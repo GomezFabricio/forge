@@ -2,18 +2,16 @@
 """Bootstrap de forge en un proyecto.
 
 Invocado por la skill /fg-setup (Markdown). Hace todo el trabajo de instalación
-inicial: detectar stack, cachear testing capabilities, mergear CLAUDE.md,
-inicializar CodeGraph, generar skill registry placeholder, actualizar
-.gitignore.
+inicial: detectar stack, generar docs/audit/config.yaml con defaults, mergear
+CLAUDE.md, inicializar CodeGraph, generar skill registry placeholder,
+actualizar .gitignore.
 
 Uso:
     python -m forge.bootstrap [--project-root PATH] [--json]
 
-Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante.
-
-El bootstrap escribe `.atl/testing-capabilities.yaml` con la detección hecha.
-La skill /fg-setup que invocó al bootstrap puede leer ese archivo y persistirlo
-en engram con mem_save (forge/testing-capabilities/{project}).
+Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante. Si
+docs/audit/config.yaml ya existe, el bootstrap NO lo sobrescribe — los
+cambios manuales del dev se preservan.
 """
 
 import argparse
@@ -78,14 +76,16 @@ def detect_stack(root: Path) -> list:
 def detect_test_runner(root: Path, stacks: list) -> tuple:
     for stack in stacks:
         for runner_name, indicators, command in TEST_RUNNERS.get(stack, []):
-            if not indicators or any((root / ind).exists() for ind in indicators):
-                return runner_name, command
-    return None, None
+            matching = [ind for ind in indicators if (root / ind).exists()]
+            if not indicators or matching:
+                detected_from = matching[0] if matching else ""
+                return runner_name, command, detected_from
+    return None, None, ""
 
 
 def ensure_dirs(root: Path) -> list:
     paths = [
-        root / "docs" / "changes",
+        root / "docs" / "audit" / "changes",
         root / ".atl",
         root / "config",
     ]
@@ -174,22 +174,51 @@ def init_codegraph(root: Path) -> tuple:
         return None, f"codegraph init falló: {e}"
 
 
-def cache_testing_capabilities(root: Path, stacks: list, runner: str, runner_command: str) -> dict:
-    capabilities = {
-        "stacks": stacks,
-        "test_runner": (
-            {"name": runner, "command": runner_command}
-            if runner else None
-        ),
-        "strict_tdd": runner is not None,
+AUDIT_CONFIG_HEADER = """# docs/audit/config.yaml
+#
+# Configuración del workflow forge para este proyecto.
+# El bloque `context` lo regenera /fg-setup en cada corrida (detección automática).
+# El bloque `rules` lo edita el equipo a mano: cambiar `implement.tdd` a `true`
+# activa Strict TDD para los ciclos del workflow.
+"""
+
+
+def create_audit_config(root: Path, stacks: list, runner: str, runner_command: str, detected_from: str) -> str:
+    path = root / "docs" / "audit" / "config.yaml"
+    if path.exists():
+        return "preserved"
+
+    config = {
+        "schema": "forge",
+        "context": {
+            "stacks": stacks,
+            "test_runner": (
+                {
+                    "name": runner,
+                    "command": runner_command,
+                    "detected_from": detected_from,
+                }
+                if runner else None
+            ),
+        },
+        "rules": {
+            "implement": {
+                "tdd": False,
+                "test_command": "",
+            },
+            "review": {
+                "test_command": "",
+                "coverage_threshold": 0,
+            },
+        },
     }
-    path = root / ".atl" / "testing-capabilities.yaml"
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        yaml.safe_dump(capabilities, sort_keys=False, allow_unicode=True),
+        AUDIT_CONFIG_HEADER + "\n" + yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
-    return capabilities
+    return "created"
 
 
 def update_gitignore(root: Path) -> str:
@@ -233,9 +262,9 @@ def run(root: Path) -> dict:
         "project_root": str(root),
         "stacks": [],
         "test_runner": None,
-        "strict_tdd": False,
         "dirs_ensured": [],
         "claude_md": None,
+        "audit_config": None,
         "config_templates": {},
         "codegraph": {"status": None, "warning": None},
         "skill_registry": None,
@@ -248,19 +277,20 @@ def run(root: Path) -> dict:
     if not stacks:
         report["warnings"].append("No se detectó un stack reconocido (no hay manifiestos típicos).")
 
-    runner, runner_command = detect_test_runner(root, stacks)
+    runner, runner_command, detected_from = detect_test_runner(root, stacks)
     report["test_runner"] = (
-        {"name": runner, "command": runner_command} if runner else None
+        {"name": runner, "command": runner_command, "detected_from": detected_from}
+        if runner else None
     )
-    report["strict_tdd"] = runner is not None
     if not runner:
         report["warnings"].append(
-            "No se detectó test runner. Strict TDD queda INACTIVO. "
-            "Instalá uno (pytest, vitest, etc.) y re-corré /fg-setup para activarlo."
+            "No se detectó test runner. docs/audit/config.yaml queda con test_runner: null. "
+            "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
         )
 
     report["dirs_ensured"] = ensure_dirs(root)
     report["claude_md"] = merge_or_create_claude_md(root)
+    report["audit_config"] = create_audit_config(root, stacks, runner, runner_command, detected_from)
 
     report["config_templates"] = copy_config_templates(root)
 
@@ -272,8 +302,6 @@ def run(root: Path) -> dict:
     report["skill_registry"] = generate_skill_registry_placeholder(root)
     report["gitignore"] = update_gitignore(root)
 
-    cache_testing_capabilities(root, stacks, runner, runner_command)
-
     return report
 
 
@@ -283,10 +311,9 @@ def print_report(report: dict) -> None:
     print(f"Stack detectado: {', '.join(stacks) if stacks else 'ninguno'}")
     if report["test_runner"]:
         tr = report["test_runner"]
-        print(f"Test runner: {tr['command']} ({tr['name']})")
+        print(f"Test runner: {tr['command']} ({tr['name']}, detectado de {tr['detected_from']})")
     else:
         print("Test runner: no detectado")
-    print(f"Strict TDD Mode: {'ACTIVO' if report['strict_tdd'] else 'INACTIVO'}")
     cg = report["codegraph"]
     if cg["status"] == "indexed":
         print("CodeGraph: índice creado")
@@ -297,12 +324,16 @@ def print_report(report: dict) -> None:
     print()
     print("Archivos:")
     print(f"  CLAUDE.md: {report['claude_md']}")
+    print(f"  docs/audit/config.yaml: {report['audit_config']}")
     for name, status in report["config_templates"].items():
         print(f"  config/{name}: {status}")
     print(f"  .atl/skill-registry.md: {report['skill_registry']}")
-    print(f"  .atl/testing-capabilities.yaml: escrito")
     print(f"  .gitignore: {report['gitignore']}")
     print()
+    if report["audit_config"] == "created":
+        print("Nota: TDD está OFF por default. Para activarlo, editá docs/audit/config.yaml")
+        print("      y cambiá rules.implement.tdd a true.")
+        print()
     if report["warnings"]:
         print("Advertencias:")
         for w in report["warnings"]:

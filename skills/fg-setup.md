@@ -1,6 +1,6 @@
 ---
 name: fg-setup
-description: Instala forge en un proyecto existente. Idempotente. Detecta stack, cachea testing capabilities, activa Strict TDD si hay test runner, inicializa CodeGraph, genera CLAUDE.md institucional y skill-registry. NO genera scaffolding del proyecto.
+description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/audit/config.yaml con defaults, inicializa CodeGraph, genera CLAUDE.md institucional y skill-registry. NO activa Strict TDD ni genera scaffolding del proyecto.
 when_to_apply: Una vez al adoptar forge en un proyecto. Re-ejecutable para upgrade — detecta lo existente y solo agrega lo faltante.
 ---
 
@@ -51,51 +51,18 @@ Heurísticas:
 
 Si hay varios manifiestos, reportar todos al dev (proyecto polyglot).
 
-### 3. Detectar y cachear testing capabilities
+### 3. Detectar testing capabilities (sin activar TDD)
 
-Identificar:
+Identificar el **test runner** del proyecto: `pytest` (Python), `vitest`/`jest` (Node), `go test` (Go), `mvn`/`gradle` (Java), `cargo test` (Rust), etc. Comando exacto para correr tests y manifiesto del que se infirió.
 
-- **Test runner**: `pytest` (Python), `vitest`/`jest` (Node), `go test` (Go), etc. Comando exacto para correr tests.
-- **Coverage tool**: si está disponible (ej: `pytest --cov`, `vitest --coverage`, `go test -cover`).
-- **Integration tools**: si hay (testing-library, supertest, etc.).
-- **E2E tools**: si hay (playwright, cypress, selenium).
+La detección **NO activa Strict TDD**. Es información que se vuelca al `docs/audit/config.yaml` (paso 5) para que el dev decida por proyecto si activar el ciclo TDD o no.
 
-Persistir en engram:
-
-```
-mem_save(
-  title: "forge/testing-capabilities/{project}",
-  topic_key: "forge/testing-capabilities/{project}",
-  type: "config",
-  project: "{project}",
-  capture_prompt: false,
-  content: |
-    test_runner:
-      command: "<comando>"
-      detected_from: "<manifiesto>"
-    coverage:
-      available: true|false
-      tool: "<tool si aplica>"
-    integration:
-      available: true|false
-      tools: [<lista>]
-    e2e:
-      available: true|false
-      tools: [<lista>]
-    strict_tdd: true|false  # true si test_runner fue detectado
-)
-```
-
-### 4. Activar Strict TDD Mode (o reportar advertencia)
-
-- Si `test_runner` fue detectado → `strict_tdd: true`. Mencionar en el reporte final al dev.
-- Si NO se detectó → `strict_tdd: false`. Reportar al dev como advertencia (no bloqueo): "No detecté test runner. Strict TDD queda desactivado. Si querés activarlo, instalá uno y re-corré /fg-setup."
-
-### 5. Crear estructura mínima de carpetas
+### 4. Crear estructura mínima de carpetas
 
 ```
 docs/
-└── changes/             ← vacío, listo para recibir cambios
+└── audit/               ← cadena de auditoría IA-asistida
+    └── changes/         ← vacío, listo para recibir cambios
 .atl/                    ← donde vive el skill-registry
 .codegraph/              ← índice de CodeGraph (gitignored)
 config/                  ← YAMLs por proyecto (modulos-transversales)
@@ -103,10 +70,43 @@ config/                  ← YAMLs por proyecto (modulos-transversales)
 
 Si alguna carpeta ya existe, no la toca.
 
+### 5. Generar `docs/audit/config.yaml`
+
+Es la configuración persistente del proyecto que el equipo edita a mano para decidir cómo corre el workflow forge. Se genera con la detección del paso 3 y defaults conservadores.
+
+Si `docs/audit/config.yaml` ya existe (re-ejecución de `/fg-setup`), **NO sobrescribir**. Solo se crea cuando no existe.
+
+Formato:
+
+```yaml
+schema: forge
+
+context:
+  stacks: ["Python"]            # detectado del paso 2
+  test_runner:                  # detectado del paso 3 — null si no se encontró
+    name: "pytest"
+    command: "pytest"
+    detected_from: "pyproject.toml"
+
+rules:
+  implement:
+    # Si true, /fg-implement aplica el ciclo Safety Net → RED → GREEN → TRIANGULATE → REFACTOR.
+    tdd: false
+    # Comando de test que usa el ciclo TDD. Si vacío, usa context.test_runner.command.
+    test_command: ""
+  review:
+    # Comando que /fg-review usa para validar la suite completa al cierre del cambio.
+    test_command: ""
+    # Cobertura mínima requerida (0 = sin enforcement).
+    coverage_threshold: 0
+```
+
+Avisar al dev: "TDD está OFF por default. Para activarlo, editá `docs/audit/config.yaml` y cambiá `rules.implement.tdd` a `true`."
+
 ### 6. Generar o mergear `CLAUDE.md` institucional
 
 - Si NO existe `CLAUDE.md` en la raíz: copiar el template `templates/CLAUDE-md-institucional.md` adaptando placeholders.
-- Si existe: mergear secciones faltantes (persona, engram, Strict TDD, workflow). NO sobrescribir secciones que el dev ya escribió. Reportar qué se mergeó.
+- Si existe: mergear secciones faltantes (persona, engram, mecánica TDD, workflow). NO sobrescribir secciones que el dev ya escribió. Reportar qué se mergeó.
 
 ### 7. Inicializar CodeGraph
 
@@ -133,15 +133,18 @@ Imprimir en español:
 forge instalado en {nombre del proyecto}
 
 Stack detectado: {stack}
-Test runner: {comando} {(con advertencia si no se detectó)}
-Strict TDD Mode: {ACTIVO | INACTIVO}
+Test runner: {comando} ({nombre}, detectado de {manifiesto})
 CodeGraph: {N nodos, N aristas indexados}
 
 Archivos generados/mergeados:
 - CLAUDE.md ({creado | mergeado})
+- docs/audit/config.yaml ({creado | preservado existente})
 - config/modulos-transversales.yaml ({creado | preservado existente})
 - .atl/skill-registry.md (generado)
 - .gitignore (actualizado)
+
+Nota: TDD está OFF por default. Para activarlo, editá docs/audit/config.yaml
+      y cambiá rules.implement.tdd a true.
 
 Próximo paso: /fg-plan <descripción del cambio que querés hacer>
 ```
@@ -153,8 +156,8 @@ Próximo paso: /fg-plan <descripción del cambio que querés hacer>
 - Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante.
 - Mergear archivos pre-existentes (CLAUDE.md, gitignore, modulos-transversales.yaml) sin sobrescribir.
 - Reportar al dev qué se hizo y qué se preservó.
-- Cachear testing capabilities en engram.
-- Activar Strict TDD si hay test runner.
+- Generar `docs/audit/config.yaml` con la detección del paso 3 y defaults conservadores. NO sobrescribir si ya existe.
+- NO activar Strict TDD desde `/fg-setup` — eso lo decide el dev editando el config a mano.
 
 ### Preguntar
 
@@ -177,7 +180,7 @@ status: success | partial | blocked
 executive_summary: 1-2 oraciones del setup completado
 stack_detected: <stack>
 test_runner: <comando o "no detectado">
-strict_tdd: true | false
+audit_config: created | preserved
 codegraph_indexed:
   nodes: <N>
   edges: <N>
@@ -188,6 +191,6 @@ files_merged:
 files_preserved:
   - <lista de archivos que ya existían y no se tocaron>
 warnings:
-  - <ej: "no se detectó test runner — Strict TDD inactivo">
+  - <ej: "no se detectó test runner — config.yaml queda con test_runner: null">
 next_recommended: /fg-plan <descripción>
 ```

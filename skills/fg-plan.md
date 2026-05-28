@@ -23,6 +23,21 @@ Si el dev quiere forzar el tipo y nombre exactos, puede usar la sintaxis explíc
 
 ## Proceso
 
+### 0. Resolver el modo de ejecución del ciclo
+
+Al arrancar un ciclo nuevo, decidir si la sesión actual usa modo **interactivo** o **automático**:
+
+- **Interactivo**: cada fase (`/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`) pausa al cerrar y pregunta al dev si seguir o ajustar. Útil cuando se quiere supervisar paso a paso.
+- **Automático**: las fases se encadenan sin pausa hasta el final del ciclo. Útil cuando el dev confía en el flow y quiere velocidad.
+
+**Cache de sesión**: el orquestador cachea la respuesta para la sesión actual. Si ya hay un modo definido en esta sesión, **usar el cacheado sin volver a preguntar**. Si es la primera vez que se arranca un ciclo en la sesión, preguntar y cachear.
+
+Pregunta al dev (solo si no hay cache):
+
+> "¿Modo del ciclo: interactivo o automático? (cacheado para la sesión actual)"
+
+El cache vive solo en el contexto del orquestador — no se persiste en filesystem ni engram. Sesión nueva → vuelve a preguntar.
+
 ### 1. Inferir el tipo del cambio
 
 Aplicar las siguientes heurísticas sobre la descripción del dev. El tipo final debe ser uno de: `feat`, `fix`, `refactor`, `chore`, `docs`, `perf`, `test`.
@@ -106,6 +121,7 @@ Imprimir:
 
 ### Siempre
 
+- Resolver el modo de ejecución del ciclo en el paso 0 — preguntar solo si no hay cache de sesión.
 - Inferir tipo y nombre del lenguaje natural del dev.
 - Consultar CodeGraph para enriquecer el contexto antes de escribir.
 - Preguntar sobre el problema cuando algo no quede claro.
@@ -114,6 +130,7 @@ Imprimir:
 
 ### Preguntar
 
+- El modo de ejecución del ciclo (interactivo/automático) — solo si no hay cache de sesión.
 - Solo cuando la inferencia de tipo o nombre sea genuinamente ambigua.
 - Solo cuando el alcance del problema tenga huecos importantes que afecten el diseño.
 
@@ -130,6 +147,7 @@ Imprimir:
 ```yaml
 status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se hizo
+cycle_mode: interactivo | automatico
 artifacts:
   - docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/README.md
 inferred:
