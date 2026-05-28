@@ -16,9 +16,11 @@ Después de `/fg-implement`, cuando el `design.md` tiene el checklist completo (
 
 ## Carga obligatoria del módulo Strict TDD Verify
 
-Si en engram existe `forge/testing-capabilities/{project}` con `strict_tdd: true`, cargar el módulo `_shared/strict-tdd-verify.md` (vive en `mvp/skills/_shared/strict-tdd-verify.md` cuando forge se instala). Ese módulo define el TDD Compliance Check, el Assertion Quality Audit, Test Layer Distribution, Changed File Coverage y Quality Metrics.
+Leer `docs/audit/config.yaml` del proyecto. Si `rules.implement.tdd` es `true`, cargar el módulo `_shared/strict-tdd-verify.md`. Ese módulo define el TDD Compliance Check, el Assertion Quality Audit, Test Layer Distribution, Changed File Coverage y Quality Metrics.
 
-Si `strict_tdd: false`, correr en modo estándar (validación básica) y avisar al dev.
+Si `rules.implement.tdd` es `false`, correr en modo estándar (validación básica) y avisar al dev.
+
+El comando que `/fg-review` usa para correr la suite completa es `rules.review.test_command`. Si está vacío, fallback a `rules.implement.test_command` y luego a `context.test_runner.command`. El threshold de coverage viene de `rules.review.coverage_threshold` (0 = sin enforcement).
 
 ## Proceso
 
@@ -26,6 +28,7 @@ Si `strict_tdd: false`, correr en modo estándar (validación básica) y avisar 
 
 - `design.md` del cambio: checklist, decisiones técnicas, flags_for_review (si vienen de `/fg-implement`).
 - `README.md`: Estado actual.
+- `docs/audit/config.yaml` del proyecto: modo TDD activo y comando de test/coverage threshold.
 - `apply-progress` y la TDD Cycle Evidence que generó `/fg-implement`.
 
 ### 2. Correr la suite completa de tests
@@ -63,7 +66,7 @@ Reportar la tabla con file/line/assertion/issue/severity.
 ### 5. Test Layer Distribution y Changed File Coverage
 
 - Clasificar tests por layer (Unit / Integration / E2E).
-- Si hay tool de coverage en testing capabilities, correr coverage sobre archivos modificados y reportar por archivo con líneas no cubiertas.
+- Correr coverage sobre archivos modificados y reportar por archivo con líneas no cubiertas. Si `rules.review.coverage_threshold` > 0 y algún archivo cambiado queda por debajo, flagear como WARNING.
 
 ### 6. Quality Metrics (si tools disponibles)
 

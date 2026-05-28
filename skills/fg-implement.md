@@ -16,16 +16,18 @@ Después de `/fg-design`, cuando el `design.md` tiene un checklist de tareas pen
 
 ## Carga obligatoria del módulo Strict TDD
 
-Si en `engram` existe `forge/testing-capabilities/{project}` con `strict_tdd: true`, cargar el módulo `_shared/strict-tdd.md` (vive en `mvp/skills/_shared/strict-tdd.md` cuando forge se instala). Ese módulo define el ciclo de 7 pasos, los banned assertion patterns, la regla extract-before-mock y approval testing.
+Leer `docs/audit/config.yaml` del proyecto. Si `rules.implement.tdd` es `true`, cargar el módulo `_shared/strict-tdd.md`. Ese módulo define el ciclo de 7 pasos, los banned assertion patterns, la regla extract-before-mock y approval testing.
 
-Si `strict_tdd: false` (no se detectó test runner durante `/fg-setup`), correr en modo estándar (sin TDD obligatorio) y avisar al dev al inicio.
+Si `rules.implement.tdd` es `false` (default que viene de `/fg-setup`), correr en modo estándar (sin TDD obligatorio) y avisar al dev al inicio que el ciclo TDD no está activo. El dev puede activarlo editando `docs/audit/config.yaml` y reenviando.
+
+El comando de test a usar es `rules.implement.test_command`. Si está vacío, fallback a `context.test_runner.command`. Si los dos están vacíos, abortar con mensaje claro al dev.
 
 ## Proceso
 
 ### 1. Leer el contexto del cambio
 
 - Leer `design.md` del cambio activo, especialmente el Checklist y las Decisiones técnicas.
-- Leer las testing capabilities cacheadas en engram (`mem_search` por `forge/testing-capabilities/{project}`).
+- Leer `docs/audit/config.yaml` del proyecto para conocer el modo TDD y el comando de test.
 - Si hay `apply-progress` previo en `design.md` (ej: vienes a continuar un cambio iniciado antes), retomar desde la primera tarea no tachada.
 
 ### 2. Ejecutar el ciclo TDD para cada tarea
