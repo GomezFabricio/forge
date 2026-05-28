@@ -7,7 +7,6 @@ CBU format: 22 digits. Two-block checksum algorithm (BCRA specification):
 check_digit = (10 - (sum_of_weighted_digits % 10)) % 10
 """
 
-from typing import Optional
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
@@ -17,7 +16,7 @@ _BLOCK2_WEIGHTS = [9, 1, 7, 3, 9, 1, 7, 3, 9, 1, 7, 3, 9]
 
 def _cbu_check_digit(digits: str, weights: list) -> int:
     """Compute expected check digit for a CBU block."""
-    total = sum(int(d) * w for d, w in zip(digits, weights))
+    total = sum(int(d) * w for d, w in zip(digits, weights, strict=True))
     return (10 - (total % 10)) % 10
 
 
@@ -42,7 +41,7 @@ def _is_valid_cbu(cbu_str: str) -> bool:
 class _CbuRecognizer(PatternRecognizer):
     """PatternRecognizer subclass that validates the CBU two-block checksum."""
 
-    def validate_result(self, pattern_text: str) -> Optional[bool]:
+    def validate_result(self, pattern_text: str) -> bool | None:
         """Return True if both block checksums pass, False otherwise."""
         return _is_valid_cbu(pattern_text)
 

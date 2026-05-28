@@ -4,9 +4,6 @@ TDD cycle: RED — imports from redaction_log which does not exist yet.
 """
 
 import json
-from pathlib import Path
-
-import pytest
 
 from forge.filters.redaction_log import hash_prompt, log_event
 
@@ -96,7 +93,7 @@ class TestLogEvent:
         lines = log_path.read_text(encoding="utf-8").strip().split("\n")
         assert len(lines) == 4
         # First 3 are unchanged (redacted)
-        for i, line in enumerate(lines[:3]):
+        for line in lines[:3]:
             entry = json.loads(line)
             assert entry["action"] == "redacted"
         # 4th is passthrough

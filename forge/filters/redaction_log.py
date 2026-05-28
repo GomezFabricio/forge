@@ -8,7 +8,6 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 try:
     from forge import __version__ as _FORGE_VERSION
@@ -32,7 +31,7 @@ def log_event(
     action: str,
     types: dict,
     prompt_hash: str,
-    log_path: Optional[Path] = None,
+    log_path: Path | None = None,
 ) -> None:
     """Append a redaction or passthrough event to the JSONL log file.
 

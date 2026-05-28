@@ -4,7 +4,6 @@ CUIT format: XX-XXXXXXXX-X (2-8-1 digit groups separated by hyphens).
 Checksum: mod-11 algorithm with AFIP weights [5,4,3,2,7,6,5,4,3,2].
 """
 
-from typing import Optional
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
@@ -40,7 +39,7 @@ def _is_valid_cuit(cuit_str: str) -> bool:
 class _CuitRecognizer(PatternRecognizer):
     """PatternRecognizer subclass that validates the CUIT mod-11 checksum."""
 
-    def validate_result(self, pattern_text: str) -> Optional[bool]:
+    def validate_result(self, pattern_text: str) -> bool | None:
         """Return True if checksum passes, False otherwise."""
         return _is_valid_cuit(pattern_text)
 

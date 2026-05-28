@@ -5,11 +5,9 @@ Phase 4: full pipeline with redaction, #fg-pass override, and logging.
 """
 
 import json
-from pathlib import Path
 
 from forge.filters.hook_user_prompt import process_prompt
-from tests.filters.fixtures import CUIT_VALID_1, GITHUB_CLASSIC_PAT
-
+from tests.filters.fixtures import CUIT_VALID_1
 
 # ---------------------------------------------------------------------------
 # Legacy pass-through tests (Phase 1 — must stay green)
@@ -62,7 +60,7 @@ class TestProcessPromptPipeline:
         """HOK-01-D: multiple entity types are all replaced."""
         log_path = tmp_path / "redactions.jsonl"
         result = process_prompt(
-            {"prompt": f"Email: user@example.com, token AWS: AKIAIOSFODNN7EXAMPLE"},
+            {"prompt": "Email: user@example.com, token AWS: AKIAIOSFODNN7EXAMPLE"},
             log_path=log_path,
         )
         assert result.get("continue") is True

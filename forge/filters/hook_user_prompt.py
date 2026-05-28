@@ -20,7 +20,6 @@ error en stderr. El filtro no bloquea el dev loop.
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 _FG_PASS_MARKER = "#fg-pass"
 
@@ -31,7 +30,7 @@ def process_prompt(
     analyzer=None,
     anonymizer=None,
     operators=None,
-    log_path: Optional[Path] = None,
+    log_path: Path | None = None,
 ) -> dict:
     """Process a Claude Code UserPromptSubmit hook payload.
 
@@ -102,7 +101,7 @@ def _build_types_count(results) -> dict:
     return types_count
 
 
-def _log_redaction(prompt: str, types_count: dict, log_path: Optional[Path]) -> None:
+def _log_redaction(prompt: str, types_count: dict, log_path: Path | None) -> None:
     """Append a redaction event to the JSONL log."""
     from forge.filters.redaction_log import hash_prompt, log_event
 
@@ -114,7 +113,7 @@ def _log_redaction(prompt: str, types_count: dict, log_path: Optional[Path]) -> 
     )
 
 
-def _log_passthrough(prompt: str, log_path: Optional[Path]) -> None:
+def _log_passthrough(prompt: str, log_path: Path | None) -> None:
     """Append a passthrough event to the JSONL log."""
     from forge.filters.redaction_log import hash_prompt, log_event
 
