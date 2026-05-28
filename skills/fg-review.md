@@ -166,7 +166,7 @@ Cambiar Estado a `cerrado`.
 status: success | partial | blocked
 executive_summary: 1-2 oraciones del resultado del review
 artifacts:
-  - docs/changes/<cambio>/README.md (Cierre escrito, Estado: cerrado)
+  - docs/audit/changes/<cambio>/README.md (Cierre escrito, Estado: cerrado)
 tests_run:
   total: <N>
   passing: <N>

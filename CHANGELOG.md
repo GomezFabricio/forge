@@ -27,7 +27,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - **Privacidad de engram por disciplina del agente**: el `CLAUDE.md` institucional que `/fg-setup` mergea incluye la regla operativa "engram persiste señales del proceso, no datos del dominio". No hay scrubber automático — la barrera es la disciplina del agente reforzada por el system prompt.
 - **Strict TDD Mode + Triangulación** heredados como módulo compartido (`skills/_shared/strict-tdd.md` y `strict-tdd-verify.md`): ciclo de 7 pasos por tarea, triangulación obligatoria, banned assertion patterns auditados por `/fg-review`.
 - **Persona del orquestador** "mentor cordial con rigor profesional" con 10 reglas no negociables, en español.
-- **Convención de cambios**: un cambio = una carpeta `docs/changes/<YYYY-MM-tipo-nombre>/` con `README.md` (portada humano) + `design.md` (técnico vivo). Sin Envelope JSON estricto.
+- **Convención de cambios**: un cambio = una carpeta `docs/audit/changes/<YYYY-MM-tipo-nombre>/` con `README.md` (portada humano) + `design.md` (técnico vivo). Sin Envelope JSON estricto.
 - **Idioma**: artefactos al dev en español; identificadores de código, conventional types y nombres de tools/MCPs/hooks en inglés.
 - **Licencia MIT**.
 

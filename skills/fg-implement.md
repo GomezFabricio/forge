@@ -126,8 +126,8 @@ status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se implementó
 artifacts:
   - <lista de archivos creados/modificados>
-  - docs/changes/<cambio>/fg-design.md (checklist actualizado, decisiones agregadas)
-  - docs/changes/<cambio>/README.md (Estado: implementado o implementando)
+  - docs/audit/changes/<cambio>/fg-design.md (checklist actualizado, decisiones agregadas)
+  - docs/audit/changes/<cambio>/README.md (Estado: implementado o implementando)
 tdd_cycle_evidence:
   # Tabla con una fila por tarea (ver formato en _shared/strict-tdd.md)
   - task: <id o título>

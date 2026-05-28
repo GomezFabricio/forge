@@ -58,11 +58,11 @@ Ejemplo de pregunta:
 
 ### 4. Crear la carpeta del cambio
 
-Path: `docs/changes/<YYYY-MM>-<tipo>-<nombre>/`
+Path: `docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/`
 
 Donde `<YYYY-MM>` es el año-mes actual.
 
-Ejemplo: `docs/changes/2026-05-feat-login-usuarios/`
+Ejemplo: `docs/audit/changes/2026-05-feat-login-usuarios/`
 
 ### 5. Consultar CodeGraph para entender el contexto
 
@@ -131,7 +131,7 @@ Imprimir:
 status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se hizo
 artifacts:
-  - docs/changes/<YYYY-MM>-<tipo>-<nombre>/README.md
+  - docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/README.md
 inferred:
   tipo: <tipo inferido>
   nombre: <nombre kebab-case inferido>

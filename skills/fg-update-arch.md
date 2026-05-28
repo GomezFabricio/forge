@@ -37,7 +37,7 @@ Dos modos:
 - Solo se procesa el cambio que está cerrando (su `README.md` con `structural: true` en el frontmatter).
 
 **Modo b) Modo "consolidación" (invocación manual)**:
-- Listar los cambios cerrados en `docs/changes/` cuyo frontmatter tenga `structural: true` y que no hayan sido consolidados todavía (marca opcional en frontmatter: `arch_synced: false`).
+- Listar los cambios cerrados en `docs/audit/changes/` cuyo frontmatter tenga `structural: true` y que no hayan sido consolidados todavía (marca opcional en frontmatter: `arch_synced: false`).
 - Procesar todos en orden cronológico.
 
 Si el dev quiere precisión, puede pasar argumentos explícitos: `/fg-update-arch desde-fecha 2026-04-01` o `/fg-update-arch cambio 2026-05-feat-login-usuarios`.
