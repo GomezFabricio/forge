@@ -67,6 +67,9 @@ addopts = [
     "--strict-markers",
     "--strict-config",
 ]
+markers = [
+    "slow: marks tests as slow (e2e subprocess tests that pay Presidio cold start)",
+]
 
 [tool.ruff]
 line-length = 100
