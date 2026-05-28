@@ -150,15 +150,26 @@ Ejemplos comentados típicos: `src/auth/`, `src/db/`, `src/logging/`, `src/middl
 
 ## Strict TDD Mode
 
-Si `/fg-setup` detecta un test runner reconocido (`pytest`, `vitest`/`jest`, `go test`, `mvn`, `cargo test`, etc.), **activa Strict TDD Mode automáticamente** en el proyecto.
+forge soporta un ciclo Strict TDD opt-in. Está OFF por default — `/fg-setup` no lo activa, lo decide el equipo editando el archivo de configuración del proyecto.
+
+**Activarlo**: editar `docs/audit/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado.
 
 Cuando está activo:
 
 - `/fg-implement` aplica el ciclo de 7 pasos por tarea: **Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR → Complete**.
 - Las tres leyes se respetan: (1) no escribir producción sin test fallando, (2) no escribir más test que el necesario para fallar, (3) no escribir más código que el necesario para pasar.
-- `/fg-review` audita assertion quality (tautologías, ghost loops, smoke tests, mock-heavy tests son flaggeados como WARNING o CRITICAL según severidad).
+- `/fg-review` audita assertion quality (tautologías, ghost loops, smoke tests, mock-heavy tests son flaggeados como WARNING o CRITICAL según severidad) y opcionalmente valida cobertura mínima (`rules.review.coverage_threshold`).
 
-Si el proyecto no tiene test runner, Strict TDD queda inactivo y `/fg-implement` opera en modo estándar.
+Cuando está OFF, `/fg-implement` opera en modo estándar y `/fg-review` aplica validación básica.
+
+### Modo del ciclo SDD (interactivo / automático)
+
+Independiente del TDD, el **modo de ejecución del ciclo** lo decide el dev al arrancar el primer ciclo de la sesión:
+
+- **Interactivo**: cada fase pausa al cerrar y espera confirmación del dev para seguir.
+- **Automático**: las fases se encadenan sin pausa hasta el final del ciclo.
+
+La elección se cachea para la sesión actual — `/fg-plan` pregunta una sola vez por sesión y reusa la respuesta para los ciclos siguientes. Sesión nueva → vuelve a preguntar. El cache no se persiste en filesystem.
 
 ---
 
