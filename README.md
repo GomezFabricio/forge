@@ -291,6 +291,64 @@ Para contribuir código:
 
 ---
 
+## PII filter
+
+forge incluye un hook `UserPromptSubmit` que detecta y redacta datos personales e identificadores sensibles **antes** de que el prompt llegue a la API de Anthropic. El filtro opera en modo pattern-only (sin spaCy, sin modelos NLP), con cold start < 300ms en Windows.
+
+### Qué detecta
+
+22 tipos de entidad: identificadores argentinos (CUIT, DNI_AR, CBU), secretos técnicos (JWT, AWS_ACCESS_KEY, AWS_SECRET_KEY, GITHUB_PAT, GITHUB_FINE_GRAINED, OPENAI_KEY, ANTHROPIC_KEY, SLACK_TOKEN, STRIPE_KEY, PRIVATE_KEY_BLOCK, CONNECTION_STRING_PASSWORD, BEARER_TOKEN), y tipos Presidio built-in (CREDIT_CARD, EMAIL_ADDRESS, IBAN_CODE, IP_ADDRESS, PHONE_NUMBER, URL, CRYPTO).
+
+### Cómo funciona
+
+Cada detección reemplaza el dato con un placeholder estable: `[CUIT]`, `[JWT]`, `[AWS_ACCESS_KEY]`, etc. El prompt modificado llega a Claude en lugar del original. El texto circundante se preserva verbatim.
+
+### Registro de auditoría
+
+Cada redacción y cada passthrough se registran en `.forge/redactions.jsonl` (append-only, una línea JSON por evento). El log nunca contiene el texto del prompt — solo un hash SHA-256 truncado a 16 caracteres para correlación.
+
+### Override: `#fg-pass`
+
+Para pasar un prompt sin filtrar (fixtures, tests, datos de ejemplo documentados), incluir el marcador `#fg-pass` en cualquier parte del prompt:
+
+```
+CUIT del proveedor: 20-12345678-6  #fg-pass
+```
+
+El marcador es case-sensitive. `#FG-PASS`, `#fg_pass` o `# fg-pass` **no** activan el override.
+
+### Registro manual del hook
+
+Hasta que `forge install --global` sea end-to-end, registrar el hook manualmente en `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m forge.filters.hook_user_prompt"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Kill-switch
+
+Para desactivar el filtro sin revertir código:
+
+```bash
+export FORGE_PII_DISABLE=1
+```
+
+---
+
 ## Licencia
 
 [MIT](LICENSE). Copyright (c) 2026 Fabricio Gomez.
