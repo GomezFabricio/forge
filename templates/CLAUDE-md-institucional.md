@@ -1,7 +1,7 @@
 # CLAUDE.md — Convenciones institucionales del proyecto
 
 > Este archivo lo genera o mergea `/fg-setup` cuando se incorpora forge al proyecto.
-> Documenta la persona del orquestador, las reglas de engram, el modo Strict TDD activo y el workflow de las skills.
+> Documenta la persona del orquestador, las reglas de engram, la mecánica de Strict TDD y el workflow de las skills.
 > Si ya existía `CLAUDE.md` en el proyecto, `/fg-setup` mergea estas secciones sin sobrescribir lo existente.
 
 ## Persona del orquestador — Mentor cordial con rigor profesional
@@ -54,11 +54,23 @@ Si detectás que estás por persistir contenido del dominio, abstenete y avisá 
 
 ## Strict TDD Mode
 
-Si `/fg-setup` detectó un test runner en el proyecto, **Strict TDD Mode está activo**.
+El proyecto controla Strict TDD desde `docs/audit/config.yaml`. La clave `rules.implement.tdd` define si el ciclo TDD está activo:
 
-Esto significa que `/fg-implement` aplica el ciclo de 7 pasos (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR → Complete) para cada tarea del checklist, y `/fg-review` valida la TDD Cycle Evidence + audita assertion quality + reporta coverage de archivos cambiados.
+- `tdd: true` → `/fg-implement` aplica el ciclo de 7 pasos (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR → Complete) para cada tarea del checklist, y `/fg-review` valida la TDD Cycle Evidence + audita assertion quality + reporta coverage de archivos cambiados.
+- `tdd: false` (default que viene de `/fg-setup`) → `/fg-implement` corre en modo estándar y `/fg-review` aplica validación básica.
 
-### Las tres leyes
+El comando de test sale de `rules.implement.test_command` (con fallback a `context.test_runner.command` y luego al runner detectado al re-ejecutar `/fg-setup`). El threshold de coverage de `/fg-review` viene de `rules.review.coverage_threshold` (0 = sin enforcement).
+
+Para activar TDD: editar `docs/audit/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado con el proyecto.
+
+### Modo del ciclo SDD (interactivo / automático)
+
+Distinto del TDD, el **modo de ejecución del ciclo** (interactivo vs automático) lo decide el dev al arrancar el primer ciclo de la sesión. La respuesta se cachea para la sesión actual y NO se persiste en filesystem. Sesión nueva → `/fg-plan` vuelve a preguntar.
+
+- **Interactivo**: cada fase pausa al cerrar y espera confirmación del dev para seguir.
+- **Automático**: las fases se encadenan sin pausa hasta el final del ciclo.
+
+### Las tres leyes (cuando TDD está activo)
 
 1. **NO escribir código de producción** sin un test fallando.
 2. **NO escribir más test** que el necesario para fallar.
