@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────────────────────────────────
+# modulos-transversales.yaml
+# Configuración del detector de cambios estructurales de forge.
+# ─────────────────────────────────────────────────────────────────────
+#
+# QUÉ HACE
+#   Le indica al detector qué paths del proyecto son "transversales"
+#   (es decir, su modificación impacta varias áreas del sistema y por
+#   lo tanto debe contar como cambio estructural). También enumera los
+#   archivos de manifiesto y los paths de migraciones de BD que el
+#   detector debe vigilar.
+#
+# CÓMO SE USA
+#   La skill /fg-review invoca al detector (forge/structural_detector.py)
+#   con la lista de archivos modificados. El detector aplica 4
+#   heurísticas en paralelo, cualquiera positiva marca el cambio como
+#   estructural:
+#
+#     1. Toca un manifest_files → "new_dependencies".
+#     2. Toca un transversal_paths → "transversal_module_change".
+#     3. Toca un migration_paths → "db_migration".
+#     4. CodeGraph detecta módulo top-level nuevo → "new_top_level_module".
+#
+#   Si el cambio queda marcado estructural, /fg-review sugiere correr
+#   /fg-update-arch al cerrar el cambio.
+#
+# AJUSTAR PARA TU PROYECTO
+#   - transversal_paths: descomentar y ajustar los ejemplos según la
+#     estructura real del proyecto. La regla simple para decidir si un
+#     módulo es transversal: "si lo toco, ¿se rompen pruebas en módulos
+#     no relacionados directamente?". Si la respuesta es sí, va acá.
+#   - manifest_files: salvo casos exóticos, los defaults cubren la
+#     mayoría. Agregar si el proyecto usa un manifiesto propio.
+#   - migration_paths: ajustar al path real donde el ORM o framework
+#     guarda las migraciones (varía entre Alembic, Prisma, Rails, etc.).
+#
+# EJEMPLO RÁPIDO
+#   Si el proyecto tiene autenticación en src/auth/, descomentar:
+#       - src/auth/
+#   y cualquier cambio que toque ese path se marcará estructural,
+#   disparando /fg-update-arch para mantener docs/architecture/ al día.
+# ─────────────────────────────────────────────────────────────────────
+
+transversal_paths:
+  # Ejemplos comentados. Descomentar y ajustar según tu proyecto.
+  #
+  # - src/auth/                # Autenticación y autorización
+  # - src/logging/             # Logger compartido
+  # - src/errors/              # Manejo global de errores
+  # - src/config/              # Configuración del runtime
+  # - src/db/                  # Capa de acceso a BD
+  # - src/cache/               # Cliente de cache compartido
+  # - src/i18n/                # Internacionalización
+  # - src/middleware/          # Middlewares aplicados globalmente
+
+# Archivos de manifiesto que se monitorean para detectar nuevas dependencias.
+manifest_files:
+  - requirements.txt
+  - pyproject.toml
+  - package.json
+  - package-lock.json
+  - go.mod
+  - go.sum
+  - Cargo.toml
+  - composer.json
+  - pom.xml
+  - build.gradle
+  - Gemfile
+  - Gemfile.lock
+
+# Paths donde residen las migraciones de BD. Cualquier cambio en estos paths se considera
+# estructural automáticamente.
+migration_paths:
+  - migrations/
+  - db/migrate/
+  - alembic/versions/
+  - prisma/migrations/
+  - app/db/migrations/
