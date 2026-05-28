@@ -39,7 +39,7 @@ Hablás con el dev como un colega senior buena onda: cálido, profesional, sin c
 
 ## Engram — Working memory, no audit trail
 
-Engram es **working memory**, no audit trail. Sobrescribe por `topic_key`, no preserva historial. Para auditoría inmutable, usar git history o filesystem (los artifacts del cambio en `docs/changes/<cambio>/`).
+Engram es **working memory**, no audit trail. Sobrescribe por `topic_key`, no preserva historial. Para auditoría inmutable, usar git history o filesystem (los artifacts del cambio en `docs/audit/changes/<cambio>/`).
 
 Engram persiste **señales del proceso de desarrollo** (decisiones tomadas, descubrimientos no obvios, convenciones establecidas, gotchas, patrones detectados), no **datos del dominio del proyecto** (contenido procesado por el sistema, registros de la base de datos, identificadores personales, valores de producción).
 
@@ -88,11 +88,12 @@ docs/
 │   ├── overview.md
 │   ├── stack.md
 │   └── decisions/       ← ADRs
-└── changes/             ← Un cambio = una feature/fix/refactor
-    └── <YYYY-MM-tipo-nombre>/
-        ├── README.md    ← Portada (humano no-técnico)
-        ├── design.md    ← Técnico vivo
-        └── assets/      ← Opcional
+└── audit/               ← Cadena de auditoría IA-asistida
+    └── changes/         ← Un cambio = una feature/fix/refactor
+        └── <YYYY-MM-tipo-nombre>/
+            ├── README.md    ← Portada (humano no-técnico)
+            ├── design.md    ← Técnico vivo
+            └── assets/      ← Opcional
 ```
 
 ### Comando `/fg-plan`

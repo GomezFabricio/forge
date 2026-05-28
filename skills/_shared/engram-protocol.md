@@ -27,10 +27,11 @@ Si la respuesta es **contenido completo**, va a filesystem. Si es **señal punte
 
 ```
 docs/
-├── changes/<cambio>/
-│   ├── README.md             # portada del cambio
-│   ├── design.md             # diseño técnico vivo
-│   └── assets/               # opcionales (diagramas, schemas)
+├── audit/
+│   └── changes/<cambio>/
+│       ├── README.md             # portada del cambio
+│       ├── design.md             # diseño técnico vivo
+│       └── assets/               # opcionales (diagramas, schemas)
 └── architecture/
     ├── overview.md           # visión general del sistema
     ├── stack.md              # tecnologías, librerías, versiones
@@ -104,7 +105,7 @@ mem_save(
     Decidimos JWT sobre sessions para autenticación.
     Razón: stateless permite escalar horizontalmente sin sticky sessions; el equipo tiene experiencia previa.
     ADR completo: docs/architecture/decisions/001-auth-jwt.md
-    Cambio que la introdujo: docs/changes/2026-05-feat-login-usuarios/
+    Cambio que la introdujo: docs/audit/changes/2026-05-feat-login-usuarios/
   """
 )
 ```
@@ -135,7 +136,7 @@ PASO B — RETRIEVE FULL CONTENT (obligatorio):
 
 Mismo `topic_key` + `project` + `scope` → UPDATE (sobrescribe), NO INSERT.
 
-El contenido previo se pierde — `revision_count` incrementa pero el viejo NO se guarda. Esto es **por diseño** — engram es working memory, no audit trail. Para historia de iteración usar filesystem (los artifacts del cambio en `docs/changes/<cambio>/` versionados con git).
+El contenido previo se pierde — `revision_count` incrementa pero el viejo NO se guarda. Esto es **por diseño** — engram es working memory, no audit trail. Para historia de iteración usar filesystem (los artifacts del cambio en `docs/audit/changes/<cambio>/` versionados con git).
 
 ### Reglas de actualización de topic
 
@@ -161,8 +162,8 @@ Las skills llaman `mem_save` IMMEDIATAMENTE después de cualquiera de estos even
 
 Lo que NO se persiste como señal independiente porque ya está en filesystem:
 
-- README.md completo de un cambio → vive en `docs/changes/<cambio>/README.md`.
-- design.md completo → vive en `docs/changes/<cambio>/fg-design.md`.
+- README.md completo de un cambio → vive en `docs/audit/changes/<cambio>/README.md`.
+- design.md completo → vive en `docs/audit/changes/<cambio>/fg-design.md`.
 - ADRs completos → viven en `docs/architecture/decisions/NNN-titulo.md`.
 - Apply-progress detallado por tarea → el checklist tachado vive en `design.md` del cambio.
 - Review report completo → la sección "Cierre" del README.md tiene la síntesis.

@@ -138,8 +138,8 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se diseñó
 artifacts:
-  - docs/changes/<cambio>/fg-design.md (creado)
-  - docs/changes/<cambio>/README.md (actualizado, Estado: diseñado)
+  - docs/audit/changes/<cambio>/fg-design.md (creado)
+  - docs/audit/changes/<cambio>/README.md (actualizado, Estado: diseñado)
 tasks_count: <cantidad de tareas en el checklist>
 files_affected:
   - <lista de archivos identificados con CodeGraph>

@@ -17,7 +17,7 @@
 Los tres ejes que el producto endurece sobre la operación habitual de Claude Code:
 
 1. **Privacidad** — la regla operativa "engram persiste señales del proceso, no datos del dominio" está incorporada al `CLAUDE.md` institucional que `/fg-setup` mergea. La disciplina del agente es la barrera principal contra que identificadores y secretos del dominio terminen en memoria persistente.
-2. **Auditoría** — cada cambio queda registrado en `docs/changes/<cambio>/` con un `README.md` (portada humano) y un `design.md` (técnico vivo). El historial de git es la cadena de auditoría.
+2. **Auditoría** — cada cambio queda registrado en `docs/audit/changes/<cambio>/` con un `README.md` (portada humano) y un `design.md` (técnico vivo). El historial de git es la cadena de auditoría.
 3. **Permisos estrictos** — el agente no ejecuta acciones destructivas sin autorización explícita. Configuración `bypassPermissions: false` por defecto.
 
 forge **no reemplaza** Claude Code — vive encima de él, agregando las skills, hooks y sub-agentes que el workflow necesita.
@@ -95,7 +95,7 @@ Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 | Skill | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente, re-invocable para upgrade. |
-| `/fg-plan <descripción libre>` | Crea la carpeta `docs/changes/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. |
+| `/fg-plan <descripción libre>` | Crea la carpeta `docs/audit/changes/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. |
 | `/fg-design` | Llena el `design.md` con archivos afectados (vía CodeGraph), decisiones técnicas y checklist de tareas. |
 | `/fg-implement` | Implementa el checklist tarea por tarea aplicando el ciclo Strict TDD si está activo (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR). |
 | `/fg-review` | Corre la suite completa, valida TDD Cycle Evidence, audita assertion quality, delega a sub-agentes especialistas según el cambio, y consolida el cierre. Única skill que delega. |
@@ -109,11 +109,12 @@ docs/
 │   ├── overview.md
 │   ├── stack.md
 │   └── decisions/               ← ADRs
-└── changes/
-    └── 2026-05-feat-login/      ← un cambio
-        ├── README.md            ← portada (lectura humano)
-        ├── design.md            ← técnico vivo (checklist, decisiones, archivos)
-        └── assets/              ← opcional
+└── audit/                       ← cadena de auditoría IA-asistida
+    └── changes/
+        └── 2026-05-feat-login/  ← un cambio
+            ├── README.md        ← portada (lectura humano)
+            ├── design.md        ← técnico vivo (checklist, decisiones, archivos)
+            └── assets/          ← opcional
 ```
 
 ---
