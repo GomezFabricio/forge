@@ -193,7 +193,9 @@ Los **identificadores técnicos** (nombres de comandos, slash commands, hooks, t
 
 ---
 
-## Estructura del repo
+## Estructura del repo (source)
+
+> Esta es la estructura del repo `forge` (source). **`forge install --global` distribuye estos archivos a `~/.claude/`** — el dev que adopta forge no necesita tener `skills/`, `agents/` ni `templates/` en su proyecto. La estructura del proyecto del dev tras `/fg-setup` se muestra más abajo.
 
 ```
 forge/
@@ -202,7 +204,7 @@ forge/
 │   ├── cli.py                   ← entry point del binario `forge`
 │   ├── bootstrap.py             ← ejecutor de /fg-setup (instala forge en un proyecto)
 │   └── structural_detector.py   ← detector usado por /fg-review
-├── skills/                      ← 6 skills + módulos compartidos
+├── skills/                      ← 6 skills + módulos compartidos (van a ~/.claude/skills/forge/)
 │   ├── fg-setup.md
 │   ├── fg-plan.md
 │   ├── fg-design.md
@@ -210,16 +212,16 @@ forge/
 │   ├── fg-review.md
 │   ├── fg-update-arch.md
 │   └── _shared/                 ← skill-resolver, persistence-contract, strict-tdd
-├── agents/                      ← 6 sub-agentes especialistas
+├── agents/                      ← 6 sub-agentes especialistas (van a ~/.claude/agents/)
 │   ├── code-reviewer.md
 │   ├── security-reviewer.md
 │   ├── dba-reviewer.md
 │   ├── frontend-reviewer.md
 │   ├── qa-reviewer.md
 │   └── legacy-impact-analyzer.md
-├── config/                      ← template de configuración per-project
+├── config/                      ← template de configuración per-project (se copia al proyecto)
 │   └── modulos-transversales.yaml
-├── templates/                   ← templates de artefactos generados
+├── templates/                   ← templates de artefactos generados (se aplican al proyecto)
 │   ├── README-change.md
 │   ├── design-change.md
 │   └── CLAUDE-md-institucional.md
@@ -232,6 +234,32 @@ forge/
 ├── CHANGELOG.md
 └── .gitignore
 ```
+
+## Estructura del proyecto del dev después de `/fg-setup`
+
+Después de correr `/fg-setup` en un proyecto, forge crea o mergea **solo** lo siguiente. Las skills, agents y templates **no se copian** al proyecto — viven globalmente en `~/.claude/` y se descubren desde ahí.
+
+```
+mi-proyecto/
+├── CLAUDE.md                    ← convenciones institucionales (mergeado por /fg-setup)
+├── config/
+│   └── modulos-transversales.yaml   ← qué considera estructural el detector
+├── docs/
+│   └── audit/                   ← cadena de auditoría IA-asistida
+│       ├── index.md
+│       └── changes/             ← un cambio = una carpeta
+│           └── 2026-05-feat-login/
+│               ├── README.md    ← portada (lectura humano)
+│               └── design.md    ← técnico vivo
+├── .atl/
+│   └── skill-registry.md        ← registry de skills resueltas para este proyecto
+├── .codegraph/                  ← índice de CodeGraph (gitignored)
+├── .engram/                     ← memoria persistente cross-session (gitignored salvo chunks/)
+├── .forge/                      ← runtime de forge (gitignored)
+└── .gitignore                   ← actualizado con las entradas necesarias
+```
+
+El resto del proyecto (`src/`, tests, build configs, etc.) lo administra el dev — forge no impone arquitectura.
 
 ---
 

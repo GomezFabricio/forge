@@ -31,14 +31,23 @@ forge usa **GitFlow-lite**: dos ramas long-lived (`main` y `develop`) más ramas
 
 ### Naming de ramas
 
-kebab-case con prefijo descriptivo:
+forge usa **naming bilingüe** paralelo a la convención de commits:
+
+- **Prefijo en inglés**: mismo set que los conventional commit types (`feature/`, `fix/`, `chore/`, `docs/`, `refactor/`, `hotfix/`, `test/`, `perf/`, `style/`, `build/`, `ci/`). Estándar de industria, compatible con tooling como `commitlint` o `conventional-pre-commit` si se agrega más adelante.
+- **Subject en español, kebab-case**: legible para el equipo hispano-parlante.
+
+Ejemplos:
 
 ```
-feature/filter-pii-pre-anthropic
-fix/bootstrap-codegraph-missing
-chore/bump-presidio
-hotfix/cli-version-flag
+feature/filtro-pii-pre-anthropic
+fix/bootstrap-codegraph-faltante
+chore/actualizar-presidio
+hotfix/flag-version-cli
+docs/aclarar-alcance-skills-en-readme
+refactor/tdd-wizard-por-ciclo
 ```
+
+**Por qué bilingüe**: el prefijo es el "lenguaje técnico universal" — un contributor externo o un tool de CI espera `feature/`, no `nueva/`. El subject es el "lenguaje del equipo" — más fluido para describir el qué del cambio en el contexto del proyecto.
 
 ### Flujo concreto
 
@@ -47,10 +56,10 @@ hotfix/cli-version-flag
 ```
 git checkout develop
 git pull
-git checkout -b feature/mi-cambio
+git checkout -b feature/mi-cambio-en-espanol
 # ... commits ...
-git push -u origin feature/mi-cambio
-# abrir PR feature/mi-cambio → develop
+git push -u origin feature/mi-cambio-en-espanol
+# abrir PR feature/mi-cambio-en-espanol → develop
 # squash and merge
 ```
 
@@ -67,10 +76,10 @@ git push -u origin feature/mi-cambio
 ```
 git checkout main
 git pull
-git checkout -b hotfix/issue-critico
+git checkout -b hotfix/error-critico
 # ... commits ...
-git push -u origin hotfix/issue-critico
-# abrir PR hotfix/issue-critico → main
+git push -u origin hotfix/error-critico
+# abrir PR hotfix/error-critico → main
 # squash and merge
 # en main: tag vX.Y.(Z+1)
 # cherry-pick a develop si el bug existe también ahí
