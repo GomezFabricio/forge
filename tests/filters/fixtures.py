@@ -89,15 +89,13 @@ OPENAI_KEY_VALID = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkL"  # 48 c
 ANTHROPIC_KEY_VALID = "sk-ant-" + "api03-" + "x" * 87  # 93 chars after sk-ant-
 
 # ---------------------------------------------------------------------------
-# Slack token — synthetic, NOT a real token (avoids GitHub secret scanning)
+# Synthetic test tokens built via concatenation to avoid GitHub secret scanning.
+# Scanners check literal strings; runtime-built strings don't match their patterns
+# but still satisfy the regex of the recognizers (which sees the final value).
 # ---------------------------------------------------------------------------
-SLACK_BOT_TOKEN = "xoxb-EXAMPLENOTREAL-EXAMPLENOTREAL-ExampleNotRealForTestsOnly0000"
-
-# ---------------------------------------------------------------------------
-# Stripe keys — synthetic, NOT real tokens (avoids GitHub secret scanning)
-# ---------------------------------------------------------------------------
-STRIPE_LIVE_SECRET = "sk_live_EXAMPLENOTREALNotForActualUseTests0000"
-STRIPE_TEST_PUBLISHABLE = "pk_test_EXAMPLENOTREALNotForActualUseTests0000"
+SLACK_BOT_TOKEN = "xoxb-" + "FAKE" + "-NOTREAL-" + ("x" * 36)
+STRIPE_LIVE_SECRET = "sk_" + "live_" + "FAKE" + ("x" * 28)
+STRIPE_TEST_PUBLISHABLE = "pk_" + "test_" + "FAKE" + ("x" * 28)
 
 # ---------------------------------------------------------------------------
 # RSA/EC private key blocks — synthetic (not real private keys)
