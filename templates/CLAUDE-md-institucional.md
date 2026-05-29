@@ -159,7 +159,7 @@ texto_de_prueba = "El CUIT es 20-12345678-6 y el email es dev@ejemplo.com"  #fg-
 
 ### Registro de eventos
 
-Incluso con `#fg-pass`, el hook registra un evento `action: "passthrough"` en `.forge/redactions.jsonl` con el hash SHA-256 truncado del prompt original. El log no contiene el texto del prompt.
+Incluso con `#fg-pass`, el hook registra un evento `action: "passthrough"` en `.forge/auditoria-pii.jsonl` con el hash SHA-256 truncado del prompt original. El log no contiene el texto del prompt.
 
 ---
 

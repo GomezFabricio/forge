@@ -305,7 +305,7 @@ Cada detección reemplaza el dato con un placeholder estable: `[CUIT]`, `[JWT]`,
 
 ### Registro de auditoría
 
-Cada redacción y cada passthrough se registran en `.forge/redactions.jsonl` (append-only, una línea JSON por evento). El log nunca contiene el texto del prompt — solo un hash SHA-256 truncado a 16 caracteres para correlación.
+Cada redacción y cada passthrough se registran en `.forge/auditoria-pii.jsonl` (append-only, una línea JSON por evento). El log nunca contiene el texto del prompt — solo un hash SHA-256 truncado a 16 caracteres para correlación.
 
 ### Override: `#fg-pass`
 

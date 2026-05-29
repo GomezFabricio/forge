@@ -5,7 +5,7 @@ Submódulos:
 - analyzer: Presidio Analyzer con recognizers built-in + custom.
 - anonymizer: Presidio Anonymizer con placeholders por tipo de entidad.
 - recognizers: custom recognizers (AR + secretos técnicos).
-- redaction_log: logging append-only a .forge/redactions.jsonl.
+- redaction_log: logging append-only a .forge/auditoria-pii.jsonl.
 
 Public API:
 """

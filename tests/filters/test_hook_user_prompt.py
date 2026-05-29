@@ -41,7 +41,7 @@ class TestProcessPromptPipeline:
 
     def test_cuit_redacted(self, tmp_path):
         """HOK-01-B: prompt with CUIT returns modified_prompt with [CUIT] placeholder."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         result = process_prompt(
             {"prompt": f"El CUIT del proveedor es {CUIT_VALID_1}"},
             log_path=log_path,
@@ -58,7 +58,7 @@ class TestProcessPromptPipeline:
 
     def test_multi_entity_redacted(self, tmp_path):
         """HOK-01-D: multiple entity types are all replaced."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         result = process_prompt(
             {"prompt": "Email: user@example.com, token AWS: AKIAIOSFODNN7EXAMPLE"},
             log_path=log_path,
@@ -70,7 +70,7 @@ class TestProcessPromptPipeline:
 
     def test_fg_pass_skips_analysis(self, tmp_path):
         """OVR-01-A: #fg-pass in prompt skips all analysis and returns {}."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         result = process_prompt(
             {"prompt": f"Test fixture: {CUIT_VALID_1} #fg-pass"},
             log_path=log_path,
@@ -81,7 +81,7 @@ class TestProcessPromptPipeline:
 
     def test_fg_pass_in_comment(self, tmp_path):
         """OVR-01-B: #fg-pass in a code comment also triggers override."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         result = process_prompt(
             {"prompt": f"# test data\n# #fg-pass\ncuit = '{CUIT_VALID_1}'"},
             log_path=log_path,
@@ -90,7 +90,7 @@ class TestProcessPromptPipeline:
 
     def test_fg_pass_uppercase_no_override(self, tmp_path):
         """OVR-01-C: #FG-PASS (uppercase) does NOT trigger override."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         result = process_prompt(
             {"prompt": f"El CUIT es {CUIT_VALID_1} #FG-PASS"},
             log_path=log_path,
@@ -101,7 +101,7 @@ class TestProcessPromptPipeline:
 
     def test_pii_logs_redaction(self, tmp_path):
         """LOG: detecting PII appends a redacted event to the JSONL log."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         process_prompt(
             {"prompt": f"CUIT del proveedor: {CUIT_VALID_1}"},
             log_path=log_path,
@@ -114,7 +114,7 @@ class TestProcessPromptPipeline:
 
     def test_passthrough_logs_passthrough(self, tmp_path):
         """LOG: #fg-pass triggers a passthrough event in the log."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         process_prompt(
             {"prompt": f"cuit {CUIT_VALID_1} #fg-pass"},
             log_path=log_path,
@@ -126,7 +126,7 @@ class TestProcessPromptPipeline:
 
     def test_silent_no_log(self, tmp_path):
         """LOG-01-D: no PII and no #fg-pass produces NO log entry."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         process_prompt(
             {"prompt": "una pregunta genérica sin PII"},
             log_path=log_path,
@@ -135,7 +135,7 @@ class TestProcessPromptPipeline:
 
     def test_fg_pass_is_case_sensitive(self, tmp_path):
         """OVR-01 R20.6: only literal #fg-pass triggers override; #fg_pass does not."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         result = process_prompt(
             {"prompt": f"cuit {CUIT_VALID_1} #fg_pass"},
             log_path=log_path,

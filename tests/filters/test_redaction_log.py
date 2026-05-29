@@ -41,7 +41,7 @@ class TestLogEvent:
 
     def test_log_event_redacted_appends_jsonl(self, tmp_path):
         """LOG-01-A: redaction event is appended as valid JSONL."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         log_event(
             action="redacted",
             types={"CUIT": 2, "EMAIL_ADDRESS": 1},
@@ -60,7 +60,7 @@ class TestLogEvent:
 
     def test_log_event_passthrough(self, tmp_path):
         """LOG-01-B: passthrough event is logged with empty types and count=0."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         log_event(
             action="passthrough",
             types={},
@@ -75,7 +75,7 @@ class TestLogEvent:
 
     def test_multiple_appends_no_overwrite(self, tmp_path):
         """LOG-01-C: multiple log_event calls append — do not overwrite."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         for i in range(3):
             log_event(
                 action="redacted",
@@ -101,7 +101,7 @@ class TestLogEvent:
 
     def test_forge_dir_created_if_missing(self, tmp_path):
         """R21.4: .forge/ directory is created if it does not exist."""
-        log_path = tmp_path / ".forge" / "redactions.jsonl"
+        log_path = tmp_path / ".forge" / "auditoria-pii.jsonl"
         assert not (tmp_path / ".forge").exists()
         log_event(
             action="redacted",
@@ -113,7 +113,7 @@ class TestLogEvent:
 
     def test_log_does_not_contain_prompt_text(self, tmp_path):
         """R21.5: log entry does NOT contain prompt text — only hash."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         log_event(
             action="redacted",
             types={"CUIT": 1},
@@ -130,7 +130,7 @@ class TestLogEvent:
 
     def test_lf_line_endings(self, tmp_path):
         """R21 Windows: log file uses LF line endings (no CRLF)."""
-        log_path = tmp_path / "redactions.jsonl"
+        log_path = tmp_path / "auditoria-pii.jsonl"
         log_event(
             action="redacted",
             types={"CUIT": 1},

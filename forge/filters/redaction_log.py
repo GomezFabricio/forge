@@ -1,6 +1,6 @@
 """Redaction log helpers (REQ-LOG-01).
 
-Writes append-only JSONL to .forge/redactions.jsonl.
+Writes append-only JSONL to .forge/auditoria-pii.jsonl.
 Never stores prompt content — only a SHA-256 hash (truncated to 16 chars).
 """
 
@@ -14,7 +14,7 @@ try:
 except ImportError:
     _FORGE_VERSION = "unknown"
 
-_DEFAULT_LOG_PATH = Path(".forge") / "redactions.jsonl"
+_DEFAULT_LOG_PATH = Path(".forge") / "auditoria-pii.jsonl"
 
 
 def hash_prompt(prompt: str) -> str:
@@ -39,7 +39,7 @@ def log_event(
     :param types: Dict mapping entity type labels to their occurrence count.
                   Empty dict for passthrough/error events.
     :param prompt_hash: 16-character hex string (SHA-256[:16] of original prompt).
-    :param log_path: Override log file path. Defaults to ``.forge/redactions.jsonl``
+    :param log_path: Override log file path. Defaults to ``.forge/auditoria-pii.jsonl``
                      relative to cwd. Override is used in tests via ``tmp_path``.
     """
     if log_path is None:

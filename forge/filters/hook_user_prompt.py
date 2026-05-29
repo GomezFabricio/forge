@@ -10,7 +10,7 @@ dict que Claude Code interpreta:
 Override: si el prompt contiene `#fg-pass` (case-sensitive), se salta
 todo análisis y se devuelve `{}` (el prompt pasa sin modificar).
 
-Logging: redacciones y passthroughs se registran en `.forge/redactions.jsonl`.
+Logging: redacciones y passthroughs se registran en `.forge/auditoria-pii.jsonl`.
 Nada a loguear cuando no hay PII y no hay override.
 
 ADR-4 (fail-open): si Presidio crashea, se devuelve `{}` y se loguea el
@@ -38,7 +38,7 @@ def process_prompt(
     :param analyzer: Injected ``AnalyzerEngine`` (optional; lazy-built if None).
     :param anonymizer: Injected ``AnonymizerEngine`` (optional; lazy-built if None).
     :param operators: Injected operators config dict (optional; lazy-built if None).
-    :param log_path: Override log file path (for tests). Defaults to ``.forge/redactions.jsonl``.
+    :param log_path: Override log file path (for tests). Defaults to ``.forge/auditoria-pii.jsonl``.
     :return: ``{}`` for no-op (pass-through) or
              ``{"continue": True, "modified_prompt": <redacted>}`` for redactions.
     """
