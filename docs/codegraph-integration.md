@@ -35,7 +35,7 @@ Esto evita que `/fg-plan` invente contexto o haga grep textual ciego.
 - ¿Hay clases, funciones o módulos que claramente se tocan?
 - ¿Hay archivos que el cambio probablemente NO toca aunque parezcan relacionados por nombre?
 
-La sección "Archivos afectados" del `design.md` se llena con esta información, no con suposiciones.
+La sección "Archivos afectados" de `diseño.md` se llena con esta información, no con suposiciones.
 
 ### `/fg-review` — detectar cambios estructurales
 
@@ -54,7 +54,7 @@ Si alguna de estas señales aparece, `/fg-review` marca el cambio como `structur
 
 - Listar los módulos top-level actuales del proyecto.
 - Listar las dependencias internas entre módulos centrales.
-- Identificar nuevas entidades de dominio que no están descriptas en `docs/architecture/overview.md`.
+- Identificar nuevas entidades de dominio que no están descriptas en `docs/arquitectura/overview.md`.
 
 Cruza eso con la doc actual y propone diffs por archivo (overview.md, stack.md, ADRs nuevos).
 

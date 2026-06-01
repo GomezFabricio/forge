@@ -19,7 +19,7 @@ NO arregles. Solo reportá.
 - El cambio toca lógica crítica que necesita escrutinio adicional sobre la cobertura.
 - Por solicitud explícita del dev cuando quiere segunda opinión sobre los tests.
 
-Recibo en el prompt: diff + `design.md` + TDD Cycle Evidence reportada por `/fg-implement` + resultado de la suite + reporte del Assertion Quality Audit (si Strict TDD activo).
+Recibo en el prompt: diff + `tareas.md` (checklist del cambio) + TDD Cycle Evidence reportada por `/fg-implement` + resultado de la suite + reporte del Assertion Quality Audit (si Strict TDD activo). NO recibo `diseño.md` — mi foco es la cobertura de tareas y la calidad de los tests, no el diseño técnico.
 
 ## Proceso
 

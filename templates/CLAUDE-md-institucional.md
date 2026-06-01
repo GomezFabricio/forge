@@ -39,7 +39,7 @@ Hablás con el dev como un colega senior buena onda: cálido, profesional, sin c
 
 ## Engram — Working memory, no audit trail
 
-Engram es **working memory**, no audit trail. Sobrescribe por `topic_key`, no preserva historial. Para auditoría inmutable, usar git history o filesystem (los artifacts del cambio en `docs/audit/changes/<cambio>/`).
+Engram es **working memory**, no audit trail. Sobrescribe por `topic_key`, no preserva historial. Para auditoría inmutable, usar git history o filesystem (los artifacts del cambio en `docs/auditoria/cambios/<cambio>/`).
 
 Engram persiste **señales del proceso de desarrollo** (decisiones tomadas, descubrimientos no obvios, convenciones establecidas, gotchas, patrones detectados), no **datos del dominio del proyecto** (contenido procesado por el sistema, registros de la base de datos, identificadores personales, valores de producción).
 
@@ -54,14 +54,14 @@ Si detectás que estás por persistir contenido del dominio, abstenete y avisá 
 
 ## Strict TDD Mode
 
-El proyecto controla Strict TDD desde `docs/audit/config.yaml`. La clave `rules.implement.tdd` define si el ciclo TDD está activo:
+El proyecto controla Strict TDD desde `docs/auditoria/config.yaml`. La clave `rules.implement.tdd` define si el ciclo TDD está activo:
 
 - `tdd: true` → `/fg-implement` aplica el ciclo de 7 pasos (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR → Complete) para cada tarea del checklist, y `/fg-review` valida la TDD Cycle Evidence + audita assertion quality + reporta coverage de archivos cambiados.
 - `tdd: false` (default que viene de `/fg-setup`) → `/fg-implement` corre en modo estándar y `/fg-review` aplica validación básica.
 
 El comando de test sale de `rules.implement.test_command` (con fallback a `context.test_runner.command` y luego al runner detectado al re-ejecutar `/fg-setup`). El threshold de coverage de `/fg-review` viene de `rules.review.coverage_threshold` (0 = sin enforcement).
 
-Para activar TDD: editar `docs/audit/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado con el proyecto.
+Para activar TDD: editar `docs/auditoria/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado con el proyecto.
 
 ### Modo del ciclo SDD (interactivo / automático)
 
@@ -96,16 +96,18 @@ Estructura de cambios:
 
 ```
 docs/
-├── architecture/        ← Documentación permanente del sistema (gestionada por /fg-update-arch)
+├── arquitectura/        ← Documentación permanente del sistema (gestionada por /fg-update-arch)
 │   ├── overview.md
 │   ├── stack.md
 │   └── decisions/       ← ADRs
-└── audit/               ← Cadena de auditoría IA-asistida
-    └── changes/         ← Un cambio = una feature/fix/refactor
+└── auditoria/           ← Cadena de auditoría IA-asistida
+    └── cambios/         ← Un cambio = una feature/fix/refactor
         └── <YYYY-MM-tipo-nombre>/
-            ├── README.md    ← Portada (humano no-técnico)
-            ├── design.md    ← Técnico vivo
-            └── assets/      ← Opcional
+            ├── README.md       ← Portada (humano no-técnico)
+            ├── diseño.md       ← Técnico estable (solo escribe /fg-design)
+            ├── tareas.md       ← Checklist mutable (/fg-implement tacha)
+            ├── decisiones.md   ← Decisiones append-only
+            └── assets/         ← Opcional
 ```
 
 ### Comando `/fg-plan`
@@ -121,7 +123,7 @@ El dev describe en lenguaje natural lo que quiere hacer. La skill infiere tipo (
 
 ## Idioma
 
-- Templates generados (`README.md`, `design.md`), ADRs, mensajes al dev: **español**.
+- Templates generados (`README.md`, `diseño.md`, `tareas.md`, `decisiones.md`), ADRs, mensajes al dev: **español**.
 - Identificadores de código (variables, funciones, clases): **inglés** (estándar técnico universal).
 - Conventional commits types (`feat`, `fix`, etc.): **inglés**.
 - Nombres de comandos, tools, MCPs, hooks: **inglés** (identificadores del ecosistema).

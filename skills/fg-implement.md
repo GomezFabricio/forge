@@ -8,17 +8,17 @@ when_to_apply: El dev invoca /fg-implement después de /fg-design. Es el tercer 
 
 ## Propósito
 
-Convertir el checklist de tareas del `design.md` en código que funciona, escrito bajo disciplina de TDD con triangulación. **El código es side effect de los tests** — los tests definen el comportamiento, la implementación pasa los tests.
+Convertir el checklist de tareas de `tareas.md` en código que funciona, escrito bajo disciplina de TDD con triangulación. **El código es side effect de los tests** — los tests definen el comportamiento, la implementación pasa los tests.
 
 ## Cuándo aplicarla
 
-Después de `/fg-design`, cuando el `design.md` tiene un checklist de tareas pendientes. Si no existe `design.md` o el checklist está vacío, abortar y sugerir correr `/fg-design` primero.
+Después de `/fg-design`, cuando `tareas.md` tiene un checklist de tareas pendientes. Si no existe `tareas.md` o el checklist está vacío, abortar y sugerir correr `/fg-design` primero.
 
 ## Carga obligatoria del módulo Strict TDD
 
-Leer `docs/audit/config.yaml` del proyecto. Si `rules.implement.tdd` es `true`, cargar el módulo `_shared/strict-tdd.md`. Ese módulo define el ciclo de 7 pasos, los banned assertion patterns, la regla extract-before-mock y approval testing.
+Leer `docs/auditoria/config.yaml` del proyecto. Si `rules.implement.tdd` es `true`, cargar el módulo `_shared/strict-tdd.md`. Ese módulo define el ciclo de 7 pasos, los banned assertion patterns, la regla extract-before-mock y approval testing.
 
-Si `rules.implement.tdd` es `false` (default que viene de `/fg-setup`), correr en modo estándar (sin TDD obligatorio) y avisar al dev al inicio que el ciclo TDD no está activo. El dev puede activarlo editando `docs/audit/config.yaml` y reenviando.
+Si `rules.implement.tdd` es `false` (default que viene de `/fg-setup`), correr en modo estándar (sin TDD obligatorio) y avisar al dev al inicio que el ciclo TDD no está activo. El dev puede activarlo editando `docs/auditoria/config.yaml` y reenviando.
 
 El comando de test a usar es `rules.implement.test_command`. Si está vacío, fallback a `context.test_runner.command`. Si los dos están vacíos, abortar con mensaje claro al dev.
 
@@ -26,9 +26,10 @@ El comando de test a usar es `rules.implement.test_command`. Si está vacío, fa
 
 ### 1. Leer el contexto del cambio
 
-- Leer `design.md` del cambio activo, especialmente el Checklist y las Decisiones técnicas.
-- Leer `docs/audit/config.yaml` del proyecto para conocer el modo TDD y el comando de test.
-- Si hay `apply-progress` previo en `design.md` (ej: vienes a continuar un cambio iniciado antes), retomar desde la primera tarea no tachada.
+- Leer `diseño.md` del cambio activo para entender el enfoque y la arquitectura.
+- Leer `tareas.md` para el checklist de tareas a ejecutar.
+- Leer `docs/auditoria/config.yaml` del proyecto para conocer el modo TDD y el comando de test.
+- Si hay tareas ya tachadas en `tareas.md` (ej: vienes a continuar un cambio iniciado antes), retomar desde la primera tarea no tachada.
 
 ### 2. Ejecutar el ciclo TDD para cada tarea
 
@@ -68,10 +69,10 @@ Para cada tarea del checklist en orden, aplicar el ciclo completo de 7 pasos:
    Si un refactor rompe tests: revertir ese paso, intentar más chico.
 
 6. Mark task complete
-   Tachar la tarea en el checklist de design.md.
+   Tachar la tarea en el checklist de tareas.md.
 
 7. Note deviations
-   Si surgió alguna decisión no anticipada durante el código, sumarla a Decisiones técnicas en design.md con fecha y razón.
+   Si surgió alguna decisión no anticipada durante el código, agregarla al final de decisiones.md con fecha y razón (append-only — nunca sobrescribir).
    Si surgió un riesgo o tarea adicional, mencionarla al dev.
 ```
 
@@ -79,7 +80,7 @@ Para cada tarea del checklist en orden, aplicar el ciclo completo de 7 pasos:
 
 `/fg-implement` NO invoca roles. Pero puede detectar contextos donde sugerir al dev (o a `/fg-review`) que se invoquen:
 
-- Si el cambio toca código de autenticación, datos sensibles o endpoints públicos: anotar en `design.md` para que `/fg-review` invoque `security-reviewer`.
+- Si el cambio toca código de autenticación, datos sensibles o endpoints públicos: anotar en `decisiones.md` para que `/fg-review` invoque `security-reviewer`.
 - Si el cambio crea migraciones o queries pesadas: anotar para `dba-reviewer`.
 
 ### 4. Manejar checklist completo
@@ -106,7 +107,7 @@ Cuando todas las tareas estén tachadas:
 - Correr SAFETY NET antes de modificar archivos pre-existentes.
 - Reportar la TDD Cycle Evidence table al cerrar.
 - Cuando el spec define múltiples scenarios, escribir test cases que los cubran todos.
-- Cuando aparece una decisión durante el código, registrarla en `design.md` y avisar al dev.
+- Cuando aparece una decisión durante el código, agregarla al final de `decisiones.md` (append-only) y avisar al dev.
 
 ### Preguntar
 
@@ -128,8 +129,9 @@ status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se implementó
 artifacts:
   - <lista de archivos creados/modificados>
-  - docs/audit/changes/<cambio>/fg-design.md (checklist actualizado, decisiones agregadas)
-  - docs/audit/changes/<cambio>/README.md (Estado: implementado o implementando)
+  - docs/auditoria/cambios/<cambio>/tareas.md (checklist actualizado)
+  - docs/auditoria/cambios/<cambio>/decisiones.md (decisiones nuevas agregadas, si las hubo)
+  - docs/auditoria/cambios/<cambio>/README.md (Estado: implementado o implementando)
 tdd_cycle_evidence:
   # Tabla con una fila por tarea (ver formato en _shared/strict-tdd.md)
   - task: <id o título>

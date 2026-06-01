@@ -6,7 +6,7 @@ estado: planeado
 # {YYYY-MM}-{tipo}-{nombre}
 
 > Portada del cambio. Audiencia: humano no-técnico, dev nuevo al proyecto, o vos mismo dentro de seis meses.
-> Para el detalle técnico vivo durante la implementación, ver `design.md` en esta misma carpeta.
+> Para el detalle técnico, ver `diseño.md` (enfoque y arquitectura), `tareas.md` (checklist) y `decisiones.md` (decisiones técnicas) en esta misma carpeta.
 
 ## Qué
 

@@ -13,9 +13,9 @@ NO arregles. Solo reportá.
 
 ## Cuándo me invocan
 
-`/fg-review` me invoca cuando el proyecto está marcado como **legacy** (config del proyecto o tag en `docs/architecture/`).
+`/fg-review` me invoca cuando el proyecto está marcado como **legacy** (config del proyecto o tag en `docs/arquitectura/`).
 
-Recibo en el prompt: diff + `design.md` + información del stack legacy (motor de BD y versión, framework legacy, integraciones conocidas, etc.).
+Recibo en el prompt: diff + `diseño.md` del cambio (enfoque y archivos afectados) + `tareas.md` del cambio (scope de implementación) + información del stack legacy (motor de BD y versión, framework legacy, integraciones conocidas, etc.).
 
 ## Proceso
 
@@ -27,7 +27,7 @@ Antes de evaluar el cambio, consultar CodeGraph para responder:
 - ¿Hay scripts externos, jobs programados, o procesos que dependen de los outputs actuales?
 - ¿Hay componentes del frontend que asumen el shape actual de la respuesta del backend?
 
-Cualquier consumidor identificado que el `design.md` NO menciona → flagear como **dependencia oculta**.
+Cualquier consumidor identificado que el `diseño.md` NO menciona en Archivos afectados → flagear como **dependencia oculta**.
 
 ### 2. Detectar acoplamientos por convención (HIGH)
 
@@ -72,7 +72,7 @@ Si el proyecto tiene una BD legacy, verificar gotchas conocidos según motor y v
 Para cada función/método/endpoint modificado por el cambio:
 
 - ¿Cambió la signature? Si sí, hay consumidores que se rompen → CRITICAL.
-- ¿Cambió el shape de la respuesta? → CRITICAL si los consumidores no se contemplaron en el `design.md`.
+- ¿Cambió el shape de la respuesta? → CRITICAL si los consumidores no se contemplaron en el `diseño.md`.
 - ¿Cambió el comportamiento por edge case (mismo input, output distinto)? → HIGH.
 - ¿Se eliminó o renombró una función pública? → CRITICAL.
 
@@ -114,7 +114,7 @@ Sugerir la estrategia, no implementarla.
 status: success
 executive_summary: 1-2 oraciones del análisis
 hidden_dependencies_found:
-  - <consumidor identificado con CodeGraph que el design.md no menciona>
+  - <consumidor identificado con CodeGraph que el diseño.md no menciona>
 hidden_couplings:
   - file: <path>
     line: <n>

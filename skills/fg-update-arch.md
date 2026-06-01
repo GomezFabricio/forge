@@ -1,6 +1,6 @@
 ---
 name: fg-update-arch
-description: Mantiene actualizada la documentación permanente del proyecto en docs/architecture/ a partir de los cambios estructurales. Lee architecture actual + cambios cerrados marcados como estructurales + topología del código vía CodeGraph. Propone diff por archivo, NO todo-o-nada. El dev acepta cada propuesta individualmente.
+description: Mantiene actualizada la documentación permanente del proyecto en docs/arquitectura/ a partir de los cambios estructurales. Lee architecture actual + cambios cerrados marcados como estructurales + topología del código vía CodeGraph. Propone diff por archivo, NO todo-o-nada. El dev acepta cada propuesta individualmente.
 when_to_apply: Sugerida por /fg-review cuando detecta cambios estructurales en un cambio que se está cerrando. También invocable manualmente cuando el dev quiere consolidar varios cambios pendientes en una sola actualización de arquitectura.
 ---
 
@@ -8,9 +8,9 @@ when_to_apply: Sugerida por /fg-review cuando detecta cambios estructurales en u
 
 ## Propósito
 
-Mantener la documentación permanente del sistema (`docs/architecture/`) sincronizada con la realidad del código. Sin esto, la doc se vuelve obsoleta en 3 meses y nadie le cree.
+Mantener la documentación permanente del sistema (`docs/arquitectura/`) sincronizada con la realidad del código. Sin esto, la doc se vuelve obsoleta en 3 meses y nadie le cree.
 
-A diferencia del `README.md` y `design.md` por cambio (que son episódicos), `docs/architecture/` describe **cómo es el sistema HOY**, evoluciona lento y es lo que un dev nuevo lee para entender el proyecto.
+A diferencia del `README.md`, `diseño.md`, `tareas.md` y `decisiones.md` por cambio (que son episódicos), `docs/arquitectura/` describe **cómo es el sistema HOY**, evoluciona lento y es lo que un dev nuevo lee para entender el proyecto.
 
 ## Cuándo aplicarla
 
@@ -26,7 +26,7 @@ A diferencia del `README.md` y `design.md` por cambio (que son episódicos), `do
 
 ### 1. Leer el estado actual de la arquitectura
 
-- Si existe `docs/architecture/`: leer `overview.md`, `stack.md`, y los ADRs en `decisions/`.
+- Si existe `docs/arquitectura/`: leer `overview.md`, `stack.md`, y los ADRs en `decisions/`.
 - Si NO existe (primer uso de `/fg-update-arch`): crearla con templates vacíos y marcarlos como "a llenar a partir del análisis de este uso".
 
 ### 2. Identificar los cambios estructurales a consolidar
@@ -37,7 +37,7 @@ Dos modos:
 - Solo se procesa el cambio que está cerrando (su `README.md` con `structural: true` en el frontmatter).
 
 **Modo b) Modo "consolidación" (invocación manual)**:
-- Listar los cambios cerrados en `docs/audit/changes/` cuyo frontmatter tenga `structural: true` y que no hayan sido consolidados todavía (marca opcional en frontmatter: `arch_synced: false`).
+- Listar los cambios cerrados en `docs/auditoria/cambios/` cuyo frontmatter tenga `structural: true` y que no hayan sido consolidados todavía (marca opcional en frontmatter: `arch_synced: false`).
 - Procesar todos en orden cronológico.
 
 Si el dev quiere precisión, puede pasar argumentos explícitos: `/fg-update-arch desde-fecha 2026-04-01` o `/fg-update-arch cambio 2026-05-feat-login-usuarios`.
@@ -86,7 +86,7 @@ Actualizar `overview.md` o `stack.md` cuando:
 **Nunca todo-o-nada**. Cada propuesta se presenta independiente:
 
 ```
-=== Propuesta 1: actualizar docs/architecture/stack.md ===
+=== Propuesta 1: actualizar docs/arquitectura/stack.md ===
 Sección: Dependencias
 
 + - bcrypt 4.0.1 (hashing de passwords, agregado en 2026-05-feat-login-usuarios)
@@ -94,7 +94,7 @@ Sección: Dependencias
 
 ¿Aceptar [a], editar [e], rechazar [r]?
 
-=== Propuesta 2: crear docs/architecture/decisions/001-auth-jwt.md ===
+=== Propuesta 2: crear docs/arquitectura/decisions/001-auth-jwt.md ===
 
 # ADR 001 — Autenticación con JWT en vez de sesiones por cookie
 
@@ -142,7 +142,7 @@ Esto evita que el próximo `/fg-update-arch` los reprocese.
 
 - Cantidad de propuestas presentadas, aceptadas, editadas y rechazadas.
 - Lista de ADRs creados o modificados.
-- Sugerir hacer commit de los cambios a `docs/architecture/`.
+- Sugerir hacer commit de los cambios a `docs/arquitectura/`.
 
 ## Reglas
 
@@ -163,8 +163,8 @@ Esto evita que el próximo `/fg-update-arch` los reprocese.
 
 - Aplicar cambios sin que el dev acepte cada propuesta individualmente.
 - Sobrescribir un ADR existente (los ADRs son inmutables — si la decisión cambió, se crea un ADR nuevo que supersede al viejo).
-- Inventar consecuencias o alternativas para los ADRs — basarse en el `design.md` del cambio.
-- Crear `docs/architecture/` con archivos vacíos si nunca se usó — solo aparecen cuando hay material real para escribir.
+- Inventar consecuencias o alternativas para los ADRs — basarse en el `diseño.md` y `decisiones.md` del cambio.
+- Crear `docs/arquitectura/` con archivos vacíos si nunca se usó — solo aparecen cuando hay material real para escribir.
 
 ## Envelope de retorno
 
@@ -180,8 +180,8 @@ adrs_created:
 adrs_superseded:
   - <ADR-NNN viejo — superseded por ADR-NNN nuevo>
 files_updated:
-  - docs/architecture/overview.md
-  - docs/architecture/stack.md
+  - docs/arquitectura/overview.md
+  - docs/arquitectura/stack.md
   - <otros>
 changes_marked_synced:
   - <YYYY-MM-tipo-nombre del cambio>
