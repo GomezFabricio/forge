@@ -1,6 +1,6 @@
 ---
 name: fg-setup
-description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/audit/config.yaml con defaults, inicializa CodeGraph, genera CLAUDE.md institucional y skill-registry. NO activa Strict TDD ni genera scaffolding del proyecto.
+description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/auditoria/config.yaml con defaults, inicializa CodeGraph, genera CLAUDE.md institucional y skill-registry. NO activa Strict TDD ni genera scaffolding del proyecto.
 when_to_apply: Una vez al adoptar forge en un proyecto. Re-ejecutable para upgrade — detecta lo existente y solo agrega lo faltante.
 ---
 
@@ -15,7 +15,7 @@ Adoptar forge en un proyecto existente: instalar el harness de Claude Code (skil
 - No genera el scaffolding del proyecto (compose, Makefile, deploy/, src/, etc.) — eso es trabajo del análisis o del dev, no del producto.
 - No pregunta por stack/perfil para imponer arquitectura.
 - No genera `pyproject.toml` u otros manifiestos de dependencias.
-- No crea `docs/architecture/` vacío — esa carpeta aparece a demanda con `/fg-update-arch`.
+- No crea `docs/arquitectura/` vacío — esa carpeta aparece a demanda con `/fg-update-arch`.
 
 ## Cuándo aplicarla
 
@@ -55,14 +55,14 @@ Si hay varios manifiestos, reportar todos al dev (proyecto polyglot).
 
 Identificar el **test runner** del proyecto: `pytest` (Python), `vitest`/`jest` (Node), `go test` (Go), `mvn`/`gradle` (Java), `cargo test` (Rust), etc. Comando exacto para correr tests y manifiesto del que se infirió.
 
-La detección **NO activa Strict TDD**. Es información que se vuelca al `docs/audit/config.yaml` (paso 5) para que el dev decida por proyecto si activar el ciclo TDD o no.
+La detección **NO activa Strict TDD**. Es información que se vuelca al `docs/auditoria/config.yaml` (paso 5) para que el dev decida por proyecto si activar el ciclo TDD o no.
 
 ### 4. Crear estructura mínima de carpetas
 
 ```
 docs/
-└── audit/               ← cadena de auditoría IA-asistida
-    └── changes/         ← vacío, listo para recibir cambios
+└── auditoria/           ← cadena de auditoría IA-asistida
+    └── cambios/         ← vacío, listo para recibir cambios
 .atl/                    ← donde vive el skill-registry
 .codegraph/              ← índice de CodeGraph (gitignored)
 config/                  ← YAMLs por proyecto (modulos-transversales)
@@ -70,11 +70,11 @@ config/                  ← YAMLs por proyecto (modulos-transversales)
 
 Si alguna carpeta ya existe, no la toca.
 
-### 5. Generar `docs/audit/config.yaml`
+### 5. Generar `docs/auditoria/config.yaml`
 
 Es la configuración persistente del proyecto que el equipo edita a mano para decidir cómo corre el workflow forge. Se genera con la detección del paso 3 y defaults conservadores.
 
-Si `docs/audit/config.yaml` ya existe (re-ejecución de `/fg-setup`), **NO sobrescribir**. Solo se crea cuando no existe.
+Si `docs/auditoria/config.yaml` ya existe (re-ejecución de `/fg-setup`), **NO sobrescribir**. Solo se crea cuando no existe.
 
 Formato:
 
@@ -101,7 +101,7 @@ rules:
     coverage_threshold: 0
 ```
 
-Avisar al dev: "TDD está OFF por default. Para activarlo, editá `docs/audit/config.yaml` y cambiá `rules.implement.tdd` a `true`."
+Avisar al dev: "TDD está OFF por default. Para activarlo, editá `docs/auditoria/config.yaml` y cambiá `rules.implement.tdd` a `true`."
 
 ### 6. Generar o mergear `CLAUDE.md` institucional
 
@@ -138,12 +138,12 @@ CodeGraph: {N nodos, N aristas indexados}
 
 Archivos generados/mergeados:
 - CLAUDE.md ({creado | mergeado})
-- docs/audit/config.yaml ({creado | preservado existente})
+- docs/auditoria/config.yaml ({creado | preservado existente})
 - config/modulos-transversales.yaml ({creado | preservado existente})
 - .atl/skill-registry.md (generado)
 - .gitignore (actualizado)
 
-Nota: TDD está OFF por default. Para activarlo, editá docs/audit/config.yaml
+Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.yaml
       y cambiá rules.implement.tdd a true.
 
 Próximo paso: /fg-plan <descripción del cambio que querés hacer>
@@ -156,7 +156,7 @@ Próximo paso: /fg-plan <descripción del cambio que querés hacer>
 - Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante.
 - Mergear archivos pre-existentes (CLAUDE.md, gitignore, modulos-transversales.yaml) sin sobrescribir.
 - Reportar al dev qué se hizo y qué se preservó.
-- Generar `docs/audit/config.yaml` con la detección del paso 3 y defaults conservadores. NO sobrescribir si ya existe.
+- Generar `docs/auditoria/config.yaml` con la detección del paso 3 y defaults conservadores. NO sobrescribir si ya existe.
 - NO activar Strict TDD desde `/fg-setup` — eso lo decide el dev editando el config a mano.
 
 ### Preguntar
@@ -170,7 +170,7 @@ Próximo paso: /fg-plan <descripción del cambio que querés hacer>
 - Sobrescribir archivos existentes sin permiso.
 - Generar scaffolding del proyecto (compose, Makefile, deploy/, src/, etc.).
 - Preguntar por stack/perfil para imponer arquitectura.
-- Crear `docs/architecture/` vacío — solo aparece con `/fg-update-arch`.
+- Crear `docs/arquitectura/` vacío — solo aparece con `/fg-update-arch`.
 - Indexar CodeGraph en background sin avisar al dev (puede tardar en proyectos grandes).
 
 ## Envelope de retorno

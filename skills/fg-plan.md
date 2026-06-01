@@ -73,11 +73,11 @@ Ejemplo de pregunta:
 
 ### 4. Crear la carpeta del cambio
 
-Path: `docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/`
+Path: `docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/`
 
 Donde `<YYYY-MM>` es el año-mes actual.
 
-Ejemplo: `docs/audit/changes/2026-05-feat-login-usuarios/`
+Ejemplo: `docs/auditoria/cambios/2026-05-feat-login-usuarios/`
 
 ### 5. Consultar CodeGraph para entender el contexto
 
@@ -138,7 +138,7 @@ Imprimir:
 
 - Pedirle al dev que escriba el tipo o el nombre en kebab-case por su cuenta.
 - Asumir alcance o restricciones que el dev no mencionó. Si no se sabe, preguntar.
-- Crear el `design.md` (ese lo crea `/fg-design`).
+- Crear `diseño.md`, `tareas.md` ni `decisiones.md` (esos los crea `/fg-design`).
 - Tocar código del proyecto.
 - Imponer estilos de arquitectura o stack.
 
@@ -149,7 +149,7 @@ status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se hizo
 cycle_mode: interactivo | automatico
 artifacts:
-  - docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/README.md
+  - docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/README.md
 inferred:
   tipo: <tipo inferido>
   nombre: <nombre kebab-case inferido>

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+# TODO: tests pendientes — ver cycle tests-bootstrap-paths
 """Bootstrap de forge en un proyecto.
 
 Invocado por la skill /fg-setup (Markdown). Hace todo el trabajo de instalación
-inicial: detectar stack, generar docs/audit/config.yaml con defaults, mergear
+inicial: detectar stack, generar docs/auditoria/config.yaml con defaults, mergear
 CLAUDE.md, inicializar CodeGraph, generar skill registry placeholder,
 actualizar .gitignore.
 
@@ -10,7 +11,7 @@ Uso:
     python -m forge.bootstrap [--project-root PATH] [--json]
 
 Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante. Si
-docs/audit/config.yaml ya existe, el bootstrap NO lo sobrescribe — los
+docs/auditoria/config.yaml ya existe, el bootstrap NO lo sobrescribe — los
 cambios manuales del dev se preservan.
 """
 
@@ -85,7 +86,7 @@ def detect_test_runner(root: Path, stacks: list) -> tuple:
 
 def ensure_dirs(root: Path) -> list:
     paths = [
-        root / "docs" / "audit" / "changes",
+        root / "docs" / "auditoria" / "cambios",
         root / ".atl",
         root / "config",
     ]
@@ -174,7 +175,7 @@ def init_codegraph(root: Path) -> tuple:
         return None, f"codegraph init falló: {e}"
 
 
-AUDIT_CONFIG_HEADER = """# docs/audit/config.yaml
+AUDIT_CONFIG_HEADER = """# docs/auditoria/config.yaml
 #
 # Configuración del workflow forge para este proyecto.
 # El bloque `context` lo regenera /fg-setup en cada corrida (detección automática).
@@ -184,7 +185,7 @@ AUDIT_CONFIG_HEADER = """# docs/audit/config.yaml
 
 
 def create_audit_config(root: Path, stacks: list, runner: str, runner_command: str, detected_from: str) -> str:
-    path = root / "docs" / "audit" / "config.yaml"
+    path = root / "docs" / "auditoria" / "config.yaml"
     if path.exists():
         return "preserved"
 
@@ -284,7 +285,7 @@ def run(root: Path) -> dict:
     )
     if not runner:
         report["warnings"].append(
-            "No se detectó test runner. docs/audit/config.yaml queda con test_runner: null. "
+            "No se detectó test runner. docs/auditoria/config.yaml queda con test_runner: null. "
             "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
         )
 
@@ -324,14 +325,14 @@ def print_report(report: dict) -> None:
     print()
     print("Archivos:")
     print(f"  CLAUDE.md: {report['claude_md']}")
-    print(f"  docs/audit/config.yaml: {report['audit_config']}")
+    print(f"  docs/auditoria/config.yaml: {report['audit_config']}")
     for name, status in report["config_templates"].items():
         print(f"  config/{name}: {status}")
     print(f"  .atl/skill-registry.md: {report['skill_registry']}")
     print(f"  .gitignore: {report['gitignore']}")
     print()
     if report["audit_config"] == "created":
-        print("Nota: TDD está OFF por default. Para activarlo, editá docs/audit/config.yaml")
+        print("Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.yaml")
         print("      y cambiá rules.implement.tdd a true.")
         print()
     if report["warnings"]:

@@ -8,6 +8,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Changed (en progreso)
+
+- **Rename de paths a español**: `docs/audit/changes/` → `docs/auditoria/cambios/`, `docs/audit/config.yaml` → `docs/auditoria/config.yaml`, `docs/architecture/` → `docs/arquitectura/`. Todas las skills, agentes, templates y `bootstrap.py` actualizados.
+- **Split de template de diseño**: `templates/design-change.md` reemplazado por tres archivos con responsabilidad exclusiva: `templates/diseño.md` (estable), `templates/tareas.md` (mutable), `templates/decisiones.md` (append-only). Mapping canónico de sub-docs por agente documentado en `/fg-review`.
+
 ### Pendiente para próximas iteraciones
 
 - Implementación real del subcomando `forge install --global` (deposita skills, agents y commands en `~/.claude/`).

@@ -21,7 +21,7 @@ NO arregles. Solo reportá.
 - Manejo de estado del cliente (Redux, Zustand, Pinia, etc.).
 - Configuración de bundler o assets.
 
-Recibo en el prompt: diff + `design.md` + framework detectado (React, Vue, Angular, Svelte, etc.).
+Recibo en el prompt: diff + `diseño.md` del cambio + framework detectado (React, Vue, Angular, Svelte, etc.).
 
 ## Proceso
 

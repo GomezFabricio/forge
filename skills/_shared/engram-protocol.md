@@ -7,7 +7,7 @@
 
 Engram persiste **señales del proceso de desarrollo** (estado del workflow, decisiones tomadas, descubrimientos no obvios, convenciones establecidas, configuración detectada).
 
-NO persiste **contenido completo** (READMEs, design.md, ADRs, datos del dominio del proyecto). El contenido vive en filesystem (`docs/`) y se versiona con git.
+NO persiste **contenido completo** (READMEs, diseño.md, tareas.md, decisiones.md, ADRs, datos del dominio del proyecto). El contenido vive en filesystem (`docs/`) y se versiona con git.
 
 ### Test mental antes de persistir
 
@@ -15,7 +15,7 @@ Si en 3 meses busco con `mem_search`, ¿qué quiero que aparezca?
 
 | Quiero que aparezca | NO quiero que aparezca |
 |---|---|
-| "Decidimos JWT sobre sessions, ver `docs/architecture/decisions/001-auth-jwt.md`" | El ADR completo de 50 KB pegado en SQLite |
+| "Decidimos JWT sobre sessions, ver `docs/arquitectura/decisions/001-auth-jwt.md`" | El ADR completo de 50 KB pegado en SQLite |
 | "Bug N+1 en `/users` se resolvió cacheando con Redis. Patrón aplicable a otros endpoints" | El diff completo del commit que lo arregló |
 | "Test runner del proyecto: pytest. Coverage tool: pytest-cov" | El README.md completo de un cambio |
 
@@ -27,12 +27,14 @@ Si la respuesta es **contenido completo**, va a filesystem. Si es **señal punte
 
 ```
 docs/
-├── audit/
-│   └── changes/<cambio>/
+├── auditoria/
+│   └── cambios/<cambio>/
 │       ├── README.md             # portada del cambio
-│       ├── design.md             # diseño técnico vivo
+│       ├── diseño.md             # diseño técnico (estable, solo escribe /fg-design)
+│       ├── tareas.md             # checklist mutable (/fg-implement tacha tareas)
+│       ├── decisiones.md         # decisiones técnicas (append-only)
 │       └── assets/               # opcionales (diagramas, schemas)
-└── architecture/
+└── arquitectura/
     ├── overview.md           # visión general del sistema
     ├── stack.md              # tecnologías, librerías, versiones
     └── decisions/
@@ -104,8 +106,8 @@ mem_save(
   content: """
     Decidimos JWT sobre sessions para autenticación.
     Razón: stateless permite escalar horizontalmente sin sticky sessions; el equipo tiene experiencia previa.
-    ADR completo: docs/architecture/decisions/001-auth-jwt.md
-    Cambio que la introdujo: docs/audit/changes/2026-05-feat-login-usuarios/
+    ADR completo: docs/arquitectura/decisions/001-auth-jwt.md
+    Cambio que la introdujo: docs/auditoria/cambios/2026-05-feat-login-usuarios/
   """
 )
 ```
@@ -136,7 +138,7 @@ PASO B — RETRIEVE FULL CONTENT (obligatorio):
 
 Mismo `topic_key` + `project` + `scope` → UPDATE (sobrescribe), NO INSERT.
 
-El contenido previo se pierde — `revision_count` incrementa pero el viejo NO se guarda. Esto es **por diseño** — engram es working memory, no audit trail. Para historia de iteración usar filesystem (los artifacts del cambio en `docs/audit/changes/<cambio>/` versionados con git).
+El contenido previo se pierde — `revision_count` incrementa pero el viejo NO se guarda. Esto es **por diseño** — engram es working memory, no audit trail. Para historia de iteración usar filesystem (los artifacts del cambio en `docs/auditoria/cambios/<cambio>/` versionados con git).
 
 ### Reglas de actualización de topic
 
@@ -162,10 +164,12 @@ Las skills llaman `mem_save` IMMEDIATAMENTE después de cualquiera de estos even
 
 Lo que NO se persiste como señal independiente porque ya está en filesystem:
 
-- README.md completo de un cambio → vive en `docs/audit/changes/<cambio>/README.md`.
-- design.md completo → vive en `docs/audit/changes/<cambio>/fg-design.md`.
-- ADRs completos → viven en `docs/architecture/decisions/NNN-titulo.md`.
-- Apply-progress detallado por tarea → el checklist tachado vive en `design.md` del cambio.
+- README.md completo de un cambio → vive en `docs/auditoria/cambios/<cambio>/README.md`.
+- diseño.md completo → vive en `docs/auditoria/cambios/<cambio>/diseño.md`.
+- tareas.md completo → vive en `docs/auditoria/cambios/<cambio>/tareas.md`.
+- decisiones.md completo → vive en `docs/auditoria/cambios/<cambio>/decisiones.md`.
+- ADRs completos → viven en `docs/arquitectura/decisions/NNN-titulo.md`.
+- Apply-progress detallado por tarea → el checklist tachado vive en `tareas.md` del cambio.
 - Review report completo → la sección "Cierre" del README.md tiene la síntesis.
 
 Si una skill quiere referenciar uno de estos artifacts desde una señal de engram, usa el **path filesystem** como puntero, no el contenido.

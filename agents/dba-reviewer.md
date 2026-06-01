@@ -20,7 +20,7 @@ NO arregles. Solo reportá.
 - Queries nuevos o modificados en código (especialmente los que tocan tablas grandes).
 - Cambios al ORM mapping.
 
-Recibo en el prompt: diff + `design.md` + información del motor de BD del proyecto (Postgres, MySQL, Oracle, etc.).
+Recibo en el prompt: diff + `diseño.md` del cambio + información del motor de BD del proyecto (Postgres, MySQL, Oracle, etc.).
 
 ## Proceso
 

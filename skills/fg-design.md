@@ -1,6 +1,6 @@
 ---
 name: fg-design
-description: Define el cómo del cambio. Lee el README.md generado por /fg-plan, consulta CodeGraph para identificar archivos afectados realmente, y produce design.md con enfoque técnico, arquitectura, archivos, checklist de tareas y decisiones técnicas iniciales.
+description: Define el cómo del cambio. Lee el README.md generado por /fg-plan, consulta CodeGraph para identificar archivos afectados realmente, y produce tres documentos (diseño.md, tareas.md, decisiones.md) con enfoque técnico, arquitectura, archivos, checklist de tareas y decisiones técnicas iniciales.
 when_to_apply: El dev invoca /fg-design después de haber corrido /fg-plan. Es el segundo paso del workflow.
 ---
 
@@ -8,7 +8,7 @@ when_to_apply: El dev invoca /fg-design después de haber corrido /fg-plan. Es e
 
 ## Propósito
 
-Convertir el qué/por qué del `README.md` en un plan técnico ejecutable. La salida es `design.md`, un documento vivo que crece durante `/fg-implement` registrando decisiones que surgen.
+Convertir el qué/por qué del `README.md` en un plan técnico ejecutable. La salida son tres archivos bajo `docs/auditoria/cambios/<cambio>/`: `diseño.md` (documento estable con enfoque, arquitectura y archivos afectados), `tareas.md` (checklist mutable durante `/fg-implement`) y `decisiones.md` (registro append-only de decisiones técnicas).
 
 ## Cuándo aplicarla
 
@@ -33,7 +33,7 @@ La idea es **no adivinar** archivos afectados con grep textual; usar el grafo es
 
 ### 3. Definir el enfoque técnico
 
-En la sección "Enfoque" del `design.md`, escribir:
+En la sección "Enfoque" de `diseño.md`, escribir:
 
 - Estrategia general (ej: "agregar un nuevo módulo `auth/` con servicios separados", "extender el endpoint existente con un nuevo parámetro").
 - Librerías o tools que se van a usar y por qué (ej: "bcrypt para hashing porque ya está en el proyecto").
@@ -43,7 +43,7 @@ Si hay decisiones técnicas grandes que NO son obvias del contexto, preguntarlas
 
 ### 4. Documentar la arquitectura
 
-En la sección "Arquitectura":
+En la sección "Arquitectura" de `diseño.md`:
 
 - Cómo el cambio se integra con el sistema existente.
 - Diagramas simples en formato mermaid si el cambio cruza varios módulos.
@@ -51,7 +51,7 @@ En la sección "Arquitectura":
 
 ### 5. Listar archivos afectados
 
-En la sección "Archivos afectados", listar paths concretos con marca de nuevo/modificado/eliminado. Usar la información del paso 2 (CodeGraph), no inventar.
+En la sección "Archivos afectados" de `diseño.md`, listar paths concretos con marca de nuevo/modificado/eliminado. Usar la información del paso 2 (CodeGraph), no inventar.
 
 Ejemplo:
 ```
@@ -64,7 +64,7 @@ Ejemplo:
 
 ### 6. Descomponer en checklist de tareas
 
-En la sección "Checklist de tareas", listar tareas concretas marcables.
+En `tareas.md`, listar tareas concretas marcables bajo la sección "Checklist de tareas".
 
 Reglas para la descomposición:
 
@@ -86,7 +86,7 @@ Ejemplo:
 
 ### 7. Registrar decisiones técnicas iniciales
 
-En la sección "Decisiones técnicas":
+En `decisiones.md` (append-only — nunca sobrescribir):
 
 - Cualquier decisión grande que se tomó durante `/fg-design` (elección de librería, patrón arquitectónico, contrato de API).
 - Cada decisión: fecha (YYYY-MM-DD) + qué se decidió + por qué.
@@ -96,7 +96,7 @@ Ejemplo:
 - 2026-05-26: Usamos bcrypt sobre argon2. Razón: bcrypt ya está en el proyecto y satisface el threat model interno.
 ```
 
-Esta sección crece durante `/fg-implement` con decisiones que surjan en el código.
+`decisiones.md` crece durante `/fg-implement` con decisiones que surjan en el código — siempre append, nunca rewrite.
 
 ### 8. Actualizar el README.md
 
@@ -104,8 +104,9 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 
 ### 9. Reportar al dev
 
-- Confirmar `design.md` creado.
-- Mostrar la cantidad de tareas del checklist.
+- Confirmar los tres archivos creados: `diseño.md`, `tareas.md`, `decisiones.md`.
+- Si alguno ya existe, NO sobrescribir — preguntar al dev si quiere re-correr `/fg-design` (caso re-diseño parcial).
+- Mostrar la cantidad de tareas del checklist de `tareas.md`.
 - Sugerir el siguiente paso: `/fg-implement`.
 
 ## Reglas
@@ -114,9 +115,10 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 
 - Leer el `README.md` del cambio antes de empezar.
 - Consultar CodeGraph para identificar archivos afectados reales.
-- Escribir el `design.md` en español.
-- Cada decisión técnica registrada con fecha y razón.
-- El checklist debe estar ordenado: dependencias primero.
+- Crear los tres archivos (`diseño.md`, `tareas.md`, `decisiones.md`) desde los templates correspondientes.
+- Escribir todos los artefactos en español.
+- Cada decisión técnica registrada en `decisiones.md` con fecha y razón.
+- El checklist de `tareas.md` debe estar ordenado: dependencias primero.
 
 ### Preguntar
 
@@ -128,9 +130,10 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 
 - Inventar archivos afectados sin consultar CodeGraph.
 - Imponer un patrón arquitectónico que el proyecto no usa.
-- Saltarse la sección Decisiones técnicas (aunque esté vacía, debe existir).
+- Saltarse la creación de `decisiones.md` (aunque esté vacío, debe existir).
 - Empezar a escribir código del cambio (eso es `/fg-implement`).
 - Modificar el `README.md` excepto por el campo Estado.
+- Sobrescribir archivos existentes — si alguno de los tres ya existe, preguntar al dev.
 
 ## Envelope de retorno
 
@@ -138,8 +141,10 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se diseñó
 artifacts:
-  - docs/audit/changes/<cambio>/fg-design.md (creado)
-  - docs/audit/changes/<cambio>/README.md (actualizado, Estado: diseñado)
+  - docs/auditoria/cambios/<cambio>/diseño.md (creado)
+  - docs/auditoria/cambios/<cambio>/tareas.md (creado)
+  - docs/auditoria/cambios/<cambio>/decisiones.md (creado)
+  - docs/auditoria/cambios/<cambio>/README.md (actualizado, Estado: diseñado)
 tasks_count: <cantidad de tareas en el checklist>
 files_affected:
   - <lista de archivos identificados con CodeGraph>
