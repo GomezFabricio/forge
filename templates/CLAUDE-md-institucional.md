@@ -126,6 +126,43 @@ El dev describe en lenguaje natural lo que quiere hacer. La skill infiere tipo (
 - Conventional commits types (`feat`, `fix`, etc.): **inglés**.
 - Nombres de comandos, tools, MCPs, hooks: **inglés** (identificadores del ecosistema).
 
+## #fg-pass — override del filtro PII
+
+El hook `UserPromptSubmit` de forge redacta automáticamente datos personales e identificadores sensibles antes de que el prompt llegue a Anthropic. Si necesitás pasar un prompt sin filtrar (fixture de test, dato de ejemplo documentado, debugging del propio filtro), usá el marcador `#fg-pass`.
+
+### Semántica
+
+- **Todo o nada**: `#fg-pass` bypasea el filtro completo para ese prompt. No hay override granular por tipo de entidad.
+- **Case-sensitive**: solo el literal `#fg-pass` activa el override. `#FG-PASS`, `#fg_pass` y `# fg-pass` no lo activan.
+- **Puede aparecer en cualquier parte del prompt**: inline, en un comentario, en un bloque de código. El filtro lo detecta en cualquier posición.
+
+### Cuándo usarlo
+
+```
+# Caso 1: fixture de test que contiene un CUIT válido
+cuit_proveedor = "20-12345678-6"  #fg-pass
+
+# Caso 2: documentando el formato esperado para un campo sensible
+# El CUIT debe tener formato XX-XXXXXXXX-X con checksum mod-11 válido.
+# Ejemplo: 20-12345678-6
+#fg-pass
+
+# Caso 3: debugging del filtro (verificar qué detecta un input específico)
+texto_de_prueba = "El CUIT es 20-12345678-6 y el email es dev@ejemplo.com"  #fg-pass
+```
+
+### Qué no es `#fg-pass`
+
+- NO es una forma de hacer commit de secretos reales al repositorio.
+- NO es para uso permanente en prompts de producción.
+- NO desactiva el filtro en prompts futuros — aplica solo al prompt donde aparece.
+
+### Registro de eventos
+
+Incluso con `#fg-pass`, el hook registra un evento `action: "passthrough"` en `.forge/auditoria-pii.jsonl` con el hash SHA-256 truncado del prompt original. El log no contiene el texto del prompt.
+
+---
+
 ## Convenciones del proyecto
 
 <!--
