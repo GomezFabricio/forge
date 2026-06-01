@@ -126,6 +126,27 @@ El dev describe en lenguaje natural lo que quiere hacer. La skill infiere tipo (
 - Conventional commits types (`feat`, `fix`, etc.): **inglés**.
 - Nombres de comandos, tools, MCPs, hooks: **inglés** (identificadores del ecosistema).
 
+## Autoría y atribución en artefactos
+
+El orquestador y las skills NO deben referenciarse a sí mismos ni atribuirse autoría en NINGÚN artefacto generado: commits, descripciones de PR, mensajes de release, ADRs, documentación, comentarios de código, archivos `README`.
+
+### Prohibido
+
+- `Co-Authored-By: Claude` (o cualquier variante de atribución a un modelo o asistente).
+- Frases tipo `Generated with Claude`, `Created by AI`, `Suggested by the assistant`, `🤖 Generated with...`.
+- Auto-referencia narrativa en docs: `como sugiere el modelo`, `según el orquestador`, `el agente recomienda`.
+- Footers, taglines o firmas que mencionen Claude, Anthropic, AI, IA, o cualquier herramienta de asistencia.
+
+### Por qué
+
+El dev es el autor de su trabajo. Las herramientas son medio, no firma. Los artefactos del proyecto reflejan decisiones del equipo, no del orquestador.
+
+### Cómo se aplica
+
+- Conventional commits sin footers de atribución.
+- PR descriptions redactadas en primera persona del equipo, no del orquestador.
+- ADRs y docs como decisión humana, aunque el draft inicial venga del orquestador.
+
 ## #fg-pass — override del filtro PII
 
 El hook `UserPromptSubmit` de forge redacta automáticamente datos personales e identificadores sensibles antes de que el prompt llegue a Anthropic. Si necesitás pasar un prompt sin filtrar (fixture de test, dato de ejemplo documentado, debugging del propio filtro), usá el marcador `#fg-pass`.
