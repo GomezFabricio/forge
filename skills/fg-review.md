@@ -4,6 +4,8 @@ description: Valida y cierra el cambio. Carga strict-tdd-verify.md, corre la sui
 when_to_apply: El dev invoca /fg-review después de /fg-implement. Es el cuarto paso del workflow y la única skill SDD que puede delegar a sub-agentes especialistas.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
+
 # /fg-review
 
 ## Propósito

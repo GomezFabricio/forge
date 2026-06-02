@@ -4,6 +4,8 @@ description: Entiende un cambio nuevo. El dev describe lo que quiere hacer en le
 when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, D, E)
+
 # /fg-plan
 
 ## Propósito
@@ -32,9 +34,11 @@ Al arrancar un ciclo nuevo, decidir si la sesión actual usa modo **interactivo*
 
 **Cache de sesión**: el orquestador cachea la respuesta para la sesión actual. Si ya hay un modo definido en esta sesión, **usar el cacheado sin volver a preguntar**. Si es la primera vez que se arranca un ciclo en la sesión, preguntar y cachear.
 
+**Default sugerido desde config**: leer `rules.workflow.cycle_mode` de `docs/auditoria/config.yaml`. Si existe, usar ese valor como respuesta pre-seleccionada en la pregunta (no como respuesta automática — siempre preguntar la primera vez por sesión para que el dev pueda cambiar si quiere). Si no existe el config, el default es `interactive`.
+
 Pregunta al dev (solo si no hay cache):
 
-> "¿Modo del ciclo: interactivo o automático? (cacheado para la sesión actual)"
+> "¿Modo del ciclo: interactivo o automático? (cacheado para la sesión actual; default del proyecto: {cycle_mode del config})"
 
 El cache vive solo en el contexto del orquestador — no se persiste en filesystem ni engram. Sesión nueva → vuelve a preguntar.
 

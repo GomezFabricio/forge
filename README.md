@@ -140,7 +140,49 @@ Las demás skills (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-
 
 ## Configuración por proyecto
 
-Después de correr `/fg-setup`, el proyecto tiene un archivo editable en `config/`:
+Después de correr `/fg-setup`, el proyecto tiene dos archivos editables:
+
+### `docs/auditoria/config.yaml`
+
+Controla el comportamiento del workflow forge para el proyecto. `/fg-setup` lo genera con defaults conservadores y comentarios densos — legible sin contexto adicional. El equipo lo edita a mano y lo commitea.
+
+Los bloques más importantes:
+
+#### `rules.pr_size` — Review Workload Forecast
+
+`/fg-design` estima cuántas líneas tendrá el PR al cerrar. El bloque `rules.pr_size` controla qué hace con esa estimación:
+
+| Modo (`enforcement`) | Comportamiento |
+|---|---|
+| `off` | Sin mención del budget. 1 issue = 1 MR sin fricción. **Default recomendado** para la mayoría de los equipos. |
+| `warn` | Avisa cuando el PR supera `budget_lines` pero **no bloquea**. Útil para devs y freelancers que quieren visibilidad sin fricción. |
+| `block` | Exige documentar `size:exception` en el PR body antes de continuar si el PR supera el budget. Para equipos con presión real sobre calidad de review. |
+
+```yaml
+rules:
+  pr_size:
+    budget_lines: 400       # umbral de "PR grande" (heurística estándar: 400 líneas)
+    suggest_split: false    # ¿sugerir partir en chained PRs cuando supera el budget?
+    enforcement: off        # off | warn | block
+```
+
+**forge nunca crea ramas ni PRs automáticamente** — el forecast es información, no acción. El dev siempre opt-in explícitamente a cualquier split.
+
+#### `rules.implement.max_tasks_per_batch` — Batching de implementación
+
+Si `/fg-design` genera más tareas que este límite, `/fg-implement` implementa hasta el límite, guarda el progreso en engram, y le avisa al dev cuántas tareas quedan. La próxima invocación retoma donde quedó.
+
+```yaml
+rules:
+  implement:
+    max_tasks_per_batch: 20   # ajustar según el tamaño típico de los cambios del equipo
+```
+
+La norma sana es **"1 sesión = 1 ciclo"** — si un cambio requiere múltiples batches, correr cada uno en una sesión nueva para mantener el contexto del modelo fresco.
+
+#### `rules.workflow.cycle_mode` — Default del modo de ciclo
+
+Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive` o `automatic`). `/fg-plan` lo lee al arrancar y lo usa como valor pre-seleccionado en la pregunta de modo — el dev siempre puede cambiar la elección por sesión.
 
 ### `config/modulos-transversales.yaml`
 

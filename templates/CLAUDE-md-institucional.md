@@ -70,6 +70,44 @@ Distinto del TDD, el **modo de ejecución del ciclo** (interactivo vs automátic
 - **Interactivo**: cada fase pausa al cerrar y espera confirmación del dev para seguir.
 - **Automático**: las fases se encadenan sin pausa hasta el final del ciclo.
 
+El default sugerido del proyecto está en `rules.workflow.cycle_mode` de `docs/auditoria/config.yaml`. `/fg-plan` lo usa como valor pre-seleccionado en la pregunta, pero siempre pregunta — el dev puede cambiar el modo por sesión.
+
+### Review Workload Forecast y modos de enforcement
+
+`/fg-design` estima cuántas líneas tendrá el PR al cerrar. El bloque `rules.pr_size` de `docs/auditoria/config.yaml` controla qué hace con esa estimación:
+
+| Modo (`enforcement`) | Comportamiento |
+|---|---|
+| `off` | Sin mención del budget. 1 issue = 1 MR sin fricción. Default recomendado para la mayoría de los equipos. |
+| `warn` | Avisa cuando el PR supera el budget (`budget_lines`) pero no bloquea. Útil para devs / freelancers que quieren visibilidad sin fricción. |
+| `block` | Exige documentar `size:exception` en el PR body antes de avanzar si el PR supera el budget. Para equipos con presión real sobre calidad de review. |
+
+Configurar en `docs/auditoria/config.yaml`:
+
+```yaml
+rules:
+  pr_size:
+    budget_lines: 400       # umbral de líneas (400 = heurística estándar)
+    suggest_split: false    # si sugerir chained PRs cuando supera el budget
+    enforcement: off        # off | warn | block
+```
+
+**forge nunca crea ramas ni PRs automáticamente** — el forecast y las sugerencias son información, no acción. El dev siempre opt-in explícitamente.
+
+### Pattern de batching (implementación en múltiples sesiones)
+
+Si `/fg-design` genera más tareas que `rules.implement.max_tasks_per_batch` (default: 20), `/fg-implement` implementa hasta el límite del batch, guarda el progreso en engram y reporta cuántas tareas quedan. La siguiente invocación de `/fg-implement` retoma desde donde quedó.
+
+Configurar el batch size en `docs/auditoria/config.yaml`:
+
+```yaml
+rules:
+  implement:
+    max_tasks_per_batch: 20   # ajustar según el tamaño típico de los cambios del equipo
+```
+
+La norma sana es "1 sesión = 1 ciclo" — si un cambio requiere múltiples batches, cada uno debería correrse en una sesión nueva para mantener el contexto del modelo fresco.
+
 ### Las tres leyes (cuando TDD está activo)
 
 1. **NO escribir código de producción** sin un test fallando.
