@@ -38,7 +38,7 @@
 #   Si el proyecto tiene autenticación en src/auth/, descomentar:
 #       - src/auth/
 #   y cualquier cambio que toque ese path se marcará estructural,
-#   disparando /fg-update-arch para mantener docs/architecture/ al día.
+#   disparando /fg-update-arch para mantener docs/arquitectura/ al día.
 # ─────────────────────────────────────────────────────────────────────
 
 transversal_paths:
