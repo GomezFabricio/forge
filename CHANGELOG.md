@@ -8,17 +8,26 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
-### Changed (en progreso)
+### Added
 
+- **`forge install` implementado** (`forge/installer.py`, ~270 LOC): depósito de skills, agents y registro de MCP de engram en `~/.claude/`. Incluye detección automática de engram (3 indicadores), prompt Y/N interactivo, flag `--install-engram` (non-interactive), flag `--skip-engram-check`, e idempotencia completa.
+- **Auto-install de engram**: descarga el binario desde GitHub Releases (`engram_{version}_{os}_{arch}.tar.gz|.zip`), extrae el binario, aplica `chmod +x` (Unix), limpia quarantine en macOS, edita `~/.profile` (Unix) o `HKCU\Environment\Path` (Windows), y escribe `~/.claude/mcp/engram.json` con schema flat.
+- **Deposit de skills con transformación de layout**: `fg-*.md` → `~/.claude/skills/<stem>/SKILL.md`; co-located companions (`strict-tdd.md`, `strict-tdd-verify.md`) depositados junto a su skill consumidora; archivos cross-cutting (`skill-resolver`, `engram-protocol`, `fg-phase-common`) → `~/.claude/skills/forge-shared/<name>/SKILL.md` con frontmatter `disable-model-invocation: true` inyectado.
+- **Exit codes claros**: `EXIT_OK=0`, `EXIT_ABORTED=10`, `EXIT_ENGRAM_INSTALL_FAILED=20`, `EXIT_DEPOSIT_FAILED=30`, `EXIT_PLATFORM_UNSUPPORTED=40`.
+- **Test suite** (`tests/test_installer.py`, `tests/test_cli.py`): 201 tests nuevos, cobertura ≥88% sobre `forge/installer.py` y 100% sobre `forge/cli.py` modificado. Strict TDD ciclo RED→GREEN→TRIANGULATE→REFACTOR por tarea.
+
+### Changed
+
+- **`forge/cli.py`**: eliminado flag `--global`; agregados `--install-engram` y `--skip-engram-check`; `cmd_install` ahora es thin dispatch a `forge.installer.run`.
+- **`forge/bootstrap.py`**: agregado `TODO(forge-bootstrap-package-root)` documentando el bug de `PACKAGE_ROOT` en instalaciones wheel non-editable (sin fix en este ciclo).
 - **Rename de paths a español**: `docs/audit/changes/` → `docs/auditoria/cambios/`, `docs/audit/config.yaml` → `docs/auditoria/config.yaml`, `docs/architecture/` → `docs/arquitectura/`. Todas las skills, agentes, templates y `bootstrap.py` actualizados.
 - **Split de template de diseño**: `templates/design-change.md` reemplazado por tres archivos con responsabilidad exclusiva: `templates/diseño.md` (estable), `templates/tareas.md` (mutable), `templates/decisiones.md` (append-only). Mapping canónico de sub-docs por agente documentado en `/fg-review`.
 
 ### Pendiente para próximas iteraciones
 
-- Implementación real del subcomando `forge install --global` (deposita skills, agents y commands en `~/.claude/`).
 - Scripts `install.sh` (Linux/Mac) e `install.ps1` (Windows) en la raíz del repo para instalación de un solo comando.
 - Integración real con CodeGraph en `forge/structural_detector.py` (hoy hay un placeholder con TODO).
-- Suite de tests `pytest` para `bootstrap.py`, `structural_detector.py` y el CLI.
+- Fix de `PACKAGE_ROOT` en `bootstrap.py` para instalaciones wheel non-editable (ver TODO marcado).
 
 ## [0.1.0] — 2026-05-27
 

@@ -1,14 +1,15 @@
 """forge CLI entry point.
 
-Subcomandos disponibles en v0.1.0:
-    forge --version          Imprime la versión instalada.
-    forge install --global   Deposita skills, agents y commands en ~/.claude/
-                             para que Claude Code los descubra.
-                             [NO IMPLEMENTADO en v0.1.0 — placeholder]
-    forge --help             Muestra ayuda.
+Subcommands:
+    forge --version                  Print installed version.
+    forge install                    Deposit skills, agents and register engram MCP
+                                     in ~/.claude/. Implemented in forge/installer.py.
+    forge install --install-engram   Auto-install engram without prompt.
+    forge install --skip-engram-check  Skip engram detection, deposit assets only.
+    forge --help                     Show help.
 
-La instalación por proyecto se hace desde Claude Code con la skill /fg-setup,
-que invoca a forge.bootstrap en el proyecto activo.
+Project-level setup is done from Claude Code with the /fg-setup skill,
+which invokes forge.bootstrap in the active project.
 """
 
 import argparse
@@ -18,27 +19,9 @@ from . import __version__
 
 
 def cmd_install(args: argparse.Namespace) -> int:
-    """Depositar skills/agents/commands en ~/.claude/."""
-    if not args.global_install:
-        sys.stderr.write(
-            "forge install: por ahora solo se soporta el modo --global.\n"
-            "Uso: forge install --global\n"
-        )
-        return 2
-
-    sys.stderr.write(
-        "forge install --global: NO IMPLEMENTADO en v0.1.0.\n"
-        "\n"
-        "Este subcomando debe depositar los siguientes archivos en ~/.claude/:\n"
-        "  - skills/forge/fg-*.md (6 skills)\n"
-        "  - agents/forge-*.md (6 sub-agentes)\n"
-        "  - commands/fg-*.md (slash commands)\n"
-        "  - skills/forge-shared/*.md (referencias compartidas)\n"
-        "\n"
-        "Pendiente para próxima iteración. Mientras tanto, las skills se pueden\n"
-        "instalar manualmente copiando los archivos del paquete a ~/.claude/.\n"
-    )
-    return 1
+    """Thin dispatch to installer.run(args). Returns exit code."""
+    from forge.installer import run as installer_run
+    return installer_run(args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,13 +35,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     install_parser = subparsers.add_parser(
         "install",
-        help="Instalar el harness de forge globalmente en ~/.claude/.",
+        help="Instalar forge en ~/.claude/ (skills, agents, MCP de engram).",
     )
     install_parser.add_argument(
-        "--global",
-        dest="global_install",
+        "--install-engram",
+        dest="install_engram",
         action="store_true",
-        help="Depositar skills, agents y commands en ~/.claude/ (modo soportado en v0.1.0).",
+        help=(
+            "Instalar engram automáticamente si falta, sin prompt (non-interactive). "
+            "Si engram ya está detectado, es no-op. "
+            "Tiene precedencia sobre --skip-engram-check."
+        ),
+    )
+    install_parser.add_argument(
+        "--skip-engram-check",
+        dest="skip_engram_check",
+        action="store_true",
+        help=(
+            "Saltar la detección de engram y depositar solo skills/agents. "
+            "--install-engram tiene precedencia si ambos se pasan."
+        ),
     )
     install_parser.set_defaults(func=cmd_install)
 

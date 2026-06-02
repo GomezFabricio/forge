@@ -21,6 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+# TODO(forge-bootstrap-package-root): PACKAGE_ROOT broken in non-editable wheel installs
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 STACK_MANIFESTS = {
