@@ -89,3 +89,13 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
 ]
+
+[tool.coverage.report]
+# Excluir la capa CLI (main, print_report) del umbral de cobertura.
+# Estas funciones son presentación pura — no contienen lógica testeable del dominio.
+exclude_lines = [
+    "pragma: no cover",
+    "def main",
+    "def print_report",
+    "if __name__",
+]

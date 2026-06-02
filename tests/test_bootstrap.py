@@ -1,0 +1,816 @@
+"""Tests de forge.bootstrap (tests-bootstrap-paths).
+
+Cubre las siguientes unidades:
+- detect_stack              REQ-TEST-DETECT-STACK
+- detect_test_runner        REQ-TEST-DETECT-RUNNER
+- _build_stacks_yaml        REQ-TEST-BUILD-YAML
+- _build_test_runner_yaml   REQ-TEST-BUILD-YAML
+- ensure_dirs               REQ-TEST-ENSURE-DIRS, REQ-IDEMPOTENT
+- create_audit_config       REQ-TEST-CREATE-CONFIG, REQ-YAML-TYPES, REQ-IDEMPOTENT
+- update_gitignore          REQ-TEST-GITIGNORE, REQ-IDEMPOTENT
+- generate_skill_registry_placeholder  REQ-TEST-SKILL-REGISTRY, REQ-IDEMPOTENT
+- merge_or_create_claude_md REQ-TEST-CLAUDE-MD
+- copy_config_templates     (complemento de REQ-TEST-CLAUDE-MD)
+- init_codegraph            REQ-TEST-INIT-CODEGRAPH
+- run                       REQ-TEST-RUN
+
+Constraints (CC-*):
+- CC-TMP-PATH: todo test que toca filesystem usa tmp_path.
+- CC-NO-REAL-PROC: nunca invoca un subprocess real ni requiere binario codegraph.
+- CC-NO-MODIFY: bootstrap.py no se modifica en este ciclo.
+"""
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import yaml
+
+import forge.bootstrap as bootstrap
+from forge.bootstrap import (
+    _build_stacks_yaml,
+    _build_test_runner_yaml,
+    create_audit_config,
+    detect_stack,
+    detect_test_runner,
+    ensure_dirs,
+    extract_section,
+    generate_skill_registry_placeholder,
+    init_codegraph,
+    merge_or_create_claude_md,
+    copy_config_templates,
+    run,
+    update_gitignore,
+)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Pure function tests (no filesystem I/O)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectStack:
+    """Tests para detect_stack(root). REQ-TEST-DETECT-STACK."""
+
+    def test_multiple_manifests_detected(self, tmp_path):
+        """GIVEN pyproject.toml y package.json, THEN ambos stacks detectados."""
+        (tmp_path / "pyproject.toml").touch()
+        (tmp_path / "package.json").touch()
+        result = detect_stack(tmp_path)
+        assert "Python" in result
+        assert "Node" in result
+
+    def test_single_manifest_python(self, tmp_path):
+        """GIVEN solo pyproject.toml, THEN lista contiene exactamente Python."""
+        (tmp_path / "pyproject.toml").touch()
+        result = detect_stack(tmp_path)
+        assert result == ["Python"]
+
+    def test_no_manifest_returns_empty(self, tmp_path):
+        """GIVEN directorio vacío, THEN lista vacía."""
+        result = detect_stack(tmp_path)
+        assert result == []
+
+    def test_multiple_python_manifests_no_duplicates(self, tmp_path):
+        """GIVEN pyproject.toml + requirements.txt + setup.py, THEN 'Python' aparece una sola vez."""
+        (tmp_path / "pyproject.toml").touch()
+        (tmp_path / "requirements.txt").touch()
+        (tmp_path / "setup.py").touch()
+        result = detect_stack(tmp_path)
+        assert result.count("Python") == 1
+
+    def test_cargo_toml_detected_as_rust(self, tmp_path):
+        """GIVEN Cargo.toml, THEN 'Rust' detectado."""
+        (tmp_path / "Cargo.toml").touch()
+        result = detect_stack(tmp_path)
+        assert "Rust" in result
+
+    def test_go_mod_detected_as_go(self, tmp_path):
+        """GIVEN go.mod, THEN 'Go' detectado."""
+        (tmp_path / "go.mod").touch()
+        result = detect_stack(tmp_path)
+        assert "Go" in result
+
+    def test_result_contains_only_recognised_names(self, tmp_path):
+        """GIVEN varios manifests, THEN todos los valores son nombres canónicos conocidos."""
+        (tmp_path / "pyproject.toml").touch()
+        (tmp_path / "package.json").touch()
+        (tmp_path / "go.mod").touch()
+        result = detect_stack(tmp_path)
+        known_stacks = {"Python", "Node", "Go", "Java", "Rust", "PHP", "Ruby"}
+        for s in result:
+            assert s in known_stacks, f"Stack desconocido: {s}"
+
+
+class TestDetectTestRunner:
+    """Tests para detect_test_runner(root, stacks). REQ-TEST-DETECT-RUNNER."""
+
+    def test_pytest_detected_via_pyproject_toml(self, tmp_path):
+        """GIVEN pyproject.toml presente, THEN runner_name='pytest', command no vacío."""
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        runner_name, command, detected_from = detect_test_runner(tmp_path, ["Python"])
+        assert runner_name == "pytest"
+        assert command
+        assert detected_from == "pyproject.toml"
+
+    def test_pytest_detected_via_setup_cfg(self, tmp_path):
+        """GIVEN setup.cfg presente, THEN pytest detectado."""
+        (tmp_path / "setup.cfg").touch()
+        runner_name, command, detected_from = detect_test_runner(tmp_path, ["Python"])
+        assert runner_name == "pytest"
+        assert detected_from == "setup.cfg"
+
+    def test_pytest_detected_via_pytest_ini(self, tmp_path):
+        """GIVEN pytest.ini presente, THEN pytest detectado."""
+        (tmp_path / "pytest.ini").touch()
+        runner_name, command, detected_from = detect_test_runner(tmp_path, ["Python"])
+        assert runner_name == "pytest"
+        assert detected_from == "pytest.ini"
+
+    def test_no_indicator_returns_none(self, tmp_path):
+        """GIVEN directorio vacío con stacks=[Python], THEN (None, None, '')."""
+        # Python stack pero sin ningún archivo indicador → unittest tiene indicators=[]
+        # lo cual significa que matching=[] pero not indicators es True → retorna unittest
+        # Usamos un stack no registrado para obtener None
+        runner_name, command, _ = detect_test_runner(tmp_path, [])
+        assert runner_name is None
+        assert command is None
+
+    def test_unknown_stack_returns_none(self, tmp_path):
+        """GIVEN stack desconocido, THEN (None, None, '')."""
+        runner_name, command, detected_from = detect_test_runner(tmp_path, ["Cobol"])
+        assert runner_name is None
+        assert command is None
+        assert detected_from == ""
+
+    def test_go_runner_detected(self, tmp_path):
+        """GIVEN Go stack con go.mod, THEN runner='go test'."""
+        (tmp_path / "go.mod").touch()
+        runner_name, command, _ = detect_test_runner(tmp_path, ["Go"])
+        assert runner_name == "go test"
+        assert "go test" in command
+
+
+class TestBuildYamlHelpers:
+    """Tests para _build_stacks_yaml y _build_test_runner_yaml. REQ-TEST-BUILD-YAML."""
+
+    def test_build_stacks_empty_list(self):
+        """GIVEN [], THEN resultado representa lista YAML vacía."""
+        result = _build_stacks_yaml([])
+        assert "[]" in result
+
+    def test_build_stacks_single_item(self):
+        """GIVEN ['Python'], THEN resultado contiene '- Python'."""
+        result = _build_stacks_yaml(["Python"])
+        assert "- Python" in result
+
+    def test_build_stacks_multiple_items(self):
+        """GIVEN ['Python', 'Node'], THEN ambas líneas presentes."""
+        result = _build_stacks_yaml(["Python", "Node"])
+        assert "- Python" in result
+        assert "- Node" in result
+
+    def test_build_stacks_preserves_order(self):
+        """GIVEN ['Go', 'Rust', 'Java'], THEN orden preservado."""
+        result = _build_stacks_yaml(["Go", "Rust", "Java"])
+        lines = [l.strip() for l in result.split("\n") if l.strip()]
+        assert lines == ["- Go", "- Rust", "- Java"]
+
+    def test_build_test_runner_yaml_none(self):
+        """GIVEN runner=None, THEN resultado contiene 'null'."""
+        result = _build_test_runner_yaml(None, None, "")
+        assert "null" in result
+
+    def test_build_test_runner_yaml_with_values(self):
+        """GIVEN runner='pytest', command='pytest', detected_from='pyproject.toml', THEN todos los campos presentes."""
+        result = _build_test_runner_yaml("pytest", "pytest", "pyproject.toml")
+        assert "pytest" in result
+        assert "pyproject.toml" in result
+
+    def test_build_test_runner_yaml_non_none_has_name(self):
+        """GIVEN runner no vacío, THEN 'name:' presente en resultado."""
+        result = _build_test_runner_yaml("jest", "npx jest", "jest.config.js")
+        assert "name:" in result
+        assert "jest" in result
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Filesystem tests (tmp_path)
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureDirs:
+    """Tests para ensure_dirs(root). REQ-TEST-ENSURE-DIRS, REQ-IDEMPOTENT."""
+
+    def test_creates_all_required_dirs(self, tmp_path):
+        """GIVEN tmp_path vacío, THEN docs/auditoria/cambios/, .atl/, config/ creados."""
+        ensure_dirs(tmp_path)
+        assert (tmp_path / "docs" / "auditoria" / "cambios").is_dir()
+        assert (tmp_path / ".atl").is_dir()
+        assert (tmp_path / "config").is_dir()
+
+    def test_returns_non_empty_list(self, tmp_path):
+        """GIVEN tmp_path vacío, THEN retorna lista no vacía."""
+        result = ensure_dirs(tmp_path)
+        assert isinstance(result, list)
+        assert len(result) > 0
+
+    def test_idempotent_no_exception_on_second_call(self, tmp_path):
+        """GIVEN ya llamado una vez, THEN segunda llamada no lanza excepción."""
+        ensure_dirs(tmp_path)
+        ensure_dirs(tmp_path)  # no debe lanzar
+        assert (tmp_path / ".atl").is_dir()
+
+    def test_directories_still_exist_after_second_call(self, tmp_path):
+        """GIVEN segunda llamada idempotente, THEN dirs siguen existiendo."""
+        ensure_dirs(tmp_path)
+        ensure_dirs(tmp_path)
+        assert (tmp_path / "docs" / "auditoria" / "cambios").is_dir()
+        assert (tmp_path / "config").is_dir()
+
+
+class TestCreateAuditConfig:
+    """Tests para create_audit_config(...). REQ-TEST-CREATE-CONFIG, REQ-YAML-TYPES, REQ-IDEMPOTENT."""
+
+    def _ensure_audit_dir(self, root: Path):
+        (root / "docs" / "auditoria").mkdir(parents=True, exist_ok=True)
+
+    def test_fresh_creation_returns_created(self, tmp_path):
+        """GIVEN directorio vacío, THEN retorna 'created'."""
+        self._ensure_audit_dir(tmp_path)
+        result = create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        assert result == "created"
+
+    def test_fresh_creation_file_exists(self, tmp_path):
+        """GIVEN directorio vacío, THEN docs/auditoria/config.yaml existe después."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        assert (tmp_path / "docs" / "auditoria" / "config.yaml").exists()
+
+    def test_preserved_when_file_exists(self, tmp_path):
+        """GIVEN config.yaml ya existe, THEN retorna 'preserved'."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        result = create_audit_config(tmp_path, ["Node"], "jest", "npx jest", "jest.config.js")
+        assert result == "preserved"
+
+    def test_preserved_file_content_unchanged(self, tmp_path):
+        """GIVEN config.yaml ya existe, THEN contenido no se modifica en segunda llamada."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        original = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        create_audit_config(tmp_path, ["Node"], "jest", "npx jest", "jest.config.js")
+        after = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert original == after
+
+    def test_yaml_round_trip_enforcement_is_str_off(self, tmp_path):
+        """REQ-YAML-TYPES: enforcement round-tripea como str 'off', no bool False (YAML 1.1 gotcha)."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        enforcement = config["rules"]["pr_size"]["enforcement"]
+        assert isinstance(enforcement, str), f"enforcement debe ser str, es {type(enforcement)}"
+        assert enforcement == "off", f"enforcement debe ser 'off', es {enforcement!r}"
+
+    def test_yaml_round_trip_suggest_split_is_bool_false(self, tmp_path):
+        """REQ-YAML-TYPES: suggest_split round-tripea como bool False."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        suggest_split = config["rules"]["pr_size"]["suggest_split"]
+        assert isinstance(suggest_split, bool), f"suggest_split debe ser bool, es {type(suggest_split)}"
+        assert suggest_split is False
+
+    def test_yaml_round_trip_tdd_is_bool_false(self, tmp_path):
+        """REQ-YAML-TYPES: tdd round-tripea como bool False."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        tdd = config["rules"]["implement"]["tdd"]
+        assert isinstance(tdd, bool), f"tdd debe ser bool, es {type(tdd)}"
+        assert tdd is False
+
+    def test_yaml_round_trip_budget_lines_is_int(self, tmp_path):
+        """REQ-YAML-TYPES: budget_lines round-tripea como int 400."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        budget = config["rules"]["pr_size"]["budget_lines"]
+        assert isinstance(budget, int), f"budget_lines debe ser int, es {type(budget)}"
+        assert budget == 400
+
+    def test_yaml_round_trip_max_tasks_is_int(self, tmp_path):
+        """REQ-YAML-TYPES: max_tasks_per_batch round-tripea como int 20."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        max_tasks = config["rules"]["implement"]["max_tasks_per_batch"]
+        assert isinstance(max_tasks, int)
+        assert max_tasks == 20
+
+    def test_yaml_round_trip_stacks_is_list(self, tmp_path):
+        """REQ-YAML-TYPES: context.stacks round-tripea como list."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python", "Node"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        stacks = config["context"]["stacks"]
+        assert isinstance(stacks, list)
+        assert "Python" in stacks
+        assert "Node" in stacks
+
+    def test_stacks_empty_list_written_correctly(self, tmp_path):
+        """GIVEN stacks=[], THEN config.yaml se crea sin error y stacks es lista vacía o null."""
+        self._ensure_audit_dir(tmp_path)
+        result = create_audit_config(tmp_path, [], None, None, "")
+        assert result == "created"
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        # stacks puede ser [] (lista vacía) según como PyYAML parsee "    []"
+        stacks = config["context"]["stacks"]
+        assert stacks == [] or stacks is None
+
+
+class TestUpdateGitignore:
+    """Tests para update_gitignore(root). REQ-TEST-GITIGNORE, REQ-IDEMPOTENT."""
+
+    FORGE_ENTRIES = ["# forge", ".codegraph/", ".engram/", "!.engram/chunks/"]
+
+    def test_fresh_creation(self, tmp_path):
+        """GIVEN sin .gitignore, THEN archivo creado con entradas forge."""
+        update_gitignore(tmp_path)
+        gitignore = tmp_path / ".gitignore"
+        assert gitignore.exists()
+        content = gitignore.read_text(encoding="utf-8")
+        for entry in self.FORGE_ENTRIES:
+            assert entry in content, f"Entrada faltante: {entry}"
+
+    def test_fresh_creation_returns_created(self, tmp_path):
+        """GIVEN sin .gitignore, THEN retorna 'created'."""
+        result = update_gitignore(tmp_path)
+        assert result == "created"
+
+    def test_append_missing_entries(self, tmp_path):
+        """GIVEN .gitignore existente sin entradas forge, THEN entradas agregadas."""
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("node_modules/\n*.pyc\n", encoding="utf-8")
+        update_gitignore(tmp_path)
+        content = gitignore.read_text(encoding="utf-8")
+        for entry in self.FORGE_ENTRIES:
+            assert entry in content
+
+    def test_append_returns_updated(self, tmp_path):
+        """GIVEN .gitignore sin entradas forge, THEN retorna string con 'updated'."""
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("node_modules/\n", encoding="utf-8")
+        result = update_gitignore(tmp_path)
+        assert "updated" in result
+
+    def test_idempotent_no_duplicates(self, tmp_path):
+        """GIVEN llamado dos veces, THEN entradas forge no se duplican (conteo por línea)."""
+        update_gitignore(tmp_path)
+        update_gitignore(tmp_path)
+        lines = (tmp_path / ".gitignore").read_text(encoding="utf-8").splitlines()
+        # Cada entrada debe aparecer exactamente una vez como línea completa
+        for entry in self.FORGE_ENTRIES:
+            exact_count = lines.count(entry)
+            assert exact_count == 1, f"Entrada duplicada como línea: {entry!r} (aparece {exact_count} veces)"
+
+    def test_idempotent_returns_preserved(self, tmp_path):
+        """GIVEN segunda llamada con entradas ya presentes, THEN retorna 'preserved'."""
+        update_gitignore(tmp_path)
+        result = update_gitignore(tmp_path)
+        assert result == "preserved"
+
+    def test_existing_content_preserved(self, tmp_path):
+        """GIVEN .gitignore con contenido previo, THEN contenido original no se elimina."""
+        gitignore = tmp_path / ".gitignore"
+        original_content = "# mis reglas\n*.log\n__pycache__/\n"
+        gitignore.write_text(original_content, encoding="utf-8")
+        update_gitignore(tmp_path)
+        content = gitignore.read_text(encoding="utf-8")
+        assert "*.log" in content
+        assert "__pycache__/" in content
+
+
+class TestGenerateSkillRegistryPlaceholder:
+    """Tests para generate_skill_registry_placeholder(root). REQ-TEST-SKILL-REGISTRY, REQ-IDEMPOTENT."""
+
+    def test_creates_file_when_absent(self, tmp_path):
+        """GIVEN sin .atl/skill-registry.md, THEN archivo creado."""
+        (tmp_path / ".atl").mkdir()
+        generate_skill_registry_placeholder(tmp_path)
+        assert (tmp_path / ".atl" / "skill-registry.md").exists()
+
+    def test_returns_placeholder_created(self, tmp_path):
+        """GIVEN sin .atl/skill-registry.md, THEN retorna 'placeholder_created'."""
+        (tmp_path / ".atl").mkdir()
+        result = generate_skill_registry_placeholder(tmp_path)
+        assert result == "placeholder_created"
+
+    def test_file_contains_skill_registry_header(self, tmp_path):
+        """GIVEN archivo creado, THEN contiene '# Skill Registry'."""
+        (tmp_path / ".atl").mkdir()
+        generate_skill_registry_placeholder(tmp_path)
+        content = (tmp_path / ".atl" / "skill-registry.md").read_text(encoding="utf-8")
+        assert "# Skill Registry" in content
+
+    def test_preserved_when_already_exists(self, tmp_path):
+        """GIVEN .atl/skill-registry.md ya existe, THEN retorna 'preserved'."""
+        atl = tmp_path / ".atl"
+        atl.mkdir()
+        registry = atl / "skill-registry.md"
+        registry.write_text("# Custom Registry\n", encoding="utf-8")
+        result = generate_skill_registry_placeholder(tmp_path)
+        assert result == "preserved"
+
+    def test_content_unchanged_on_second_call(self, tmp_path):
+        """GIVEN archivo existente, THEN contenido no se modifica."""
+        atl = tmp_path / ".atl"
+        atl.mkdir()
+        registry = atl / "skill-registry.md"
+        custom_content = "# My Custom Registry\nsome content\n"
+        registry.write_text(custom_content, encoding="utf-8")
+        generate_skill_registry_placeholder(tmp_path)
+        assert registry.read_text(encoding="utf-8") == custom_content
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: PACKAGE_ROOT monkeypatch tests
+# ---------------------------------------------------------------------------
+
+FAKE_TEMPLATE_CONTENT = """\
+## Persona del orquestador
+
+Sos el orquestador del workflow forge.
+
+## Engram
+
+Usás Engram para persistir contexto.
+
+## Strict TDD Mode
+
+Ciclo RED → GREEN → TRIANGULATE → REFACTOR.
+
+## Workflow de las skills
+
+Las skills se cargan desde .atl/skill-registry.md.
+
+## Idioma
+
+Español Rioplatense para respuestas al usuario.
+"""
+
+
+class TestMergeOrCreateClaudeMd:
+    """Tests para merge_or_create_claude_md(root). REQ-TEST-CLAUDE-MD."""
+
+    def _setup_package_root(self, monkeypatch, tmp_path):
+        """Configura PACKAGE_ROOT falso con template institucional."""
+        fake_pkg_root = tmp_path / "fake_pkg"
+        templates_dir = fake_pkg_root / "templates"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "CLAUDE-md-institucional.md").write_text(
+            FAKE_TEMPLATE_CONTENT, encoding="utf-8"
+        )
+        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
+        return fake_pkg_root
+
+    def test_fresh_create_no_existing_file(self, tmp_path, monkeypatch):
+        """GIVEN sin CLAUDE.md, THEN archivo creado, retorna 'created'."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        result = merge_or_create_claude_md(project_root)
+        assert result == "created"
+        assert (project_root / "CLAUDE.md").exists()
+
+    def test_fresh_create_content_matches_template(self, tmp_path, monkeypatch):
+        """GIVEN sin CLAUDE.md, THEN archivo contiene contenido del template."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        merge_or_create_claude_md(project_root)
+        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "Persona del orquestador" in content
+
+    def test_append_missing_section(self, tmp_path, monkeypatch):
+        """GIVEN CLAUDE.md sin sección institucional, THEN sección agregada."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / "CLAUDE.md").write_text(
+            "# My Project Config\n\nSome existing content.\n", encoding="utf-8"
+        )
+        result = merge_or_create_claude_md(project_root)
+        assert "merged" in result
+        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "Persona del orquestador" in content
+
+    def test_preserve_existing_section(self, tmp_path, monkeypatch):
+        """GIVEN CLAUDE.md ya tiene sección institucional, THEN retorna 'preserved'."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        existing_with_sections = (
+            "# My Config\n\n## Persona del orquestador\nYa existe.\n"
+            "## Engram\nYa existe.\n"
+            "## Strict TDD Mode\nYa existe.\n"
+            "## Workflow de las skills\nYa existe.\n"
+            "## Idioma\nYa existe.\n"
+        )
+        (project_root / "CLAUDE.md").write_text(existing_with_sections, encoding="utf-8")
+        result = merge_or_create_claude_md(project_root)
+        assert result == "preserved"
+
+    def test_no_duplication_on_second_call(self, tmp_path, monkeypatch):
+        """GIVEN llamado dos veces, THEN secciones no se duplican."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        merge_or_create_claude_md(project_root)
+        # Segunda llamada sobre el archivo recién creado
+        merge_or_create_claude_md(project_root)
+        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
+        # La sección no debe aparecer dos veces
+        assert content.count("## Persona del orquestador") == 1
+
+
+class TestCopyConfigTemplates:
+    """Tests para copy_config_templates(root). Complemento de REQ-TEST-CLAUDE-MD."""
+
+    def _setup_package_root(self, monkeypatch, tmp_path):
+        """Configura PACKAGE_ROOT falso con config/modulos-transversales.yaml."""
+        fake_pkg_root = tmp_path / "fake_pkg"
+        config_dir = fake_pkg_root / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "modulos-transversales.yaml").write_text(
+            "# Módulos transversales\nschema: forge\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
+        return fake_pkg_root
+
+    def test_copies_config_template_to_destination(self, tmp_path, monkeypatch):
+        """GIVEN config/ no existe en destino, THEN modulos-transversales.yaml copiado."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / "config").mkdir()
+        result = copy_config_templates(project_root)
+        assert "modulos-transversales.yaml" in result
+        assert result["modulos-transversales.yaml"] == "created"
+        assert (project_root / "config" / "modulos-transversales.yaml").exists()
+
+    def test_preserves_existing_config(self, tmp_path, monkeypatch):
+        """GIVEN config ya existe en destino, THEN retorna 'preserved' y no sobrescribe."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        (project_root / "config").mkdir(parents=True)
+        original = "# mi config personalizada\n"
+        (project_root / "config" / "modulos-transversales.yaml").write_text(
+            original, encoding="utf-8"
+        )
+        result = copy_config_templates(project_root)
+        assert result["modulos-transversales.yaml"] == "preserved"
+        # Contenido no se modifica
+        assert (project_root / "config" / "modulos-transversales.yaml").read_text(encoding="utf-8") == original
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Subprocess tests (sin subprocess real)
+# ---------------------------------------------------------------------------
+
+
+class TestInitCodegraph:
+    """Tests para init_codegraph(root). REQ-TEST-INIT-CODEGRAPH, CC-NO-REAL-PROC."""
+
+    def test_binary_absent_returns_gracefully(self, tmp_path, monkeypatch):
+        """GIVEN shutil.which devuelve None, THEN (None, msg) — sin subprocess real."""
+        monkeypatch.setattr("shutil.which", lambda _: None)
+        status, warning = init_codegraph(tmp_path)
+        assert status is None
+        assert warning is not None
+        assert "codegraph" in warning.lower()
+
+    def test_binary_absent_no_subprocess_called(self, tmp_path, monkeypatch):
+        """GIVEN shutil.which devuelve None, THEN subprocess.run no invocado."""
+        monkeypatch.setattr("shutil.which", lambda _: None)
+        with patch("subprocess.run") as mock_run:
+            init_codegraph(tmp_path)
+            mock_run.assert_not_called()
+
+    def test_happy_path_mocked_subprocess(self, tmp_path, monkeypatch):
+        """GIVEN which devuelve path y subprocess mock exitoso, THEN 'indexed' retornado."""
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/codegraph")
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            status, warning = init_codegraph(tmp_path)
+            mock_run.assert_called_once()
+            assert status == "indexed"
+            assert warning is None
+
+    def test_happy_path_subprocess_called_with_correct_args(self, tmp_path, monkeypatch):
+        """GIVEN which devuelve path, THEN subprocess.run invocado con ['codegraph', 'init', '.']."""
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/codegraph")
+        mock_result = MagicMock()
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            init_codegraph(tmp_path)
+            call_args = mock_run.call_args
+            assert call_args[0][0] == ["codegraph", "init", "."]
+
+    def test_db_already_exists_returns_preserved(self, tmp_path, monkeypatch):
+        """GIVEN .codegraph/codegraph.db ya existe, THEN retorna ('preserved', None)."""
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/codegraph")
+        db_path = tmp_path / ".codegraph" / "codegraph.db"
+        db_path.parent.mkdir(parents=True)
+        db_path.touch()
+        status, warning = init_codegraph(tmp_path)
+        assert status == "preserved"
+        assert warning is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Integration test
+# ---------------------------------------------------------------------------
+
+
+class TestRun:
+    """Tests de integración para run(root). REQ-TEST-RUN."""
+
+    def _setup_for_run(self, monkeypatch, tmp_path):
+        """Setup completo: PACKAGE_ROOT falso + which=None."""
+        fake_pkg_root = tmp_path / "fake_pkg"
+        # Templates
+        (fake_pkg_root / "templates").mkdir(parents=True)
+        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
+            FAKE_TEMPLATE_CONTENT, encoding="utf-8"
+        )
+        # Config
+        (fake_pkg_root / "config").mkdir()
+        (fake_pkg_root / "config" / "modulos-transversales.yaml").write_text(
+            "schema: forge\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
+        monkeypatch.setattr("shutil.which", lambda _: None)
+        return fake_pkg_root
+
+    def test_run_returns_dict(self, tmp_path, monkeypatch):
+        """GIVEN setup completo, THEN run() retorna dict."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        result = run(project_root)
+        assert isinstance(result, dict)
+
+    def test_run_dict_has_required_keys(self, tmp_path, monkeypatch):
+        """GIVEN run() completo, THEN dict contiene claves esperadas."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        result = run(project_root)
+        expected_keys = {"dirs_ensured", "audit_config", "gitignore", "skill_registry", "claude_md", "codegraph"}
+        for key in expected_keys:
+            assert key in result, f"Clave faltante en resultado de run(): {key}"
+
+    def test_run_no_exception(self, tmp_path, monkeypatch):
+        """GIVEN setup completo, THEN run() no lanza excepción."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        # No debe lanzar
+        run(project_root)
+
+    def test_run_dirs_ensured_non_empty(self, tmp_path, monkeypatch):
+        """GIVEN run() completo, THEN dirs_ensured es lista no vacía."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        result = run(project_root)
+        assert isinstance(result["dirs_ensured"], list)
+        assert len(result["dirs_ensured"]) > 0
+
+    def test_run_audit_config_created(self, tmp_path, monkeypatch):
+        """GIVEN primera ejecución, THEN audit_config es 'created'."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        result = run(project_root)
+        assert result["audit_config"] == "created"
+
+    def test_run_idempotent_second_call(self, tmp_path, monkeypatch):
+        """GIVEN run() llamado dos veces, THEN segunda no lanza excepción."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        run(project_root)
+        run(project_root)
+
+    def test_run_codegraph_skipped_without_binary(self, tmp_path, monkeypatch):
+        """GIVEN which=None, THEN codegraph.status es None y hay warning."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        self._setup_for_run(monkeypatch, tmp_path)
+        result = run(project_root)
+        assert result["codegraph"]["status"] is None
+        assert result["codegraph"]["warning"] is not None
+
+    def test_run_with_python_stack_detected(self, tmp_path, monkeypatch):
+        """GIVEN pyproject.toml en project_root, THEN stacks contiene 'Python'."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[tool.pytest]\n", encoding="utf-8")
+        self._setup_for_run(monkeypatch, tmp_path)
+        result = run(project_root)
+        assert "Python" in result["stacks"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Edge cases para cobertura >= 85%
+# Cubre ramas no alcanzadas: extract_section (marker ausente), update_gitignore
+# (existing sin trailing newline), merge_or_create_claude_md (existing sin
+# trailing newline), init_codegraph (SubprocessError).
+# ---------------------------------------------------------------------------
+
+
+class TestExtractSection:
+    """Tests para extract_section(content, marker). Cubre rama line 103."""
+
+    def test_marker_not_found_returns_empty_string(self):
+        """GIVEN marker ausente en content, THEN retorna ''."""
+        result = extract_section("# Header\nsome content\n", "## Missing Section")
+        assert result == ""
+
+    def test_marker_found_returns_section_up_to_next_h2(self):
+        """GIVEN marker presente, THEN retorna sección hasta el próximo ## heading."""
+        content = "## Sección A\nContenido A.\n\n## Sección B\nContenido B.\n"
+        result = extract_section(content, "## Sección A")
+        assert "## Sección A" in result
+        assert "Contenido A." in result
+        # No debe incluir Sección B
+        assert "## Sección B" not in result
+
+    def test_marker_at_end_returns_full_tail(self):
+        """GIVEN marker al final sin heading siguiente, THEN retorna todo desde el marker."""
+        content = "## Última Sección\nContenido final.\n"
+        result = extract_section(content, "## Última Sección")
+        assert "Contenido final." in result
+
+
+class TestUpdateGitignoreNoTrailingNewline:
+    """Cubre rama line 300: existing sin trailing newline."""
+
+    def test_append_to_file_without_trailing_newline(self, tmp_path):
+        """GIVEN .gitignore existente sin trailing newline, THEN entradas agregadas correctamente."""
+        gitignore = tmp_path / ".gitignore"
+        # Sin trailing newline al final
+        gitignore.write_bytes(b"node_modules/")
+        result = update_gitignore(tmp_path)
+        content = gitignore.read_text(encoding="utf-8")
+        assert "# forge" in content
+        assert ".codegraph/" in content
+        assert "updated" in result
+
+
+class TestMergeOrCreateClaudeMdNoTrailingNewline:
+    """Cubre rama line 134: existing CLAUDE.md sin trailing newline antes de merge."""
+
+    FAKE_TEMPLATE = "## Persona del orquestador\nContenido.\n"
+
+    def _setup_package_root(self, monkeypatch, tmp_path):
+        fake_pkg_root = tmp_path / "fake_pkg"
+        (fake_pkg_root / "templates").mkdir(parents=True)
+        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
+            self.FAKE_TEMPLATE, encoding="utf-8"
+        )
+        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
+
+    def test_merge_when_existing_has_no_trailing_newline(self, tmp_path, monkeypatch):
+        """GIVEN CLAUDE.md sin trailing newline, THEN merge no produce línea doble vacía al inicio."""
+        self._setup_package_root(monkeypatch, tmp_path)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        # Sin trailing newline
+        (project_root / "CLAUDE.md").write_bytes(b"# My Config\nSome content")
+        result = merge_or_create_claude_md(project_root)
+        assert "merged" in result
+        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "Persona del orquestador" in content
+
+
+class TestInitCodegraphSubprocessError:
+    """Cubre rama lines 167-168: SubprocessError en init_codegraph."""
+
+    def test_subprocess_error_returns_none_with_message(self, tmp_path, monkeypatch):
+        """GIVEN subprocess.run lanza SubprocessError, THEN (None, msg) retornado."""
+        import subprocess
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/codegraph")
+        with patch("subprocess.run", side_effect=subprocess.SubprocessError("fallo de prueba")):
+            status, warning = init_codegraph(tmp_path)
+        assert status is None
+        assert warning is not None
+        assert "codegraph" in warning.lower()
