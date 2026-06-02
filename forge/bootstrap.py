@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# TODO: tests pendientes — ver cycle tests-bootstrap-paths
 """Bootstrap de forge en un proyecto.
 
 Invocado por la skill /fg-setup (Markdown). Hace todo el trabajo de instalación
