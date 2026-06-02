@@ -17,7 +17,8 @@ NO arregles nada. NO modifiques archivos. Solo reportá.
 `/fg-review` me invoca **por default** en cualquier cambio. Recibo en el prompt:
 
 - El diff completo del cambio.
-- El `design.md` del cambio (especialmente Enfoque, Arquitectura, Decisiones técnicas).
+- `diseño.md` del cambio (Enfoque, Arquitectura, Archivos afectados).
+- `decisiones.md` del cambio (decisiones técnicas tomadas durante diseño e implementación).
 - La TDD Cycle Evidence reportada por `/fg-implement` (si Strict TDD está activo).
 
 ## Proceso — los cinco ejes
@@ -26,7 +27,7 @@ Reviso el código en este orden, marcando issues en una tabla al final.
 
 ### 1. Correctness (CRITICAL si hay)
 
-- ¿La implementación hace lo que el `design.md` dice que tenía que hacer?
+- ¿La implementación hace lo que el `diseño.md` dice que tenía que hacer?
 - ¿Hay edge cases del spec que el código no maneja?
 - ¿Hay condiciones de error que se tragan en silencio?
 - ¿Hay race conditions o estado compartido sin sincronización?
@@ -34,7 +35,7 @@ Reviso el código en este orden, marcando issues en una tabla al final.
 
 ### 2. Design (CRITICAL/WARNING según gravedad)
 
-- ¿La estructura del cambio respeta las decisiones técnicas registradas en `design.md`?
+- ¿La estructura del cambio respeta las decisiones técnicas registradas en `decisiones.md`?
 - ¿Hay abstracciones innecesarias o premature optimization?
 - ¿Hay duplicación de lógica que ya existe en el proyecto?
 - ¿Acoplamientos que van a doler en futuros cambios?

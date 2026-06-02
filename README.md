@@ -17,7 +17,7 @@
 Los tres ejes que el producto endurece sobre la operación habitual de Claude Code:
 
 1. **Privacidad** — la regla operativa "engram persiste señales del proceso, no datos del dominio" está incorporada al `CLAUDE.md` institucional que `/fg-setup` mergea. La disciplina del agente es la barrera principal contra que identificadores y secretos del dominio terminen en memoria persistente.
-2. **Auditoría** — cada cambio queda registrado en `docs/audit/changes/<cambio>/` con un `README.md` (portada humano) y un `design.md` (técnico vivo). El historial de git es la cadena de auditoría.
+2. **Auditoría** — cada cambio queda registrado en `docs/auditoria/cambios/<cambio>/` con un `README.md` (portada humano), `diseño.md` (técnico estable), `tareas.md` (checklist) y `decisiones.md` (decisiones técnicas). El historial de git es la cadena de auditoría.
 3. **Permisos estrictos** — el agente no ejecuta acciones destructivas sin autorización explícita. Configuración `bypassPermissions: false` por defecto.
 
 forge **no reemplaza** Claude Code — vive encima de él, agregando las skills, hooks y sub-agentes que el workflow necesita.
@@ -95,25 +95,27 @@ Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 | Skill | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente, re-invocable para upgrade. |
-| `/fg-plan <descripción libre>` | Crea la carpeta `docs/audit/changes/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. |
-| `/fg-design` | Llena el `design.md` con archivos afectados (vía CodeGraph), decisiones técnicas y checklist de tareas. |
+| `/fg-plan <descripción libre>` | Crea la carpeta `docs/auditoria/cambios/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. |
+| `/fg-design` | Crea `diseño.md` (enfoque + arquitectura + archivos afectados), `tareas.md` (checklist) y `decisiones.md` (decisiones técnicas iniciales), todos vía CodeGraph. |
 | `/fg-implement` | Implementa el checklist tarea por tarea aplicando el ciclo Strict TDD si está activo (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR). |
 | `/fg-review` | Corre la suite completa, valida TDD Cycle Evidence, audita assertion quality, delega a sub-agentes especialistas según el cambio, y consolida el cierre. Única skill que delega. |
-| `/fg-update-arch` | Reconcilia la documentación permanente del proyecto (`docs/architecture/`) con la realidad del código. Propone diff por archivo, nunca todo-o-nada. |
+| `/fg-update-arch` | Reconcilia la documentación permanente del proyecto (`docs/arquitectura/`) con la realidad del código. Propone diff por archivo, nunca todo-o-nada. |
 
 ### Estructura de docs por cambio
 
 ```
 docs/
-├── architecture/                ← documentación permanente (gestionada por /fg-update-arch)
+├── arquitectura/                ← documentación permanente (gestionada por /fg-update-arch)
 │   ├── overview.md
 │   ├── stack.md
 │   └── decisions/               ← ADRs
-└── audit/                       ← cadena de auditoría IA-asistida
-    └── changes/
+└── auditoria/                   ← cadena de auditoría IA-asistida
+    └── cambios/
         └── 2026-05-feat-login/  ← un cambio
             ├── README.md        ← portada (lectura humano)
-            ├── design.md        ← técnico vivo (checklist, decisiones, archivos)
+            ├── diseño.md        ← técnico estable (solo escribe /fg-design)
+            ├── tareas.md        ← checklist mutable (/fg-implement tacha)
+            ├── decisiones.md    ← decisiones técnicas (append-only)
             └── assets/          ← opcional
 ```
 
@@ -138,7 +140,49 @@ Las demás skills (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-
 
 ## Configuración por proyecto
 
-Después de correr `/fg-setup`, el proyecto tiene un archivo editable en `config/`:
+Después de correr `/fg-setup`, el proyecto tiene dos archivos editables:
+
+### `docs/auditoria/config.yaml`
+
+Controla el comportamiento del workflow forge para el proyecto. `/fg-setup` lo genera con defaults conservadores y comentarios densos — legible sin contexto adicional. El equipo lo edita a mano y lo commitea.
+
+Los bloques más importantes:
+
+#### `rules.pr_size` — Review Workload Forecast
+
+`/fg-design` estima cuántas líneas tendrá el PR al cerrar. El bloque `rules.pr_size` controla qué hace con esa estimación:
+
+| Modo (`enforcement`) | Comportamiento |
+|---|---|
+| `off` | Sin mención del budget. 1 issue = 1 MR sin fricción. **Default recomendado** para la mayoría de los equipos. |
+| `warn` | Avisa cuando el PR supera `budget_lines` pero **no bloquea**. Útil para devs y freelancers que quieren visibilidad sin fricción. |
+| `block` | Exige documentar `size:exception` en el PR body antes de continuar si el PR supera el budget. Para equipos con presión real sobre calidad de review. |
+
+```yaml
+rules:
+  pr_size:
+    budget_lines: 400       # umbral de "PR grande" (heurística estándar: 400 líneas)
+    suggest_split: false    # ¿sugerir partir en chained PRs cuando supera el budget?
+    enforcement: off        # off | warn | block
+```
+
+**forge nunca crea ramas ni PRs automáticamente** — el forecast es información, no acción. El dev siempre opt-in explícitamente a cualquier split.
+
+#### `rules.implement.max_tasks_per_batch` — Batching de implementación
+
+Si `/fg-design` genera más tareas que este límite, `/fg-implement` implementa hasta el límite, guarda el progreso en engram, y le avisa al dev cuántas tareas quedan. La próxima invocación retoma donde quedó.
+
+```yaml
+rules:
+  implement:
+    max_tasks_per_batch: 20   # ajustar según el tamaño típico de los cambios del equipo
+```
+
+La norma sana es **"1 sesión = 1 ciclo"** — si un cambio requiere múltiples batches, correr cada uno en una sesión nueva para mantener el contexto del modelo fresco.
+
+#### `rules.workflow.cycle_mode` — Default del modo de ciclo
+
+Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive` o `automatic`). `/fg-plan` lo lee al arrancar y lo usa como valor pre-seleccionado en la pregunta de modo — el dev siempre puede cambiar la elección por sesión.
 
 ### `config/modulos-transversales.yaml`
 
@@ -152,7 +196,7 @@ Ejemplos comentados típicos: `src/auth/`, `src/db/`, `src/logging/`, `src/middl
 
 forge soporta un ciclo Strict TDD opt-in. Está OFF por default — `/fg-setup` no lo activa, lo decide el equipo editando el archivo de configuración del proyecto.
 
-**Activarlo**: editar `docs/audit/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado.
+**Activarlo**: editar `docs/auditoria/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado.
 
 Cuando está activo:
 
@@ -180,7 +224,7 @@ forge integra [CodeGraph](https://github.com/colbymchenry/codegraph) (MIT, 100% 
 CodeGraph se usa para:
 
 - `/fg-plan` → identificar contexto del cambio sin grep ciego.
-- `/fg-design` → llenar la sección "Archivos afectados" del `design.md`.
+- `/fg-design` → llenar la sección "Archivos afectados" de `diseño.md`.
 - `/fg-review` → detectar módulos top-level nuevos y cambios en dependencias.
 - `/fg-update-arch` → reconciliar topología del código con la documentación.
 
@@ -235,7 +279,9 @@ forge/
 │   └── modulos-transversales.yaml
 ├── templates/                   ← templates de artefactos generados (se aplican al proyecto)
 │   ├── README-change.md
-│   ├── design-change.md
+│   ├── diseño.md
+│   ├── tareas.md
+│   ├── decisiones.md
 │   └── CLAUDE-md-institucional.md
 ├── docs/                        ← documentación interna del paquete
 │   ├── herencias.md
@@ -257,12 +303,14 @@ mi-proyecto/
 ├── config/
 │   └── modulos-transversales.yaml   ← qué considera estructural el detector
 ├── docs/
-│   └── audit/                   ← cadena de auditoría IA-asistida
+│   └── auditoria/               ← cadena de auditoría IA-asistida
 │       ├── index.md
-│       └── changes/             ← un cambio = una carpeta
+│       └── cambios/             ← un cambio = una carpeta
 │           └── 2026-05-feat-login/
-│               ├── README.md    ← portada (lectura humano)
-│               └── design.md    ← técnico vivo
+│               ├── README.md       ← portada (lectura humano)
+│               ├── diseño.md       ← técnico estable
+│               ├── tareas.md       ← checklist mutable
+│               └── decisiones.md   ← decisiones técnicas
 ├── .atl/
 │   └── skill-registry.md        ← registry de skills resueltas para este proyecto
 ├── .codegraph/                  ← índice de CodeGraph (gitignored)

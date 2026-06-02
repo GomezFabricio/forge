@@ -4,6 +4,8 @@ description: Valida y cierra el cambio. Carga strict-tdd-verify.md, corre la sui
 when_to_apply: El dev invoca /fg-review después de /fg-implement. Es el cuarto paso del workflow y la única skill SDD que puede delegar a sub-agentes especialistas.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
+
 # /fg-review
 
 ## Propósito
@@ -12,11 +14,11 @@ Validar que la implementación es correcta, que el TDD se aplicó realmente (no 
 
 ## Cuándo aplicarla
 
-Después de `/fg-implement`, cuando el `design.md` tiene el checklist completo (todas las tareas tachadas) y se reportó la TDD Cycle Evidence. Si hay tareas sin terminar, abortar y reportar.
+Después de `/fg-implement`, cuando `tareas.md` tiene el checklist completo (todas las tareas tachadas) y se reportó la TDD Cycle Evidence. Si hay tareas sin terminar, abortar y reportar.
 
 ## Carga obligatoria del módulo Strict TDD Verify
 
-Leer `docs/audit/config.yaml` del proyecto. Si `rules.implement.tdd` es `true`, cargar el módulo `_shared/strict-tdd-verify.md`. Ese módulo define el TDD Compliance Check, el Assertion Quality Audit, Test Layer Distribution, Changed File Coverage y Quality Metrics.
+Leer `docs/auditoria/config.yaml` del proyecto. Si `rules.implement.tdd` es `true`, cargar el módulo `_shared/strict-tdd-verify.md`. Ese módulo define el TDD Compliance Check, el Assertion Quality Audit, Test Layer Distribution, Changed File Coverage y Quality Metrics.
 
 Si `rules.implement.tdd` es `false`, correr en modo estándar (validación básica) y avisar al dev.
 
@@ -26,10 +28,13 @@ El comando que `/fg-review` usa para correr la suite completa es `rules.review.t
 
 ### 1. Leer el contexto
 
-- `design.md` del cambio: checklist, decisiones técnicas, flags_for_review (si vienen de `/fg-implement`).
+Los sub-docs del cambio, según el mapping canónico:
+- `diseño.md`: enfoque técnico y arquitectura (input para `code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`).
+- `tareas.md`: checklist de tareas y estado de completitud (input para `qa-reviewer`).
+- `decisiones.md`: decisiones técnicas y flags_for_review de `/fg-implement` (input para `code-reviewer`).
 - `README.md`: Estado actual.
-- `docs/audit/config.yaml` del proyecto: modo TDD activo y comando de test/coverage threshold.
-- `apply-progress` y la TDD Cycle Evidence que generó `/fg-implement`.
+- `docs/auditoria/config.yaml` del proyecto: modo TDD activo y comando de test/coverage threshold.
+- La TDD Cycle Evidence que generó `/fg-implement`.
 
 ### 2. Correr la suite completa de tests
 
@@ -85,11 +90,19 @@ Reglas de invocación (cada una usa la tool `Agent` con el `subagent_type` corre
 - **Si hay migraciones o queries pesadas**: `dba-reviewer`. Detectar por path (`*migrations*`, `*.sql`) o por flags_for_review.
 - **Si toca UI/UX**: `frontend-reviewer`. Detectar por path (`*.tsx`, `*.jsx`, `components/`, `pages/`).
 - **Si hay tests complejos o de integración nuevos**: `qa-reviewer`.
-- **Si el proyecto está marcado como legacy** (config del proyecto o tag en `docs/architecture/`): `legacy-impact-analyzer`.
+- **Si el proyecto está marcado como legacy** (config del proyecto o tag en `docs/arquitectura/`): `legacy-impact-analyzer`.
+
+Mapping canónico de sub-docs por agente:
+- `code-reviewer`: recibe `diseño.md` + `decisiones.md`.
+- `qa-reviewer`: recibe `tareas.md` + TDD Cycle Evidence.
+- `security-reviewer`: recibe `diseño.md`.
+- `dba-reviewer`: recibe `diseño.md`.
+- `frontend-reviewer`: recibe `diseño.md`.
+- `legacy-impact-analyzer`: recibe `diseño.md` + `tareas.md`.
 
 Para cada role invocado:
 
-1. Llamar a `Agent({subagent_type: "<role>", description: "<breve>", prompt: "<contexto + diff + design.md relevante>"})`.
+1. Llamar a `Agent({subagent_type: "<role>", description: "<breve>", prompt: "<contexto + diff + sub-docs correspondientes>"})`.
 2. Esperar el envelope de retorno.
 3. Si retorna issues CRITICAL: incluirlos en el cierre como bloqueantes.
 4. Si retorna issues WARNING/SUGGESTION: incluirlos en el cierre como observaciones.
@@ -169,7 +182,7 @@ Cambiar Estado a `cerrado`.
 status: success | partial | blocked
 executive_summary: 1-2 oraciones del resultado del review
 artifacts:
-  - docs/audit/changes/<cambio>/README.md (Cierre escrito, Estado: cerrado)
+  - docs/auditoria/cambios/<cambio>/README.md (Cierre escrito, Estado: cerrado)
 tests_run:
   total: <N>
   passing: <N>

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+# TODO: tests pendientes — ver cycle tests-bootstrap-paths
 """Bootstrap de forge en un proyecto.
 
 Invocado por la skill /fg-setup (Markdown). Hace todo el trabajo de instalación
-inicial: detectar stack, generar docs/audit/config.yaml con defaults, mergear
+inicial: detectar stack, generar docs/auditoria/config.yaml con defaults, mergear
 CLAUDE.md, inicializar CodeGraph, generar skill registry placeholder,
 actualizar .gitignore.
 
@@ -10,7 +11,7 @@ Uso:
     python -m forge.bootstrap [--project-root PATH] [--json]
 
 Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante. Si
-docs/audit/config.yaml ya existe, el bootstrap NO lo sobrescribe — los
+docs/auditoria/config.yaml ya existe, el bootstrap NO lo sobrescribe — los
 cambios manuales del dev se preservan.
 """
 
@@ -20,13 +21,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-try:
-    import yaml
-except ImportError:
-    sys.stderr.write("bootstrap: pyyaml no instalado. Instalá con `pip install pyyaml`.\n")
-    sys.exit(1)
-
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
@@ -85,7 +79,7 @@ def detect_test_runner(root: Path, stacks: list) -> tuple:
 
 def ensure_dirs(root: Path) -> list:
     paths = [
-        root / "docs" / "audit" / "changes",
+        root / "docs" / "auditoria" / "cambios",
         root / ".atl",
         root / "config",
     ]
@@ -174,50 +168,116 @@ def init_codegraph(root: Path) -> tuple:
         return None, f"codegraph init falló: {e}"
 
 
-AUDIT_CONFIG_HEADER = """# docs/audit/config.yaml
+AUDIT_CONFIG_TEMPLATE = """\
+# docs/auditoria/config.yaml
 #
 # Configuración del workflow forge para este proyecto.
-# El bloque `context` lo regenera /fg-setup en cada corrida (detección automática).
-# El bloque `rules` lo edita el equipo a mano: cambiar `implement.tdd` a `true`
-# activa Strict TDD para los ciclos del workflow.
+# - context: lo regenera /fg-setup en cada corrida (detección automática del stack).
+# - rules: lo edita el equipo a mano para ajustar el comportamiento del workflow.
+#
+# IMPORTANTE: si reejecutás /fg-setup, este archivo se PRESERVA — los cambios manuales
+# no se pierden. Para resetear a defaults, borrá este archivo y volvé a correr /fg-setup.
+
+schema: forge
+
+context:
+  stacks:                             # stacks detectados por /fg-setup (python, node, etc.)
+{stacks_yaml}
+  test_runner:                        # runner detectado al correr /fg-setup
+{test_runner_yaml}
+
+rules:
+  workflow:
+    # cycle_mode: cómo corren las 4 fases del workflow forge (plan → design → implement → review).
+    #   "interactive" = pausa entre fases para que el dev revise antes de seguir.
+    #   "automatic"   = corre las 4 fases sin parar, muestra solo el resultado final.
+    # NOTA: este es el default sugerido; /fg-plan paso 0 lo pregunta una vez por sesión
+    # al primer comando del ciclo y cachea la respuesta. "1 sesión = 1 ciclo" es la norma sana.
+    cycle_mode: interactive
+
+  pr_size:
+    # Cuando /fg-design cierra, calcula un "Review Workload Forecast" estimando
+    # las líneas que va a tener el PR. Este bloque controla qué hacer con ese forecast.
+
+    # budget_lines: umbral de líneas a partir del cual el PR se considera "grande".
+    # Heurística común: 400 líneas es el techo confortable para una review humana de calidad.
+    budget_lines: 400
+
+    # suggest_split: cuando el forecast supera el budget, ¿sugerir partir en chained PRs?
+    #   false = no sugerir (default — el dev decide cuándo y cómo partir).
+    #   true  = sugerir explícitamente partir en chained PRs.
+    # Esto es SUGERENCIA, no acción: forge nunca crea ramas o PRs sin opt-in explícito.
+    suggest_split: false
+
+    # enforcement: cuán estricto es el control del budget. Tres modos:
+    #   "off"   = nunca menciona el budget. 1 issue = 1 MR (default oficina típica).
+    #   "warn"  = avisa en /fg-design y /fg-review cuando se supera, pero NO bloquea.
+    #             Útil para devs / freelancers atentos que quieren visibilidad sin fricción.
+    #   "block" = exige documentar `size:exception` en el PR body para mergear cuando supera.
+    #             Útil para equipos con presión real sobre calidad de review.
+    enforcement: "off"
+
+  implement:
+    # tdd: opt-in al ciclo Strict TDD de forge (RED → GREEN → TRIANGULATE → REFACTOR).
+    #   false = modo estándar (default — /fg-implement avisa que TDD no está activo).
+    #   true  = /fg-implement carga _shared/strict-tdd.md y exige el ciclo de 7 pasos.
+    # Para activar: editar este archivo y commitear. El cambio queda versionado.
+    tdd: false
+
+    # test_command: comando que /fg-implement usa para correr tests entre tareas.
+    # Si está vacío, fallback a context.test_runner.command. Si los dos están vacíos, aborta.
+    test_command: ""
+
+    # max_tasks_per_batch: cuántas tareas /fg-implement procesa antes de cortar y guardar
+    # progreso. Si /fg-design generó más tareas que este límite, /fg-implement corta cuando
+    # llega al límite, guarda el progreso en engram (forge/{{cambio}}/implement-progress) y
+    # reporta al dev. La próxima invocación retoma desde donde quedó.
+    # NOTA: idealmente cada batch corre en una sesión nueva (norma "1 sesión = 1 ciclo").
+    max_tasks_per_batch: 20
+
+  review:
+    # test_command: comando que /fg-review usa para correr la suite completa al validar.
+    # Fallback chain: rules.review.test_command → rules.implement.test_command → context.test_runner.command.
+    test_command: ""
+
+    # coverage_threshold: cobertura mínima requerida sobre archivos modificados.
+    #   0 = sin enforcement (default — sólo reporta coverage, no bloquea).
+    #   N>0 = bloquea cierre del ciclo si algún archivo cambiado queda por debajo.
+    coverage_threshold: 0
 """
 
 
+def _build_stacks_yaml(stacks: list) -> str:
+    """Render the stacks list as yaml lines with 4-space indent."""
+    if not stacks:
+        return "    []"
+    return "\n".join(f"    - {s}" for s in stacks)
+
+
+def _build_test_runner_yaml(runner: str, runner_command: str, detected_from: str) -> str:
+    """Render the test_runner block as yaml lines with 4-space indent."""
+    if not runner:
+        return "    null"
+    lines = [
+        f"    name: {runner}",
+        f"    command: {runner_command}",
+        f"    detected_from: {detected_from}",
+    ]
+    return "\n".join(lines)
+
+
 def create_audit_config(root: Path, stacks: list, runner: str, runner_command: str, detected_from: str) -> str:
-    path = root / "docs" / "audit" / "config.yaml"
+    path = root / "docs" / "auditoria" / "config.yaml"
     if path.exists():
         return "preserved"
 
-    config = {
-        "schema": "forge",
-        "context": {
-            "stacks": stacks,
-            "test_runner": (
-                {
-                    "name": runner,
-                    "command": runner_command,
-                    "detected_from": detected_from,
-                }
-                if runner else None
-            ),
-        },
-        "rules": {
-            "implement": {
-                "tdd": False,
-                "test_command": "",
-            },
-            "review": {
-                "test_command": "",
-                "coverage_threshold": 0,
-            },
-        },
-    }
+    content = AUDIT_CONFIG_TEMPLATE.format(
+        stacks_yaml=_build_stacks_yaml(stacks),
+        test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
+    )
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        AUDIT_CONFIG_HEADER + "\n" + yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    path.write_text(content, encoding="utf-8")
     return "created"
 
 
@@ -284,7 +344,7 @@ def run(root: Path) -> dict:
     )
     if not runner:
         report["warnings"].append(
-            "No se detectó test runner. docs/audit/config.yaml queda con test_runner: null. "
+            "No se detectó test runner. docs/auditoria/config.yaml queda con test_runner: null. "
             "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
         )
 
@@ -324,14 +384,14 @@ def print_report(report: dict) -> None:
     print()
     print("Archivos:")
     print(f"  CLAUDE.md: {report['claude_md']}")
-    print(f"  docs/audit/config.yaml: {report['audit_config']}")
+    print(f"  docs/auditoria/config.yaml: {report['audit_config']}")
     for name, status in report["config_templates"].items():
         print(f"  config/{name}: {status}")
     print(f"  .atl/skill-registry.md: {report['skill_registry']}")
     print(f"  .gitignore: {report['gitignore']}")
     print()
     if report["audit_config"] == "created":
-        print("Nota: TDD está OFF por default. Para activarlo, editá docs/audit/config.yaml")
+        print("Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.yaml")
         print("      y cambiá rules.implement.tdd a true.")
         print()
     if report["warnings"]:

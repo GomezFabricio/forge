@@ -4,6 +4,8 @@ description: Entiende un cambio nuevo. El dev describe lo que quiere hacer en le
 when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, D, E)
+
 # /fg-plan
 
 ## Propósito
@@ -32,9 +34,11 @@ Al arrancar un ciclo nuevo, decidir si la sesión actual usa modo **interactivo*
 
 **Cache de sesión**: el orquestador cachea la respuesta para la sesión actual. Si ya hay un modo definido en esta sesión, **usar el cacheado sin volver a preguntar**. Si es la primera vez que se arranca un ciclo en la sesión, preguntar y cachear.
 
+**Default sugerido desde config**: leer `rules.workflow.cycle_mode` de `docs/auditoria/config.yaml`. Si existe, usar ese valor como respuesta pre-seleccionada en la pregunta (no como respuesta automática — siempre preguntar la primera vez por sesión para que el dev pueda cambiar si quiere). Si no existe el config, el default es `interactive`.
+
 Pregunta al dev (solo si no hay cache):
 
-> "¿Modo del ciclo: interactivo o automático? (cacheado para la sesión actual)"
+> "¿Modo del ciclo: interactivo o automático? (cacheado para la sesión actual; default del proyecto: {cycle_mode del config})"
 
 El cache vive solo en el contexto del orquestador — no se persiste en filesystem ni engram. Sesión nueva → vuelve a preguntar.
 
@@ -73,11 +77,11 @@ Ejemplo de pregunta:
 
 ### 4. Crear la carpeta del cambio
 
-Path: `docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/`
+Path: `docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/`
 
 Donde `<YYYY-MM>` es el año-mes actual.
 
-Ejemplo: `docs/audit/changes/2026-05-feat-login-usuarios/`
+Ejemplo: `docs/auditoria/cambios/2026-05-feat-login-usuarios/`
 
 ### 5. Consultar CodeGraph para entender el contexto
 
@@ -138,7 +142,7 @@ Imprimir:
 
 - Pedirle al dev que escriba el tipo o el nombre en kebab-case por su cuenta.
 - Asumir alcance o restricciones que el dev no mencionó. Si no se sabe, preguntar.
-- Crear el `design.md` (ese lo crea `/fg-design`).
+- Crear `diseño.md`, `tareas.md` ni `decisiones.md` (esos los crea `/fg-design`).
 - Tocar código del proyecto.
 - Imponer estilos de arquitectura o stack.
 
@@ -149,7 +153,7 @@ status: success | partial | blocked
 executive_summary: 1-2 oraciones de lo que se hizo
 cycle_mode: interactivo | automatico
 artifacts:
-  - docs/audit/changes/<YYYY-MM>-<tipo>-<nombre>/README.md
+  - docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/README.md
 inferred:
   tipo: <tipo inferido>
   nombre: <nombre kebab-case inferido>

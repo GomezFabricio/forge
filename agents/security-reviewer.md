@@ -23,7 +23,7 @@ NO arregles. NO modifiques. Solo reportá.
 - Operaciones que aceptan input del usuario y lo procesan (queries, parsing, file uploads).
 - Cambios a permisos, roles, o reglas de acceso.
 
-Recibo en el prompt: diff + `design.md` + contexto del módulo afectado.
+Recibo en el prompt: diff + `diseño.md` del cambio + contexto del módulo afectado.
 
 ## Proceso — checklist por categoría
 
