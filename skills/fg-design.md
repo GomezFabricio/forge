@@ -4,6 +4,8 @@ description: Define el cómo del cambio. Lee el README.md generado por /fg-plan,
 when_to_apply: El dev invoca /fg-design después de haber corrido /fg-plan. Es el segundo paso del workflow.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, C, E)
+
 # /fg-design
 
 ## Propósito
@@ -98,11 +100,25 @@ Ejemplo:
 
 `decisiones.md` crece durante `/fg-implement` con decisiones que surjan en el código — siempre append, nunca rewrite.
 
-### 8. Actualizar el README.md
+### 8. Emitir el Review Workload Forecast
+
+Aplicar la lógica de la **Sección C** de `fg-phase-common.md` (cargada al inicio):
+
+1. Leer `rules.pr_size.enforcement` de `docs/auditoria/config.yaml`.
+2. Si `enforcement: off`, saltar este paso completamente.
+3. Si `enforcement: warn` o `block`:
+   - Estimar `estimated_changed_lines` sumando los archivos de "Archivos afectados" de `diseño.md`.
+   - Calcular `budget_risk` (Low / Medium / High) según el umbral `rules.pr_size.budget_lines`.
+   - Emitir el bloque de texto con las guard lines exactas (ver Sección C).
+   - Si `enforcement: block` y el riesgo es High: pedir al dev `size:exception` documentada antes de continuar.
+
+El campo `review_workload_forecast` se incluye en el envelope de retorno.
+
+### 9. Actualizar el README.md
 
 Cambiar la sección "Estado" del `README.md` a `diseñado`.
 
-### 9. Reportar al dev
+### 10. Reportar al dev
 
 - Confirmar los tres archivos creados: `diseño.md`, `tareas.md`, `decisiones.md`.
 - Si alguno ya existe, NO sobrescribir — preguntar al dev si quiere re-correr `/fg-design` (caso re-diseño parcial).
@@ -150,6 +166,14 @@ files_affected:
   - <lista de archivos identificados con CodeGraph>
 decisiones_grandes:
   - <decisiones técnicas registradas durante /fg-design>
+review_workload_forecast:
+  estimated_changed_lines: <N>
+  budget_threshold: <budget_lines del config>
+  budget_risk: Low | Medium | High
+  chained_recommended: Yes | No
+  decision_needed_before_apply: Yes | No
+  suggested_split: <descripción o "none">
 next_recommended: /fg-implement
 risks: None | <riesgos técnicos detectados>
+skill_resolution: paths-injected | fallback-registry | none
 ```

@@ -4,6 +4,8 @@ description: Instala forge en un proyecto existente. Idempotente. Detecta stack,
 when_to_apply: Una vez al adoptar forge en un proyecto. Re-ejecutable para upgrade — detecta lo existente y solo agrega lo faltante.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
+
 # /fg-setup
 
 ## Propósito
@@ -76,28 +78,44 @@ Es la configuración persistente del proyecto que el equipo edita a mano para de
 
 Si `docs/auditoria/config.yaml` ya existe (re-ejecución de `/fg-setup`), **NO sobrescribir**. Solo se crea cuando no existe.
 
-Formato:
+Formato generado (con comentarios densos para que el equipo entienda cada key sin contexto adicional):
 
 ```yaml
 schema: forge
 
 context:
-  stacks: ["Python"]            # detectado del paso 2
-  test_runner:                  # detectado del paso 3 — null si no se encontró
-    name: "pytest"
-    command: "pytest"
-    detected_from: "pyproject.toml"
+  stacks:                             # stacks detectados (python, node, etc.)
+    - Python
+  test_runner:                        # runner detectado al correr /fg-setup
+    name: pytest
+    command: pytest
+    detected_from: pyproject.toml
 
 rules:
+  workflow:
+    # cycle_mode: cómo corren las 4 fases del workflow forge.
+    #   "interactive" = pausa entre fases para revisar. "automatic" = sin pausa.
+    # /fg-plan paso 0 lo pregunta una vez por sesión y cachea la respuesta.
+    cycle_mode: interactive
+
+  pr_size:
+    # Controls del Review Workload Forecast — ver /fg-design y fg-phase-common.md Sección C.
+    budget_lines: 400       # umbral de "PR grande" (líneas cambiadas)
+    suggest_split: false    # si sugerir chained PRs al superar el budget
+    enforcement: off        # off | warn | block (ver fg-phase-common.md Sección C)
+
   implement:
-    # Si true, /fg-implement aplica el ciclo Safety Net → RED → GREEN → TRIANGULATE → REFACTOR.
+    # Si true, /fg-implement aplica Safety Net → RED → GREEN → TRIANGULATE → REFACTOR.
     tdd: false
-    # Comando de test que usa el ciclo TDD. Si vacío, usa context.test_runner.command.
+    # Comando de test. Si vacío, usa context.test_runner.command.
     test_command: ""
+    # Máximo de tareas por batch. /fg-implement corta al llegar al límite y reporta.
+    max_tasks_per_batch: 20
+
   review:
-    # Comando que /fg-review usa para validar la suite completa al cierre del cambio.
+    # Comando que /fg-review usa para validar la suite completa al cierre.
     test_command: ""
-    # Cobertura mínima requerida (0 = sin enforcement).
+    # Cobertura mínima requerida sobre archivos cambiados (0 = sin enforcement).
     coverage_threshold: 0
 ```
 

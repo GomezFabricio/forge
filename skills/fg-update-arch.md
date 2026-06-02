@@ -4,6 +4,8 @@ description: Mantiene actualizada la documentación permanente del proyecto en d
 when_to_apply: Sugerida por /fg-review cuando detecta cambios estructurales en un cambio que se está cerrando. También invocable manualmente cuando el dev quiere consolidar varios cambios pendientes en una sola actualización de arquitectura.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
+
 # /fg-update-arch
 
 ## Propósito

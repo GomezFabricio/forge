@@ -4,6 +4,8 @@ description: Ejecuta el plan tarea por tarea siguiendo el ciclo de Strict TDD (S
 when_to_apply: El dev invoca /fg-implement después de /fg-design. Es el tercer paso del workflow, donde se escribe el código.
 ---
 
+> Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
+
 # /fg-implement
 
 ## Propósito
@@ -30,6 +32,20 @@ El comando de test a usar es `rules.implement.test_command`. Si está vacío, fa
 - Leer `tareas.md` para el checklist de tareas a ejecutar.
 - Leer `docs/auditoria/config.yaml` del proyecto para conocer el modo TDD y el comando de test.
 - Si hay tareas ya tachadas en `tareas.md` (ej: vienes a continuar un cambio iniciado antes), retomar desde la primera tarea no tachada.
+
+### 1b. Verificar y retomar progreso anterior (pattern de batching)
+
+Aplicar la lógica de la **Sección E.5** de `fg-phase-common.md` (cargada al inicio):
+
+1. Buscar progreso previo en engram: `mem_search(query: "forge/{cambio}/implement-progress", project: "{project}")`.
+2. Si existe: `mem_get_observation(id)` → parsear tareas ya marcadas `[x]` → retomarlas como completadas.
+3. Contar las tareas pendientes (no completadas) en `tareas.md`.
+4. Leer `rules.implement.max_tasks_per_batch` de `docs/auditoria/config.yaml` (default: 20 si no está configurado).
+5. Si las tareas pendientes superan `max_tasks_per_batch`:
+   - Implementar solo hasta llegar al límite del batch.
+   - Al finalizar el batch: guardar progreso mergeando (ver regla E.5 — NUNCA overwrite).
+   - Reportar al dev: "Implementé N tareas. Quedan X pendientes. Re-invocá `/fg-implement` para continuar (idealmente en sesión nueva)."
+6. Si las tareas pendientes caben en el batch: continuar hasta completar todas.
 
 ### 2. Ejecutar el ciclo TDD para cada tarea
 
@@ -146,9 +162,14 @@ tests_summary:
   total_written: <N>
   total_passing: <N>
   layers: Unit (<N>), Integration (<N>), E2E (<N>)
-next_recommended: /fg-review
+batch_status:
+  tasks_completed_this_batch: <N>
+  tasks_remaining: <N>
+  continue_needed: true | false    # true si quedan tareas para el próximo batch
+next_recommended: /fg-review (si continue_needed=false) | /fg-implement (si continue_needed=true)
 risks: None | <riesgos detectados>
 flags_for_review:
   - <ej: "toca auth, sugerir security-reviewer">
   - <ej: "tiene migraciones, sugerir dba-reviewer">
+skill_resolution: paths-injected | fallback-registry | none
 ```
