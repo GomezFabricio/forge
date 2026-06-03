@@ -86,6 +86,10 @@ _REQUIRED_FM_KEYS: dict = {"disable-model-invocation": True, "user-invocable": F
 # Cross-cutting _shared files that go to forge-shared/ (with frontmatter injection)
 _CROSS_CUTTING = {"skill-resolver", "engram-protocol", "fg-phase-common"}
 
+# Orchestrator rule injection markers
+ORCHESTRATOR_OPEN_MARKER = "<!-- forge:orchestrator -->"
+ORCHESTRATOR_CLOSE_MARKER = "<!-- /forge:orchestrator -->"
+
 # =============================================================================
 # === Detection ===
 # =============================================================================
