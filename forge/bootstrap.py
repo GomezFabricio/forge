@@ -59,6 +59,25 @@ TEST_RUNNERS = {
 }
 
 
+def detect_mode(root: Path) -> str:
+    """Return 'upgrade' | 'adopt' | 'bootstrap' based on filesystem state.
+
+    upgrade   : (root / '.forge') exists as a directory
+    adopt     : (root / '.git') exists OR any known stack manifest is present
+    bootstrap : otherwise (empty or unknown project dir)
+
+    Pure filesystem read — no side effects, no mutations (NFR-04).
+    """
+    if (root / ".forge").exists():
+        return "upgrade"
+    if (root / ".git").exists():
+        return "adopt"
+    for manifest in STACK_MANIFESTS:
+        if (root / manifest).exists():
+            return "adopt"
+    return "bootstrap"
+
+
 def detect_stack(root: Path) -> list:
     detected = []
     for manifest, lang in STACK_MANIFESTS.items():

@@ -814,3 +814,72 @@ class TestInitCodegraphSubprocessError:
         assert status is None
         assert warning is not None
         assert "codegraph" in warning.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Mode Detection (B.1)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectMode:
+    """Tests para detect_mode(root). R-MODE-01 through R-MODE-04, NFR-04."""
+
+    def test_detect_mode_bootstrap_empty_dir(self, tmp_path):
+        """GIVEN empty dir (no .forge/, no .git/, no manifest), THEN 'bootstrap'."""
+        from forge.bootstrap import detect_mode
+        result = detect_mode(tmp_path)
+        assert result == "bootstrap"
+
+    def test_detect_mode_adopt_with_manifest(self, tmp_path):
+        """GIVEN pyproject.toml present but no .forge/ or .git/, THEN 'adopt'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / "pyproject.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "adopt"
+
+    def test_detect_mode_adopt_with_git(self, tmp_path):
+        """GIVEN .git/ present but no .forge/ and no manifest, THEN 'adopt'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".git").mkdir()
+        result = detect_mode(tmp_path)
+        assert result == "adopt"
+
+    def test_detect_mode_upgrade_with_dotforge(self, tmp_path):
+        """GIVEN .forge/ present, THEN 'upgrade' regardless of other state."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".forge").mkdir()
+        result = detect_mode(tmp_path)
+        assert result == "upgrade"
+
+    def test_detect_mode_upgrade_ignores_git_and_manifest(self, tmp_path):
+        """GIVEN .forge/ + .git/ + manifest, THEN 'upgrade' (.forge wins)."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "pyproject.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "upgrade"
+
+    def test_detect_mode_forge_plus_git_plus_manifest_is_upgrade(self, tmp_path):
+        """GIVEN all three signals, THEN .forge/ wins → 'upgrade'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "Cargo.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "upgrade"
+
+    def test_detect_mode_pure_filesystem_no_mutation(self, tmp_path):
+        """NFR-04: detect_mode does not create files or directories."""
+        from forge.bootstrap import detect_mode
+        before = set(tmp_path.iterdir())
+        detect_mode(tmp_path)
+        after = set(tmp_path.iterdir())
+        assert before == after, "detect_mode must not create or delete files"
+
+    def test_detect_mode_adopt_with_any_known_manifest(self, tmp_path):
+        """GIVEN Cargo.toml (not .git, not .forge), THEN 'adopt'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / "Cargo.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "adopt"
