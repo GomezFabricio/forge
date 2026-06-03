@@ -1391,3 +1391,56 @@ class TestInjectOrchestratorRule:
         # Double-newline separator must be present (sep = "\n\n" when no trailing \n)
         assert "\n\n<!-- forge:orchestrator -->" in content
         assert content.count("<!-- forge:orchestrator -->") == 1
+
+    def test_replaces_existing_block_idempotent(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md contains a stale forge block (different body)
+        WHEN inject_orchestrator_rule() is called once then again
+        THEN first call returns 'replaced' with new body,
+        second call returns 'replaced' with byte-identical content (idempotent),
+        and exactly ONE opening marker exists in the final file."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        stale = (
+            "<!-- forge:orchestrator -->\nOLD CONTENT\n<!-- /forge:orchestrator -->\n"
+        )
+        (fake_home / "CLAUDE.md").write_text(stale, encoding="utf-8")
+
+        result1 = inject_orchestrator_rule()
+
+        assert result1 == "replaced"
+        content_after_first = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "TEMPLATE BODY" in content_after_first
+        assert "OLD CONTENT" not in content_after_first
+
+        # Idempotency: second call must return 'replaced' and content identical
+        result2 = inject_orchestrator_rule()
+        content_after_second = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        assert result2 == "replaced"
+        assert content_after_second == content_after_first
+
+        # Exactly ONE open marker in final file (NFR-01)
+        assert content_after_second.count("<!-- forge:orchestrator -->") == 1
+
+    def test_replaces_preserves_prefix_and_suffix(self, fake_home, fake_template):
+        """TRIANGULATE: prefix and suffix content around the forge block are unchanged."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        prefix = "prefix content\n"
+        suffix = "suffix content\n"
+        initial = (
+            prefix
+            + "<!-- forge:orchestrator -->\nOLD CONTENT\n<!-- /forge:orchestrator -->\n"
+            + suffix
+        )
+        (fake_home / "CLAUDE.md").write_text(initial, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "replaced"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        assert content.startswith(prefix)
+        assert content.endswith(suffix)
+        assert "TEMPLATE BODY" in content
+        assert content.count("<!-- forge:orchestrator -->") == 1
