@@ -45,7 +45,7 @@ EXIT_PLATFORM_UNSUPPORTED = 40  # OS / arch not in supported map
 
 CLAUDE_HOME = Path.home() / ".claude"
 MCP_JSON_PATH = CLAUDE_HOME / "mcp" / "engram.json"
-ENGRAM_BIN_DIR_UNIX = Path.home() / ".local" / "bin"
+ENGRAM_BIN_DIR_UNIX = Path.home() / ".engram" / "bin"
 ENGRAM_BIN_DIR_WIN = Path.home() / ".engram" / "bin"
 
 GITHUB_RELEASES_API = (

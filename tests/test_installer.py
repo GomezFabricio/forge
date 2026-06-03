@@ -72,6 +72,33 @@ class TestInstallerConstants:
         standard_codes = {0, 1, 2, 3, 4, 5}
         assert installer.EXIT_ABORTED not in standard_codes
 
+    def test_engram_bin_dir_unix_uses_engram_namespace(self):
+        """GIVEN el módulo installer WHEN se lee ENGRAM_BIN_DIR_UNIX
+        THEN apunta a ~/.engram/bin (no ~/.local/bin) — REQ-INSTALL-ENGRAM-03."""
+        from forge import installer
+        parts = installer.ENGRAM_BIN_DIR_UNIX.parts
+        assert ".engram" in parts, f"Expected .engram in path parts, got: {parts}"
+        assert parts[-1] == "bin"
+        assert parts[-2] == ".engram"
+
+    def test_engram_bin_path_unix_resolves_correctly(self):
+        """GIVEN ENGRAM_BIN_DIR_UNIX WHEN se construye el path al binario
+        THEN resulta en ~/.engram/bin/engram — REQ-INSTALL-ENGRAM-03."""
+        from forge import installer
+        bin_path = installer.ENGRAM_BIN_DIR_UNIX / "engram"
+        assert str(bin_path).endswith(".engram/bin/engram") or str(bin_path).endswith(".engram\\bin\\engram")
+
+    def test_engram_bin_dir_unix_and_win_share_namespace(self):
+        """GIVEN ENGRAM_BIN_DIR_UNIX y ENGRAM_BIN_DIR_WIN WHEN se comparan sus partes
+        THEN ambos usan .engram/bin (consistente entre plataformas) — REQ-INSTALL-ENGRAM-03."""
+        from forge import installer
+        unix_parts = installer.ENGRAM_BIN_DIR_UNIX.parts
+        win_parts = installer.ENGRAM_BIN_DIR_WIN.parts
+        assert ".engram" in unix_parts
+        assert ".engram" in win_parts
+        assert unix_parts[-2:] == (".engram", "bin")
+        assert win_parts[-2:] == (".engram", "bin")
+
 
 # ---------------------------------------------------------------------------
 # T03: TestDetectEngram
