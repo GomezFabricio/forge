@@ -17,7 +17,7 @@ Adoptar forge en un proyecto existente: instalar el harness de Claude Code (skil
 - No genera el scaffolding del proyecto (compose, Makefile, deploy/, src/, etc.) — eso es trabajo del análisis o del dev, no del producto.
 - No pregunta por stack/perfil para imponer arquitectura.
 - No genera `pyproject.toml` u otros manifiestos de dependencias.
-- No crea `docs/arquitectura/` vacío — esa carpeta aparece a demanda con `/fg-update-arch`.
+- No crea `docs/arquitectura/` sin contenido real. En modo `bootstrap`, `overview.md` y `stack.md` se generan desde la conversación de visión (paso 10). `/fg-update-arch` reconcilia con código existente.
 
 ## Cuándo aplicarla
 
@@ -160,7 +160,70 @@ Escanear las skills disponibles para el proyecto: las propias de forge (`skills/
 
 Si el `.gitignore` ya tiene esas líneas, no duplicar.
 
-### 10. Reportar al dev
+### 10. Conversación de visión del sistema (solo en modo bootstrap)
+
+Si `mode == bootstrap`, ejecutar este sub-flow. NO es una skill nueva — parte de `/fg-setup`.
+
+Si `mode != bootstrap` → saltar todo el paso 10 y continuar al paso 11. Envelope: `vision_status: n/a`.
+
+#### 10a. Idempotencia
+
+Verificar antes de iniciar la conversación:
+
+1. Si `docs/arquitectura/overview.md` ya existe → saltar el sub-flow, continuar al paso 11. Envelope: `vision_status: preserved`.
+2. Si `config.yaml` tiene `context.vision_skipped: true` → preguntar una sola vez: "¿Querés intentar la conversación de visión de nuevo? [s/n]". Si "n" → saltar, continuar al paso 11. Si "s" → continuar al paso 10b.
+
+#### 10b. 1ra ronda de preguntas
+
+Iniciar la conversación con estas 5 preguntas (adaptar tono, mantener el foco):
+
+1. ¿Qué es este sistema? ¿Quién lo usa? ¿Qué problema resuelve?
+2. ¿Multi-tenant o single-tenant? Roles principales.
+3. ¿Web / mobile / CLI / API pura? ¿Estrategia de autenticación?
+4. Stack tecnológico: si el dev lo sabe, anotarlo; si no, decidir juntos.
+5. Módulos o áreas principales previstas.
+
+El dev puede saltar en cualquier momento respondiendo "saltar", "no" o "después" → ir directamente al paso 10d (skip path: `mark_vision_skipped`).
+
+**Incluir SOLO lo que el dev mencionó. NO inventar módulos, integraciones, ni decisiones técnicas. Si algo no se mencionó, dejarlo fuera.**
+
+#### 10c. 2da ronda de calibración (solo lo que falte)
+
+Preguntar únicamente lo que el dev no mencionó en 10b:
+
+- ¿Multi-tenant / single-tenant?
+- ¿Roles dentro de cada tenant?
+- ¿Web / mobile / ambos?
+- ¿Stack (lenguaje, framework, DB, auth) — propuesta o decidir juntos?
+- ¿Qué módulos prevés?
+
+**NO inventar respuestas. Solo preguntar lo que el dev no mencionó.**
+
+#### 10d. Destilar y validar
+
+Construir drafts de `overview.md` y `stack.md` con **SOLO lo que el dev mencionó**. NO inventar módulos, decisiones técnicas ni roles no mencionados.
+
+Mostrar ambos drafts en fenced blocks:
+
+```markdown
+# System Overview
+[contenido destilado de la conversación]
+```
+
+```markdown
+# Stack
+[contenido destilado de la conversación]
+```
+
+Preguntar: `¿Aceptás estos drafts? [s/n/editar]`
+
+- **`s`** → llamar `bootstrap.create_arquitectura_docs(root, overview_content, stack_content)`. Si el dev mencionó stacks durante la conversación, llamar también `bootstrap.patch_config_stacks(root, stacks)` y loguear en el envelope: "stacks actualizados en config.yaml: [<stack(s)>]". Agregar paths al envelope (`files_created` o `files_preserved` según lo retorne el helper). Envelope: `vision_status: completed`.
+- **`editar`** → pedir al dev qué cambiar. Regenerar los drafts UNA SOLA VEZ y mostrarlos de nuevo. Aceptar solo `[s/n]` — NO ofrecer "editar" de nuevo (límite máx. 1 iteración de edición para evitar loops indefinidos). Si "n" después de la edición → ejecutar skip path.
+- **`n`** (en cualquier punto) → skip path: llamar `bootstrap.mark_vision_skipped(root)`. Envelope: `vision_status: skipped`. Agregar a `envelope.warnings[]`: "Visión saltada — overview.md y stack.md no se generaron. Re-ejecutar /fg-setup o /fg-update-arch para crearlos."
+
+Si el contexto LLM se agota antes de completar el paso 10d → no escribir archivos parciales, no patchear config. Envelope: `vision_status: incomplete` con advertencia explicando la interrupción.
+
+### 11. Reportar al dev
 
 Imprimir en español:
 
@@ -204,7 +267,7 @@ Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.ya
 - Sobrescribir archivos existentes sin permiso.
 - Generar scaffolding del proyecto (compose, Makefile, deploy/, src/, etc.).
 - Preguntar por stack/perfil para imponer arquitectura.
-- Crear `docs/arquitectura/` vacío — solo aparece con `/fg-update-arch`.
+- En modo bootstrap, `overview.md` y `stack.md` se crean a partir de la conversación de visión del sistema (paso 10). `/fg-update-arch` sigue siendo el mecanismo para reconciliar con código existente y agregar ADRs.
 - Indexar CodeGraph en background sin avisar al dev (puede tardar en proyectos grandes).
 
 ## Envelope de retorno
@@ -217,6 +280,12 @@ stack_detected: <stack> | null           # null en modo bootstrap (sin manifiest
 test_runner: <comando> | null            # null en modo bootstrap
 audit_config: created | preserved
 pending_detection: true | false          # true = sin manifiestos todavía; false = detectado
+vision_status: completed | preserved | skipped | incomplete | n/a
+  # completed  = sub-flow corrió, overview.md + stack.md escritos
+  # preserved  = overview.md ya existía, sub-flow saltado
+  # skipped    = dev declinó (vision_skipped: true en config)
+  # incomplete = sub-flow interrumpido por budget de contexto LLM
+  # n/a        = mode != bootstrap
 codegraph_indexed:
   nodes: <N>
   edges: <N>

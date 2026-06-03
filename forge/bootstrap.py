@@ -179,6 +179,7 @@ def update_detection_fields(root: Path, *, mode: str | None = None) -> dict:
                 test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
                 last_detection=last_detection_str,
                 pending_detection="false",
+                vision_skipped="false",
             )
             config_path.write_text(content, encoding="utf-8")
             new_runner = (
@@ -360,6 +361,7 @@ context:
 {test_runner_yaml}
   last_detection: {last_detection}    # ISO 8601 UTC timestamp of last detection run (null = never run)
   pending_detection: {pending_detection}  # true = no manifests detected yet; re-run on next skill load
+  vision_skipped: {vision_skipped}     # true = dev declinó conversación de visión en bootstrap; false = no aplica o se completó
 
 rules:
   workflow:
@@ -450,6 +452,7 @@ def create_audit_config(
     *,
     pending_detection: bool = False,
     last_detection: str | None = None,
+    vision_skipped: bool = False,
 ) -> str:
     path = root / "docs" / "auditoria" / "config.yaml"
     if path.exists():
@@ -461,11 +464,115 @@ def create_audit_config(
         test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
         last_detection=last_detection_str,
         pending_detection=str(pending_detection).lower(),
+        vision_skipped=str(vision_skipped).lower(),
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return "created"
+
+
+def create_arquitectura_docs(
+    root: Path,
+    overview_content: str,
+    stack_content: str,
+) -> dict:
+    """Crea docs/arquitectura/{overview,stack}.md. UTF-8. NO overwrite si existen.
+
+    Returns: {"overview": Path, "stack": Path, "created": list[str]}
+        created ∈ ([], ["overview"], ["stack"], ["overview", "stack"])
+    """
+    arch_dir = root / "docs" / "arquitectura"
+    arch_dir.mkdir(parents=True, exist_ok=True)
+
+    overview_path = arch_dir / "overview.md"
+    stack_path = arch_dir / "stack.md"
+    created = []
+
+    if not overview_path.exists():
+        overview_path.write_text(overview_content, encoding="utf-8")
+        created.append("overview")
+
+    if not stack_path.exists():
+        stack_path.write_text(stack_content, encoding="utf-8")
+        created.append("stack")
+
+    return {
+        "overview": overview_path,
+        "stack": stack_path,
+        "created": created,
+    }
+
+
+def _load_config_for_round_trip(root: Path):
+    """Load docs/auditoria/config.yaml using ruamel round-trip mode.
+
+    Returns (yaml_instance, data, config_path) if config exists, else None.
+    Ensures context block exists as CommentedMap.
+    """
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return None
+
+    YAML = _load_ruamel()
+    yaml = YAML()
+    yaml.preserve_quotes = True
+
+    with config_path.open(encoding="utf-8") as fh:
+        data = yaml.load(fh)
+
+    if "context" not in data:
+        from ruamel.yaml.comments import CommentedMap  # noqa: PLC0415
+        data["context"] = CommentedMap()
+
+    return yaml, data, config_path
+
+
+def _write_config_round_trip(yaml, data, config_path: Path) -> None:
+    """Write data back to config_path using ruamel dump."""
+    buf = StringIO()
+    yaml.dump(data, buf)
+    config_path.write_text(buf.getvalue(), encoding="utf-8")
+
+
+def patch_config_stacks(root: Path, stacks: list) -> bool:
+    """Round-trip ruamel.yaml. Mutates ONLY context.stacks. Preserva comments rules.*.
+
+    Returns: True si patcheó, False si config.yaml ausente o stacks vacío (no-op).
+    """
+    import warnings  # noqa: PLC0415
+
+    if not stacks:
+        return False
+
+    result = _load_config_for_round_trip(root)
+    if result is None:
+        warnings.warn(
+            f"patch_config_stacks: config.yaml not found at "
+            f"{root / 'docs' / 'auditoria' / 'config.yaml'}. No-op.",
+            stacklevel=2,
+        )
+        return False
+
+    yaml, data, config_path = result
+    data["context"]["stacks"] = stacks
+    _write_config_round_trip(yaml, data, config_path)
+    return True
+
+
+def mark_vision_skipped(root: Path) -> bool:
+    """Round-trip ruamel.yaml. Sets context.vision_skipped = True.
+
+    Returns: True si patcheó, False si config.yaml ausente (no-op).
+    """
+    result = _load_config_for_round_trip(root)
+    if result is None:
+        return False
+
+    yaml, data, config_path = result
+    data["context"]["vision_skipped"] = True
+    _write_config_round_trip(yaml, data, config_path)
+    return True
 
 
 def update_gitignore(root: Path) -> str:

@@ -1281,3 +1281,255 @@ class TestEC03Recovery:
         assert config["context"]["pending_detection"] is False
         assert config["context"]["last_detection"] is not None
         assert result["changed"] is True  # new config always counts as changed
+
+
+# ---------------------------------------------------------------------------
+# Phase 14: create_arquitectura_docs (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestCreateArquitecturaDocs:
+    """Tests for create_arquitectura_docs(root, overview_content, stack_content).
+    R-HELPER-01, NFR-01, NFR-03.
+    """
+
+    def test_creates_directory_if_missing(self, tmp_path):
+        """GIVEN docs/arquitectura/ does not exist, THEN it is created."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        assert (tmp_path / "docs" / "arquitectura").is_dir()
+
+    def test_writes_overview_and_stack(self, tmp_path):
+        """GIVEN content provided, THEN files exist with that content (UTF-8)."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "Mi overview\n", "Mi stack\n")
+        overview = (tmp_path / "docs" / "arquitectura" / "overview.md").read_text(encoding="utf-8")
+        stack = (tmp_path / "docs" / "arquitectura" / "stack.md").read_text(encoding="utf-8")
+        assert "Mi overview" in overview
+        assert "Mi stack" in stack
+
+    def test_does_not_overwrite_existing(self, tmp_path):
+        """GIVEN a file already exists, THEN it is NOT overwritten; 'overview' NOT in created."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "overview.md").write_text("original overview", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview must not be overwritten
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "original overview"
+        assert "overview" not in result["created"]
+
+    def test_idempotent_on_rerun(self, tmp_path):
+        """GIVEN called twice with same content, THEN no error and second call has empty created list."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "overview A", "stack A")
+        # second call must not raise
+        result2 = create_arquitectura_docs(tmp_path, "overview A", "stack A")
+        assert result2["created"] == []
+
+    def test_returns_correct_paths(self, tmp_path):
+        """GIVEN fresh dir, THEN returned dict has 'overview', 'stack', 'created' keys; paths absolute."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        result = create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        assert "overview" in result
+        assert "stack" in result
+        assert "created" in result
+        assert result["overview"].is_absolute()
+        assert result["stack"].is_absolute()
+
+    def test_partial_existing_overview_only(self, tmp_path):
+        """GIVEN overview exists but stack does not, THEN stack created, overview preserved."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "overview.md").write_text("existing overview", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview preserved
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "existing overview"
+        assert "overview" not in result["created"]
+        # stack created
+        assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "new stack"
+        assert "stack" in result["created"]
+
+    def test_partial_existing_stack_only(self, tmp_path):
+        """GIVEN stack exists but overview does not, THEN overview created, stack preserved."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "stack.md").write_text("existing stack", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview created
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "new overview"
+        assert "overview" in result["created"]
+        # stack preserved
+        assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "existing stack"
+        assert "stack" not in result["created"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 15: patch_config_stacks (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+# Config template for patch_config_stacks tests — includes comments in rules.*
+CONFIG_WITH_CONTEXT_AND_COMMENTS = """\
+schema: forge
+
+context:
+  stacks:
+    []
+  test_runner:
+    null
+  last_detection: null
+  pending_detection: true
+  vision_skipped: false
+
+rules:
+  workflow:
+    # cycle_mode controls how phases run
+    cycle_mode: interactive  # keep this comment
+  implement:
+    tdd: false  # TDD is off by default
+"""
+
+
+def _write_patch_config(root, content=CONFIG_WITH_CONTEXT_AND_COMMENTS):
+    """Write config.yaml for patch_config_stacks tests."""
+    config_dir = root / "docs" / "auditoria"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+    return config_dir / "config.yaml"
+
+
+class TestPatchConfigStacks:
+    """Tests for patch_config_stacks(root, stacks). R-HELPER-02, NFR-04, NFR-05."""
+
+    def test_updates_stacks_field(self, tmp_path):
+        """GIVEN config with context block, THEN context.stacks is updated."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        result = patch_config_stacks(tmp_path, ["python"])
+        config_text = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert "python" in config_text
+        assert result is True
+
+    def test_preserves_rules_comments(self, tmp_path):
+        """GIVEN config with comments in rules, THEN all comments survive round-trip."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert "# cycle_mode controls how phases run" in raw
+        assert "# keep this comment" in raw
+        assert "# TDD is off by default" in raw
+
+    def test_multi_stack_list(self, tmp_path):
+        """GIVEN stacks=['python','nextjs'], THEN both appear as separate list items."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python", "nextjs"])
+        import yaml as _yaml
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert "python" in config["context"]["stacks"]
+        assert "nextjs" in config["context"]["stacks"]
+        assert len(config["context"]["stacks"]) == 2
+
+    def test_noop_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN returns False, no exception."""
+        import warnings  # noqa: I001
+        from forge.bootstrap import patch_config_stacks
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = patch_config_stacks(tmp_path, ["python"])
+        assert result is False
+        assert len(w) >= 1
+
+    def test_noop_empty_list(self, tmp_path):
+        """GIVEN stacks=[], THEN returns False, no write."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        original = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        result = patch_config_stacks(tmp_path, [])
+        after = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert result is False
+        assert original == after
+
+    def test_idempotent_same_stacks(self, tmp_path):
+        """GIVEN called twice with same stacks, THEN file content same after second call."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        after_first = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        patch_config_stacks(tmp_path, ["python"])
+        after_second = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert after_first == after_second
+
+    def test_idempotent_no_duplicate_entries(self, tmp_path):
+        """GIVEN called twice with same stacks list, THEN config.stacks has no duplicates."""
+        import yaml as _yaml  # noqa: I001
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        patch_config_stacks(tmp_path, ["python"])
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["stacks"].count("python") == 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 16: mark_vision_skipped (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestMarkVisionSkipped:
+    """Tests for mark_vision_skipped(root). R-VISION-08, R-HELPER-02, EC-01."""
+
+    def test_sets_vision_skipped_true(self, tmp_path):
+        """GIVEN config with context block, THEN context.vision_skipped == True after call."""
+        import yaml as _yaml  # noqa: I001
+        from forge.bootstrap import mark_vision_skipped
+
+        _write_patch_config(tmp_path)
+        result = mark_vision_skipped(tmp_path)
+        assert result is True
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["vision_skipped"] is True
+
+    def test_noop_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN returns False, no exception."""
+        from forge.bootstrap import mark_vision_skipped
+
+        result = mark_vision_skipped(tmp_path)
+        assert result is False
+
+    def test_idempotent_when_already_skipped(self, tmp_path):
+        """GIVEN called twice, THEN no error and value stays True."""
+        import yaml as _yaml  # noqa: I001
+        from forge.bootstrap import mark_vision_skipped
+
+        _write_patch_config(tmp_path)
+        mark_vision_skipped(tmp_path)
+        result = mark_vision_skipped(tmp_path)
+        assert result is True
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["vision_skipped"] is True
