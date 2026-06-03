@@ -26,10 +26,27 @@ Adoptar forge en un proyecto existente: instalar el harness de Claude Code (skil
 
 ## Proceso
 
-### 1. Verificar contexto del proyecto
+### 1. Detectar modo de operación
 
-- Confirmar que el directorio actual es la raíz de un proyecto (existe `.git/`, o un manifiesto reconocido como `pyproject.toml`, `package.json`, `go.mod`, etc.).
-- Si no parece un proyecto, abortar y avisar al dev.
+Llamar `bootstrap.detect_mode(root)` para determinar el modo antes de cualquier otra acción.
+
+| Condición en `root` | Modo | Comportamiento de /fg-setup |
+|---|---|---|
+| `.forge/` existe | `upgrade` | Mergear incremental; re-detectar stack si `pending_detection: true` |
+| `.git/` existe O hay manifiesto conocido | `adopt` | Comportamiento actual completo: detectar stack, crear config |
+| Ninguna de las anteriores | `bootstrap` | Crear config con `pending_detection: true`, `stacks: []`; NO abortar |
+
+**Modo bootstrap**: el directorio no tiene señales de un proyecto todavía. Está bien — forge puede inicializarse en un directorio vacío. En este modo:
+- Saltear la detección de stack obligatoria.
+- Crear `docs/auditoria/config.yaml` con `pending_detection: true` y `stacks: []`.
+- Si `.git/` no existe, **ofrecer `git init` inline** (una sola pregunta, sin insistir):
+
+  > "No encontré un repositorio git. ¿Querés que corra `git init` ahora? (s/n)"
+
+  Si el dev responde **s**: correr `git init`, reportarlo en el envelope (`git_initialized: true`).
+  Si el dev responde **n** o no responde: continuar sin git init, reportar `git_initialized: false`. NO abortar ni repetir la oferta.
+
+  **El código Python (`bootstrap.run()`) NO corre `git init`** — solo reporta si `.git/` existe. El consent es responsabilidad de la skill, no del Python.
 
 ### 2. Detectar el stack del proyecto
 
@@ -148,11 +165,12 @@ Si el `.gitignore` ya tiene esas líneas, no duplicar.
 Imprimir en español:
 
 ```
+forge inicializado en modo: {modo}
 forge instalado en {nombre del proyecto}
 
-Stack detectado: {stack}
-Test runner: {comando} ({nombre}, detectado de {manifiesto})
-CodeGraph: {N nodos, N aristas indexados}
+Stack detectado: {stack o "ninguno (bootstrap — re-detecta cuando agregues manifiestos)"}
+Test runner: {comando ({nombre}, detectado de {manifiesto}) | "no detectado"}
+CodeGraph: {N nodos, N aristas indexados | "no inicializado"}
 
 Archivos generados/mergeados:
 - CLAUDE.md ({creado | mergeado})
@@ -163,8 +181,6 @@ Archivos generados/mergeados:
 
 Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.yaml
       y cambiá rules.implement.tdd a true.
-
-Próximo paso: /fg-plan <descripción del cambio que querés hacer>
 ```
 
 ## Reglas
@@ -196,9 +212,11 @@ Próximo paso: /fg-plan <descripción del cambio que querés hacer>
 ```yaml
 status: success | partial | blocked
 executive_summary: 1-2 oraciones del setup completado
-stack_detected: <stack>
-test_runner: <comando o "no detectado">
+mode: bootstrap | adopt | upgrade        # modo detectado por detect_mode(root)
+stack_detected: <stack> | null           # null en modo bootstrap (sin manifiestos)
+test_runner: <comando> | null            # null en modo bootstrap
 audit_config: created | preserved
+pending_detection: true | false          # true = sin manifiestos todavía; false = detectado
 codegraph_indexed:
   nodes: <N>
   edges: <N>
@@ -210,5 +228,4 @@ files_preserved:
   - <lista de archivos que ya existían y no se tocaron>
 warnings:
   - <ej: "no se detectó test runner — config.yaml queda con test_runner: null">
-next_recommended: /fg-plan <descripción>
 ```
