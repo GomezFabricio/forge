@@ -1004,6 +1004,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
 
@@ -1020,6 +1021,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(skip_engram_check=True))
 
@@ -1037,6 +1039,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(install_engram=True))
 
@@ -1066,6 +1069,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
 
@@ -1107,6 +1111,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(install_engram=True, skip_engram_check=True))
 
@@ -1135,6 +1140,7 @@ class TestRunAdditional:
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
                  "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"), \
              patch("builtins.print") as mock_print:
             result = installer.run(self._make_args(install_engram=True))
@@ -1293,3 +1299,198 @@ class TestPromptUserYn:
         from forge.installer import prompt_user_yn
         with patch("builtins.input", return_value="maybe"):
             assert prompt_user_yn() == "n"
+
+
+# ---------------------------------------------------------------------------
+# TestInjectOrchestratorRule — 4 TDD cycles (PRD A.3 scenarios)
+# ---------------------------------------------------------------------------
+
+
+class TestInjectOrchestratorRule:
+    """Tests for inject_orchestrator_rule() — 4 scenarios from PRD A.3."""
+
+    @pytest.fixture
+    def fake_home(self, tmp_path, monkeypatch):
+        """Isolate CLAUDE_HOME to tmp_path. Returns the fake claude home dir."""
+        from forge import installer
+        fake_claude = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", fake_claude)
+        return fake_claude
+
+    @pytest.fixture
+    def fake_template(self, tmp_path, monkeypatch):
+        """Provide a fake template via monkeypatched get_share_root."""
+        from forge import installer
+        share = tmp_path / "share"
+        templates = share / "templates"
+        templates.mkdir(parents=True)
+        (templates / "orchestrator-rule.md").write_text(
+            "<!-- forge:orchestrator -->\nTEMPLATE BODY\n<!-- /forge:orchestrator -->\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        return templates / "orchestrator-rule.md"
+
+    def test_first_time_creates_file(self, fake_home, fake_template):
+        """GIVEN ~/.claude/ does not exist AND no CLAUDE.md
+        WHEN inject_orchestrator_rule() is called
+        THEN returns 'created', CLAUDE.md is created with template content,
+        and a second call returns 'replaced' (idempotency invariant)."""
+        from forge.installer import inject_orchestrator_rule
+
+        result = inject_orchestrator_rule()
+
+        assert result == "created"
+        claude_md = fake_home / "CLAUDE.md"
+        assert claude_md.exists()
+        content = claude_md.read_text(encoding="utf-8")
+        assert content == "<!-- forge:orchestrator -->\nTEMPLATE BODY\n<!-- /forge:orchestrator -->\n"
+
+        # Idempotency invariant: second call must return 'replaced', not 'created'
+        result2 = inject_orchestrator_rule()
+        assert result2 == "replaced"
+
+    def test_appends_to_existing_without_block(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md exists with content but NO forge markers
+        WHEN inject_orchestrator_rule() is called
+        THEN returns 'appended', original content preserved, template appended,
+        blank-line separator present, and template appears exactly once."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        original = "# Gentle AI Rules\n\nSome instructions.\n"
+        (fake_home / "CLAUDE.md").write_text(original, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "appended"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+
+        # Original content byte-for-byte unchanged at start (R-INJECT-05)
+        assert content.startswith(original)
+
+        # Template block appears at the end
+        template_block = "<!-- forge:orchestrator -->\nTEMPLATE BODY\n<!-- /forge:orchestrator -->\n"
+        assert content.endswith(template_block)
+
+        # Blank-line separator present between original and block (EC-05)
+        assert original + "\n" + template_block == content
+
+        # Template block appears exactly once
+        assert content.count("<!-- forge:orchestrator -->") == 1
+
+    def test_appends_separator_when_no_trailing_newline(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md exists ending WITHOUT trailing newline (EC-05 edge)
+        WHEN inject_orchestrator_rule() is called
+        THEN a double-newline separator ensures blank line before forge block."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        # File ends WITHOUT trailing newline
+        original_no_nl = "# Rules without trailing newline"
+        (fake_home / "CLAUDE.md").write_text(original_no_nl, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "appended"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        # Double-newline separator must be present (sep = "\n\n" when no trailing \n)
+        assert "\n\n<!-- forge:orchestrator -->" in content
+        assert content.count("<!-- forge:orchestrator -->") == 1
+
+    def test_replaces_existing_block_idempotent(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md contains a stale forge block (different body)
+        WHEN inject_orchestrator_rule() is called once then again
+        THEN first call returns 'replaced' with new body,
+        second call returns 'replaced' with byte-identical content (idempotent),
+        and exactly ONE opening marker exists in the final file."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        stale = (
+            "<!-- forge:orchestrator -->\nOLD CONTENT\n<!-- /forge:orchestrator -->\n"
+        )
+        (fake_home / "CLAUDE.md").write_text(stale, encoding="utf-8")
+
+        result1 = inject_orchestrator_rule()
+
+        assert result1 == "replaced"
+        content_after_first = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "TEMPLATE BODY" in content_after_first
+        assert "OLD CONTENT" not in content_after_first
+
+        # Idempotency: second call must return 'replaced' and content identical
+        result2 = inject_orchestrator_rule()
+        content_after_second = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        assert result2 == "replaced"
+        assert content_after_second == content_after_first
+
+        # Exactly ONE open marker in final file (NFR-01)
+        assert content_after_second.count("<!-- forge:orchestrator -->") == 1
+
+    def test_replaces_preserves_prefix_and_suffix(self, fake_home, fake_template):
+        """TRIANGULATE: prefix and suffix content around the forge block are unchanged."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        prefix = "prefix content\n"
+        suffix = "suffix content\n"
+        initial = (
+            prefix
+            + "<!-- forge:orchestrator -->\nOLD CONTENT\n<!-- /forge:orchestrator -->\n"
+            + suffix
+        )
+        (fake_home / "CLAUDE.md").write_text(initial, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "replaced"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        assert content.startswith(prefix)
+        assert content.endswith(suffix)
+        assert "TEMPLATE BODY" in content
+        assert content.count("<!-- forge:orchestrator -->") == 1
+
+    def test_preserves_gentle_ai_block(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md contains a Gentle AI block AND a stale forge block
+        WHEN inject_orchestrator_rule() is called
+        THEN returns 'replaced', Gentle AI block is byte-for-byte unchanged,
+        only the forge block body is updated, and no other content is modified."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        gentle_ai_block = (
+            "<!-- gentle-ai:persona -->\n"
+            "You are a senior architect.\n"
+            "<!-- /gentle-ai:persona -->\n"
+        )
+        forge_block_stale = (
+            "<!-- forge:orchestrator -->\n"
+            "OLD FORGE CONTENT\n"
+            "<!-- /forge:orchestrator -->\n"
+        )
+        after_content = "\n## After forge block\n\nMore user content.\n"
+        initial = gentle_ai_block + "\n" + forge_block_stale + after_content
+        (fake_home / "CLAUDE.md").write_text(initial, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "replaced"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+
+        # Gentle AI block is byte-for-byte unchanged (R-INJECT-05)
+        assert gentle_ai_block in content
+        # Specifically verify the gentle-ai:persona string is unchanged (R-INJECT-05 test oracle)
+        assert "gentle-ai:persona" in content
+        assert "You are a senior architect." in content
+
+        # Forge block is updated to new template
+        assert "TEMPLATE BODY" in content
+        assert "OLD FORGE CONTENT" not in content
+
+        # Content after forge block (suffix) is byte-for-byte unchanged
+        assert content.endswith(after_content)
+
+        # Only the forge body changed — no duplication
+        assert content.count("<!-- forge:orchestrator -->") == 1
+        assert content.count("<!-- gentle-ai:persona -->") == 1
