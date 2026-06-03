@@ -29,6 +29,7 @@ import forge.bootstrap as bootstrap
 from forge.bootstrap import (
     _build_stacks_yaml,
     _build_test_runner_yaml,
+    copy_config_templates,
     create_audit_config,
     detect_stack,
     detect_test_runner,
@@ -37,11 +38,9 @@ from forge.bootstrap import (
     generate_skill_registry_placeholder,
     init_codegraph,
     merge_or_create_claude_md,
-    copy_config_templates,
     run,
     update_gitignore,
 )
-
 
 # ---------------------------------------------------------------------------
 # Phase 3: Pure function tests (no filesystem I/O)
@@ -172,7 +171,7 @@ class TestBuildYamlHelpers:
     def test_build_stacks_preserves_order(self):
         """GIVEN ['Go', 'Rust', 'Java'], THEN orden preservado."""
         result = _build_stacks_yaml(["Go", "Rust", "Java"])
-        lines = [l.strip() for l in result.split("\n") if l.strip()]
+        lines = [line.strip() for line in result.split("\n") if line.strip()]
         assert lines == ["- Go", "- Rust", "- Java"]
 
     def test_build_test_runner_yaml_none(self):

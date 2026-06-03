@@ -1,10 +1,11 @@
 """forge install — global asset installer.
 
 Orchestrates:
-  1. detect_engram()       — check if engram is already available
-  2. install_engram()      — download binary, edit PATH, register MCP (optional)
-  3. install_assets()      — deposit skills, agents into ~/.claude/
-  4. print_report()        — human-readable summary
+  1. detect_engram()            — check if engram is already available
+  2. install_engram()           — download binary, edit PATH, register MCP (optional)
+  3. install_assets()           — deposit skills, agents into ~/.claude/
+  4. inject_orchestrator_rule() — inject forge block into ~/.claude/CLAUDE.md
+  5. print_report()             — human-readable summary
 
 Exit codes:
   EXIT_OK                  = 0   — success
@@ -93,6 +94,81 @@ proyecto — el workflow se activa solo según el contexto.
 Las skills (/fg-setup, /fg-plan, /fg-design, /fg-implement, /fg-review,
 /fg-update-arch) existen como comandos por si las querés invocar manualmente,
 pero no necesitás conocerlas."""
+
+# Orchestrator rule injection markers
+ORCHESTRATOR_OPEN_MARKER = "<!-- forge:orchestrator -->"
+ORCHESTRATOR_CLOSE_MARKER = "<!-- /forge:orchestrator -->"
+
+# =============================================================================
+# === Orchestrator rule injection ===
+# =============================================================================
+
+
+def inject_orchestrator_rule() -> str:
+    """Inject (or replace) the <!-- forge:orchestrator --> block in ~/.claude/CLAUDE.md.
+
+    Reads the block content from get_share_root() / "templates" / "orchestrator-rule.md".
+    The template file is expected to contain the complete block including delimiters.
+
+    Idempotent. Replaces existing block if present; appends fresh block if absent or malformed.
+
+    Malformed block (orphan opening marker): if the opening marker is found but the closing
+    marker is NOT found, the file is treated as having no complete forge block. A fresh
+    complete block is appended at EOF; the orphan marker and all content between it and EOF
+    are preserved untouched. Decision 2 (proposal): orphan open marker is left intact;
+    appending preserves user content.
+
+    Returns:
+        'created'  -- CLAUDE.md did not exist; created with just this block
+        'appended' -- CLAUDE.md existed without the block; block appended at end
+        'replaced' -- CLAUDE.md existed with the block; block content updated
+
+    Raises:
+        SystemExit(EXIT_DEPOSIT_FAILED) if template file is missing.
+        OSError propagated if file system is not writable.
+    """
+    template_path = get_share_root() / "templates" / "orchestrator-rule.md"
+    if not template_path.exists():
+        sys.stderr.write(
+            f"forge: template not found: {template_path}. "
+            "Reinstall forge or report this as a bug.\n"
+        )
+        raise SystemExit(EXIT_DEPOSIT_FAILED)
+
+    template_content = template_path.read_text(encoding="utf-8").rstrip()
+    target = CLAUDE_HOME / "CLAUDE.md"
+
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(template_content + "\n", encoding="utf-8")
+        return "created"
+
+    existing = target.read_text(encoding="utf-8")
+    open_idx = existing.find(ORCHESTRATOR_OPEN_MARKER)
+
+    if open_idx == -1:
+        # No forge block — append with blank-line separator
+        sep = "" if existing.endswith("\n\n") else ("\n" if existing.endswith("\n") else "\n\n")
+        target.write_text(existing + sep + template_content + "\n", encoding="utf-8")
+        return "appended"
+
+    close_idx = existing.find(ORCHESTRATOR_CLOSE_MARKER, open_idx + len(ORCHESTRATOR_OPEN_MARKER))
+
+    if close_idx == -1:
+        # Orphan open marker — DO NOT mutate it (Decision 2 from proposal).
+        # User content between orphan marker and EOF is not forge-owned.
+        # Append fresh block at EOF; orphan remains as benign artifact the dev can clean.
+        sep = "" if existing.endswith("\n\n") else ("\n" if existing.endswith("\n") else "\n\n")
+        target.write_text(existing + sep + template_content + "\n", encoding="utf-8")
+        return "appended"
+
+    # Splice: before_open + template + after_close
+    before = existing[:open_idx]
+    after_close_end = close_idx + len(ORCHESTRATOR_CLOSE_MARKER)
+    after = existing[after_close_end:]
+    new_content = before + template_content + after
+    target.write_text(new_content, encoding="utf-8")
+    return "replaced"
 
 # =============================================================================
 # === Detection ===
@@ -652,8 +728,9 @@ def run(args) -> int:  # args: argparse.Namespace
            else:
                print abort message; return EXIT_ABORTED
       3. manifest = install_assets()
-      4. print_report(...)
-      5. return EXIT_OK
+      4. inject_orchestrator_rule()
+      5. print_report(...)
+      6. return EXIT_OK
 
     REQ-FLAGS-02: --install-engram wins over --skip-engram-check.
     REQ-FLAGS-03: if detected + --install-engram → log and skip reinstall.
@@ -692,5 +769,6 @@ def run(args) -> int:  # args: argparse.Namespace
 
     # Deposit skills and agents
     manifest = install_assets()
+    inject_orchestrator_rule()
     print_report({"engram": info, "assets": manifest})
     return EXIT_OK
