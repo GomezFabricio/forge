@@ -1534,3 +1534,51 @@ class TestMarkVisionSkipped:
             (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
         )
         assert config["context"]["vision_skipped"] is True
+
+
+# ─── Phase 17: read_overview + is_vision_skipped (C.1 + C.2) ─────────────────
+
+
+class TestReadOverview:
+    def test_returns_content_when_present(self, tmp_path):
+        """GIVEN overview.md exists with content, THEN returns the content."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("X", encoding="utf-8")
+        assert read_overview(tmp_path) == "X"
+
+    def test_returns_none_when_missing(self, tmp_path):
+        """GIVEN overview.md does not exist, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        assert read_overview(tmp_path) is None
+
+    def test_returns_none_when_empty(self, tmp_path):
+        """GIVEN overview.md exists with zero bytes, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_bytes(b"")
+        assert read_overview(tmp_path) is None
+
+    def test_returns_none_when_whitespace_only(self, tmp_path):
+        """GIVEN overview.md contains only whitespace, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("   \n", encoding="utf-8")
+        assert read_overview(tmp_path) is None
+
+    def test_utf8_content(self, tmp_path):
+        """GIVEN overview.md has non-ASCII UTF-8 content, THEN returns correctly decoded string."""
+        from forge.bootstrap import read_overview
+
+        content = "Descripción con ñ y tildes: á é í ó ú"
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(content, encoding="utf-8")
+        assert read_overview(tmp_path) == content

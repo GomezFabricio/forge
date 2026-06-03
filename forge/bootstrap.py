@@ -575,6 +575,22 @@ def mark_vision_skipped(root: Path) -> bool:
     return True
 
 
+def read_overview(root: Path) -> str | None:
+    """Read docs/arquitectura/overview.md content if present and non-empty.
+
+    Returns:
+        Content as string (UTF-8) if file exists and has non-whitespace content.
+        None if file does not exist OR is empty OR whitespace-only.
+    """
+    overview_path = root / "docs" / "arquitectura" / "overview.md"
+    if not overview_path.exists():
+        return None
+    content = overview_path.read_text(encoding="utf-8")
+    if not content.strip():
+        return None
+    return content
+
+
 def update_gitignore(root: Path) -> str:
     gitignore = root / ".gitignore"
     required = [
