@@ -328,27 +328,48 @@ def _download_binary(url: str, dest: Path) -> None:
     raise last_exc  # type: ignore[misc]
 
 
-def _edit_path_unix(bin_dir: Path) -> str:
-    """Append PATH export to ~/.profile (Unix / macOS).
+def _edit_path_unix(bin_dir: Path) -> dict[str, str]:
+    """Append PATH export to ~/.bashrc, ~/.zshrc, and ~/.profile (Unix / macOS).
+
+    Edits all three rc files that EXIST. If a file does not exist, it is
+    skipped (not created) — except ~/.profile which is always created if
+    none of the other files existed. Idempotent: no duplicate entries.
 
     Returns:
-        'present'  — entry was already there (idempotent)
-        'appended' — entry added to existing file
-        'created'  — file was created with the entry
+        dict mapping rc filename (e.g. '.bashrc') to one of:
+            'present'  — entry was already there
+            'appended' — entry was added to existing file
+            'created'  — file was created with the entry (only ~/.profile)
+            'skipped'  — file did not exist (only for .bashrc / .zshrc)
 
     Q4 (resolved in apply): print_report advises to open a new terminal
     for PATH propagation on Unix (same UX as Windows).
+    REQ-PLATFORM-03: edit ~/.bashrc, ~/.zshrc, and ~/.profile.
     """
-    profile = Path.home() / ".profile"
+    home = Path.home()
     line = f'\n# Added by forge install\nexport PATH="{bin_dir}:$PATH"\n'
-    if profile.exists():
-        existing = profile.read_text(encoding="utf-8")
+    rc_files = [".bashrc", ".zshrc", ".profile"]
+    results: dict[str, str] = {}
+
+    for rc_name in rc_files:
+        rc_path = home / rc_name
+        if not rc_path.exists():
+            results[rc_name] = "skipped"
+            continue
+        existing = rc_path.read_text(encoding="utf-8")
         if str(bin_dir) in existing:
-            return "present"
-        profile.write_text(existing + line, encoding="utf-8")
-        return "appended"
-    profile.write_text(line.lstrip("\n"), encoding="utf-8")
-    return "created"
+            results[rc_name] = "present"
+            continue
+        rc_path.write_text(existing + line, encoding="utf-8")
+        results[rc_name] = "appended"
+
+    # Ensure ~/.profile always exists (fallback for login shells)
+    if results.get(".profile") == "skipped":
+        profile = home / ".profile"
+        profile.write_text(line.lstrip("\n"), encoding="utf-8")
+        results[".profile"] = "created"
+
+    return results
 
 
 def _edit_path_windows(bin_dir: Path) -> str:

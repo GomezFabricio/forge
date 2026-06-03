@@ -634,7 +634,7 @@ class TestEditPathUnix:
 
     def test_appends_to_existing_profile(self, tmp_path):
         """GIVEN ~/.profile existe sin la entrada de PATH WHEN _edit_path_unix()
-        THEN retorna 'appended' y la entry está en el archivo."""
+        THEN retorna dict con status 'appended' para .profile y la entry está en el archivo."""
         from forge import installer
         profile = tmp_path / ".profile"
         profile.write_text("# existing content\n")
@@ -643,13 +643,13 @@ class TestEditPathUnix:
         with patch.object(Path, "home", return_value=tmp_path):
             result = installer._edit_path_unix(bin_dir)
 
-        assert result == "appended"
+        assert result[".profile"] == "appended"
         content = profile.read_text()
         assert str(bin_dir) in content
 
     def test_idempotent_if_already_present(self, tmp_path):
         """GIVEN ~/.profile ya tiene la entrada de PATH WHEN _edit_path_unix()
-        THEN retorna 'present' y NO agrega duplicado."""
+        THEN retorna dict con 'present' para .profile y NO agrega duplicado."""
         from forge import installer
         bin_dir = tmp_path / ".local" / "bin"
         profile = tmp_path / ".profile"
@@ -658,23 +658,92 @@ class TestEditPathUnix:
         with patch.object(Path, "home", return_value=tmp_path):
             result = installer._edit_path_unix(bin_dir)
 
-        assert result == "present"
+        assert result[".profile"] == "present"
         content = profile.read_text()
         assert content.count(str(bin_dir)) == 1
 
     def test_creates_profile_if_missing(self, tmp_path):
         """GIVEN ~/.profile no existe WHEN _edit_path_unix() THEN crea el archivo
-        con la entrada y retorna 'created'."""
+        con la entrada y retorna dict con status 'created' para .profile."""
         from forge import installer
         bin_dir = tmp_path / ".local" / "bin"
 
         with patch.object(Path, "home", return_value=tmp_path):
             result = installer._edit_path_unix(bin_dir)
 
-        assert result == "created"
+        assert result[".profile"] == "created"
         profile = tmp_path / ".profile"
         assert profile.exists()
         assert str(bin_dir) in profile.read_text()
+
+    # REQ-PLATFORM-03: los 3 rc files -------------------------------------------
+
+    def test_edits_all_three_rc_files_when_they_exist(self, tmp_path):
+        """GIVEN ~/.bashrc, ~/.zshrc y ~/.profile existen sin la entry de PATH
+        WHEN _edit_path_unix() THEN edita los 3 archivos — REQ-PLATFORM-03."""
+        from forge import installer
+        bin_dir = tmp_path / ".engram" / "bin"
+        (tmp_path / ".bashrc").write_text("# bashrc\n")
+        (tmp_path / ".zshrc").write_text("# zshrc\n")
+        (tmp_path / ".profile").write_text("# profile\n")
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = installer._edit_path_unix(bin_dir)
+
+        assert result[".bashrc"] == "appended"
+        assert result[".zshrc"] == "appended"
+        assert result[".profile"] == "appended"
+        for rc in (".bashrc", ".zshrc", ".profile"):
+            assert str(bin_dir) in (tmp_path / rc).read_text()
+
+    def test_idempotent_across_all_rc_files(self, tmp_path):
+        """GIVEN los 3 rc files ya tienen la entry de PATH
+        WHEN _edit_path_unix() se llama 2 veces THEN no duplica la entry en ninguno."""
+        from forge import installer
+        bin_dir = tmp_path / ".engram" / "bin"
+        export_line = f'export PATH="{bin_dir}:$PATH"\n'
+        for rc in (".bashrc", ".zshrc", ".profile"):
+            (tmp_path / rc).write_text(export_line)
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result1 = installer._edit_path_unix(bin_dir)
+            result2 = installer._edit_path_unix(bin_dir)
+
+        assert all(s == "present" for s in result1.values())
+        assert all(s == "present" for s in result2.values())
+        for rc in (".bashrc", ".zshrc", ".profile"):
+            content = (tmp_path / rc).read_text()
+            assert content.count(str(bin_dir)) == 1
+
+    def test_skips_nonexistent_rc_files(self, tmp_path):
+        """GIVEN solo ~/.profile existe WHEN _edit_path_unix()
+        THEN solo edita .profile — no crea .bashrc ni .zshrc — REQ-PLATFORM-03."""
+        from forge import installer
+        bin_dir = tmp_path / ".engram" / "bin"
+        (tmp_path / ".profile").write_text("# profile\n")
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = installer._edit_path_unix(bin_dir)
+
+        # .profile editado, .bashrc/.zshrc no creados (no existían)
+        assert result[".profile"] == "appended"
+        assert ".bashrc" not in result or result[".bashrc"] == "skipped"
+        assert not (tmp_path / ".bashrc").exists()
+        assert not (tmp_path / ".zshrc").exists()
+
+    def test_export_line_points_to_engram_bin(self, tmp_path):
+        """GIVEN _edit_path_unix() WHEN agrega entry en rc files
+        THEN la línea export apunta a .engram/bin — REQ-INSTALL-ENGRAM-03."""
+        from forge import installer
+        bin_dir = tmp_path / ".engram" / "bin"
+        (tmp_path / ".bashrc").write_text("# bashrc\n")
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            installer._edit_path_unix(bin_dir)
+
+        content = (tmp_path / ".bashrc").read_text()
+        assert ".engram" in content
+        assert "bin" in content
 
 
 # ---------------------------------------------------------------------------
