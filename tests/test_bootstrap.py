@@ -1372,3 +1372,122 @@ class TestCreateArquitecturaDocs:
         # stack preserved
         assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "existing stack"
         assert "stack" not in result["created"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 15: patch_config_stacks (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+# Config template for patch_config_stacks tests — includes comments in rules.*
+CONFIG_WITH_CONTEXT_AND_COMMENTS = """\
+schema: forge
+
+context:
+  stacks:
+    []
+  test_runner:
+    null
+  last_detection: null
+  pending_detection: true
+  vision_skipped: false
+
+rules:
+  workflow:
+    # cycle_mode controls how phases run
+    cycle_mode: interactive  # keep this comment
+  implement:
+    tdd: false  # TDD is off by default
+"""
+
+
+def _write_patch_config(root, content=CONFIG_WITH_CONTEXT_AND_COMMENTS):
+    """Write config.yaml for patch_config_stacks tests."""
+    config_dir = root / "docs" / "auditoria"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+    return config_dir / "config.yaml"
+
+
+class TestPatchConfigStacks:
+    """Tests for patch_config_stacks(root, stacks). R-HELPER-02, NFR-04, NFR-05."""
+
+    def test_updates_stacks_field(self, tmp_path):
+        """GIVEN config with context block, THEN context.stacks is updated."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        result = patch_config_stacks(tmp_path, ["python"])
+        config_text = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert "python" in config_text
+        assert result is True
+
+    def test_preserves_rules_comments(self, tmp_path):
+        """GIVEN config with comments in rules, THEN all comments survive round-trip."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert "# cycle_mode controls how phases run" in raw
+        assert "# keep this comment" in raw
+        assert "# TDD is off by default" in raw
+
+    def test_multi_stack_list(self, tmp_path):
+        """GIVEN stacks=['python','nextjs'], THEN both appear as separate list items."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python", "nextjs"])
+        import yaml as _yaml
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert "python" in config["context"]["stacks"]
+        assert "nextjs" in config["context"]["stacks"]
+        assert len(config["context"]["stacks"]) == 2
+
+    def test_noop_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN returns False, no exception."""
+        import warnings
+        from forge.bootstrap import patch_config_stacks
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = patch_config_stacks(tmp_path, ["python"])
+        assert result is False
+        assert len(w) >= 1
+
+    def test_noop_empty_list(self, tmp_path):
+        """GIVEN stacks=[], THEN returns False, no write."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        original = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        result = patch_config_stacks(tmp_path, [])
+        after = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert result is False
+        assert original == after
+
+    def test_idempotent_same_stacks(self, tmp_path):
+        """GIVEN called twice with same stacks, THEN file content same after second call."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        after_first = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        patch_config_stacks(tmp_path, ["python"])
+        after_second = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert after_first == after_second
+
+    def test_idempotent_no_duplicate_entries(self, tmp_path):
+        """GIVEN called twice with same stacks list, THEN config.stacks has no duplicates."""
+        import yaml as _yaml
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        patch_config_stacks(tmp_path, ["python"])
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["stacks"].count("python") == 1

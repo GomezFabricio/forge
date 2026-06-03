@@ -504,6 +504,44 @@ def create_arquitectura_docs(
     }
 
 
+def patch_config_stacks(root: Path, stacks: list) -> bool:
+    """Round-trip ruamel.yaml. Mutates ONLY context.stacks. Preserva comments rules.*.
+
+    Returns: True si patcheó, False si config.yaml ausente o stacks vacío (no-op).
+    """
+    import warnings  # noqa: PLC0415
+
+    if not stacks:
+        return False
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        warnings.warn(
+            f"patch_config_stacks: config.yaml not found at {config_path}. No-op.",
+            stacklevel=2,
+        )
+        return False
+
+    YAML = _load_ruamel()
+    yaml = YAML()
+    yaml.preserve_quotes = True
+
+    with config_path.open(encoding="utf-8") as fh:
+        data = yaml.load(fh)
+
+    if "context" not in data:
+        from ruamel.yaml.comments import CommentedMap  # noqa: PLC0415
+        data["context"] = CommentedMap()
+
+    data["context"]["stacks"] = stacks
+
+    from io import StringIO  # noqa: PLC0415
+    buf = StringIO()
+    yaml.dump(data, buf)
+    config_path.write_text(buf.getvalue(), encoding="utf-8")
+    return True
+
+
 def update_gitignore(root: Path) -> str:
     gitignore = root / ".gitignore"
     required = [
