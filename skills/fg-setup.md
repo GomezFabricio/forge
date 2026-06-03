@@ -267,7 +267,7 @@ Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.ya
 - Sobrescribir archivos existentes sin permiso.
 - Generar scaffolding del proyecto (compose, Makefile, deploy/, src/, etc.).
 - Preguntar por stack/perfil para imponer arquitectura.
-- Crear `docs/arquitectura/` vacío — solo aparece con `/fg-update-arch`.
+- En modo bootstrap, `overview.md` y `stack.md` se crean a partir de la conversación de visión del sistema (paso 10). `/fg-update-arch` sigue siendo el mecanismo para reconciliar con código existente y agregar ADRs.
 - Indexar CodeGraph en background sin avisar al dev (puede tardar en proyectos grandes).
 
 ## Envelope de retorno

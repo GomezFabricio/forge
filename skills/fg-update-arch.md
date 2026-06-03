@@ -166,7 +166,7 @@ Esto evita que el próximo `/fg-update-arch` los reprocese.
 - Aplicar cambios sin que el dev acepte cada propuesta individualmente.
 - Sobrescribir un ADR existente (los ADRs son inmutables — si la decisión cambió, se crea un ADR nuevo que supersede al viejo).
 - Inventar consecuencias o alternativas para los ADRs — basarse en el `diseño.md` y `decisiones.md` del cambio.
-- Crear `docs/arquitectura/` con archivos vacíos si nunca se usó — solo aparecen cuando hay material real para escribir.
+- En modo bootstrap (durante `/fg-setup`), `overview.md` y `stack.md` se crean a partir de la conversación de visión del sistema. `/fg-update-arch` es el mecanismo para reconciliar la documentación con código existente, no para inicializarla.
 
 ## Envelope de retorno
 
