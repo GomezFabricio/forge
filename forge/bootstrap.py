@@ -504,23 +504,15 @@ def create_arquitectura_docs(
     }
 
 
-def patch_config_stacks(root: Path, stacks: list) -> bool:
-    """Round-trip ruamel.yaml. Mutates ONLY context.stacks. Preserva comments rules.*.
+def _load_config_for_round_trip(root: Path):
+    """Load docs/auditoria/config.yaml using ruamel round-trip mode.
 
-    Returns: True si patcheó, False si config.yaml ausente o stacks vacío (no-op).
+    Returns (yaml_instance, data, config_path) if config exists, else None.
+    Ensures context block exists as CommentedMap.
     """
-    import warnings  # noqa: PLC0415
-
-    if not stacks:
-        return False
-
     config_path = root / "docs" / "auditoria" / "config.yaml"
     if not config_path.exists():
-        warnings.warn(
-            f"patch_config_stacks: config.yaml not found at {config_path}. No-op.",
-            stacklevel=2,
-        )
-        return False
+        return None
 
     YAML = _load_ruamel()
     yaml = YAML()
@@ -533,12 +525,53 @@ def patch_config_stacks(root: Path, stacks: list) -> bool:
         from ruamel.yaml.comments import CommentedMap  # noqa: PLC0415
         data["context"] = CommentedMap()
 
-    data["context"]["stacks"] = stacks
+    return yaml, data, config_path
 
-    from io import StringIO  # noqa: PLC0415
+
+def _write_config_round_trip(yaml, data, config_path: Path) -> None:
+    """Write data back to config_path using ruamel dump."""
     buf = StringIO()
     yaml.dump(data, buf)
     config_path.write_text(buf.getvalue(), encoding="utf-8")
+
+
+def patch_config_stacks(root: Path, stacks: list) -> bool:
+    """Round-trip ruamel.yaml. Mutates ONLY context.stacks. Preserva comments rules.*.
+
+    Returns: True si patcheó, False si config.yaml ausente o stacks vacío (no-op).
+    """
+    import warnings  # noqa: PLC0415
+
+    if not stacks:
+        return False
+
+    result = _load_config_for_round_trip(root)
+    if result is None:
+        warnings.warn(
+            f"patch_config_stacks: config.yaml not found at "
+            f"{root / 'docs' / 'auditoria' / 'config.yaml'}. No-op.",
+            stacklevel=2,
+        )
+        return False
+
+    yaml, data, config_path = result
+    data["context"]["stacks"] = stacks
+    _write_config_round_trip(yaml, data, config_path)
+    return True
+
+
+def mark_vision_skipped(root: Path) -> bool:
+    """Round-trip ruamel.yaml. Sets context.vision_skipped = True.
+
+    Returns: True si patcheó, False si config.yaml ausente (no-op).
+    """
+    result = _load_config_for_round_trip(root)
+    if result is None:
+        return False
+
+    yaml, data, config_path = result
+    data["context"]["vision_skipped"] = True
+    _write_config_round_trip(yaml, data, config_path)
     return True
 
 

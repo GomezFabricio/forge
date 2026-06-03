@@ -1491,3 +1491,46 @@ class TestPatchConfigStacks:
             (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
         )
         assert config["context"]["stacks"].count("python") == 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 16: mark_vision_skipped (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestMarkVisionSkipped:
+    """Tests for mark_vision_skipped(root). R-VISION-08, R-HELPER-02, EC-01."""
+
+    def test_sets_vision_skipped_true(self, tmp_path):
+        """GIVEN config with context block, THEN context.vision_skipped == True after call."""
+        import yaml as _yaml
+        from forge.bootstrap import mark_vision_skipped
+
+        _write_patch_config(tmp_path)
+        result = mark_vision_skipped(tmp_path)
+        assert result is True
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["vision_skipped"] is True
+
+    def test_noop_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN returns False, no exception."""
+        from forge.bootstrap import mark_vision_skipped
+
+        result = mark_vision_skipped(tmp_path)
+        assert result is False
+
+    def test_idempotent_when_already_skipped(self, tmp_path):
+        """GIVEN called twice, THEN no error and value stays True."""
+        import yaml as _yaml
+        from forge.bootstrap import mark_vision_skipped
+
+        _write_patch_config(tmp_path)
+        mark_vision_skipped(tmp_path)
+        result = mark_vision_skipped(tmp_path)
+        assert result is True
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["vision_skipped"] is True
