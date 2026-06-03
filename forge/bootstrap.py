@@ -19,6 +19,8 @@ import json
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 
 # TODO(forge-bootstrap-package-root): PACKAGE_ROOT broken in non-editable wheel installs
@@ -57,6 +59,178 @@ TEST_RUNNERS = {
         ("cargo test", ["Cargo.toml"], "cargo test"),
     ],
 }
+
+
+def detect_mode(root: Path) -> str:
+    """Return 'upgrade' | 'adopt' | 'bootstrap' based on filesystem state.
+
+    upgrade   : (root / '.forge') exists as a directory
+    adopt     : (root / '.git') exists OR any known stack manifest is present
+    bootstrap : otherwise (empty or unknown project dir)
+
+    Pure filesystem read — no side effects, no mutations (NFR-04).
+    """
+    if (root / ".forge").exists():
+        return "upgrade"
+    if (root / ".git").exists():
+        return "adopt"
+    for manifest in STACK_MANIFESTS:
+        if (root / manifest).exists():
+            return "adopt"
+    return "bootstrap"
+
+
+def _load_ruamel():
+    """Import ruamel.yaml, raising RuntimeError with install instructions if missing."""
+    try:
+        from ruamel.yaml import YAML  # noqa: PLC0415
+        return YAML
+    except ImportError as exc:
+        raise RuntimeError(
+            "ruamel.yaml is required for comment-preserving config updates. "
+            "Install it with: pip install ruamel.yaml"
+        ) from exc
+
+
+def needs_detection(root: Path) -> bool:
+    """Determine if stack/test_runner detection should re-run.
+
+    Returns True iff:
+      - config.yaml does not exist (no detection has been done), OR
+      - context.pending_detection is True, OR
+      - context.last_detection is null/missing, OR
+      - Any project manifest (pyproject.toml, package.json, go.mod, etc.)
+        has mtime > last_detection.
+
+    This is the Python helper that backs the Section A.2 lazy detection GATE
+    in _shared/fg-phase-common.md. Skills call this; if True, they call
+    update_detection_fields() before proceeding.
+
+    Pure filesystem read — no side effects (NFR-04).
+    """
+    import yaml as _yaml  # noqa: PLC0415
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return True
+
+    try:
+        config = _yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return True
+
+    context = config.get("context", {}) or {}
+
+    # pending_detection: missing → treat as True (EC-05 graceful migration)
+    if context.get("pending_detection", True):
+        return True
+
+    # last_detection: null or missing → mtime check always triggers
+    last_detection_raw = context.get("last_detection")
+    if last_detection_raw is None:
+        return True
+
+    try:
+        last_detection = datetime.fromisoformat(str(last_detection_raw).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return True
+
+    # Check if any known manifest has mtime newer than last_detection
+    for manifest in STACK_MANIFESTS:
+        manifest_path = root / manifest
+        if manifest_path.exists():
+            mtime = datetime.fromtimestamp(manifest_path.stat().st_mtime, tz=timezone.utc)
+            if mtime > last_detection:
+                return True
+
+    return False
+
+
+def update_detection_fields(root: Path, *, mode: str | None = None) -> dict:
+    """Re-detect stack/test_runner and update context.* in docs/auditoria/config.yaml.
+
+    Uses ruamel.yaml round-trip to preserve comments and key order in rules.*.
+    Mutates ONLY:
+      - context.stacks
+      - context.test_runner
+      - context.last_detection  (datetime.now(timezone.utc).isoformat())
+      - context.pending_detection → False
+    NEVER mutates rules.*.
+
+    Returns: {"stacks": [...], "test_runner": {...}, "changed": bool}
+
+    EC-03: if config.yaml is missing AND mode == "upgrade", re-creates the file
+    using AUDIT_CONFIG_TEMPLATE before proceeding with detection.
+    Otherwise (no mode specified), returns {} if config is missing (no-op).
+    Idempotent: safe to call repeatedly (NFR-01).
+    """
+    YAML = _load_ruamel()
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        if mode == "upgrade":
+            # EC-03: corrupted state — recreate config, then proceed
+            stacks = detect_stack(root)
+            runner, runner_command, detected_from = detect_test_runner(root, stacks)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            last_detection_str = datetime.now(timezone.utc).isoformat()
+            content = AUDIT_CONFIG_TEMPLATE.format(
+                stacks_yaml=_build_stacks_yaml(stacks),
+                test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
+                last_detection=last_detection_str,
+                pending_detection="false",
+                vision_skipped="false",
+            )
+            config_path.write_text(content, encoding="utf-8")
+            new_runner = (
+                {"name": runner, "command": runner_command, "detected_from": detected_from}
+                if runner else None
+            )
+            return {"stacks": stacks, "test_runner": new_runner, "changed": True}
+        return {}
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+
+    with config_path.open(encoding="utf-8") as fh:
+        data = yaml.load(fh)
+
+    # Re-run detection
+    stacks = detect_stack(root)
+    runner, runner_command, detected_from = detect_test_runner(root, stacks)
+
+    # Build new test_runner value
+    if runner:
+        new_runner = {"name": runner, "command": runner_command, "detected_from": detected_from}
+    else:
+        new_runner = None
+
+    # Determine changed flag
+    old_stacks = list(data.get("context", {}).get("stacks") or [])
+    old_runner = data.get("context", {}).get("test_runner")
+    if old_runner and isinstance(old_runner, dict):
+        old_runner_simple = {"name": old_runner.get("name"), "command": old_runner.get("command"), "detected_from": old_runner.get("detected_from")}
+    else:
+        old_runner_simple = old_runner
+
+    changed = (sorted(old_stacks) != sorted(stacks)) or (old_runner_simple != new_runner)
+
+    # Mutate ONLY context.* keys
+    if "context" not in data:
+        from ruamel.yaml.comments import CommentedMap  # noqa: PLC0415
+        data["context"] = CommentedMap()
+
+    data["context"]["stacks"] = stacks
+    data["context"]["test_runner"] = new_runner
+    data["context"]["last_detection"] = datetime.now(timezone.utc).isoformat()
+    data["context"]["pending_detection"] = False
+
+    # Write back preserving comments
+    buf = StringIO()
+    yaml.dump(data, buf)
+    config_path.write_text(buf.getvalue(), encoding="utf-8")
+
+    return {"stacks": stacks, "test_runner": new_runner, "changed": changed}
 
 
 def detect_stack(root: Path) -> list:
@@ -185,6 +359,9 @@ context:
 {stacks_yaml}
   test_runner:                        # runner detectado al correr /fg-setup
 {test_runner_yaml}
+  last_detection: {last_detection}    # ISO 8601 UTC timestamp of last detection run (null = never run)
+  pending_detection: {pending_detection}  # true = no manifests detected yet; re-run on next skill load
+  vision_skipped: {vision_skipped}     # true = dev declinó conversación de visión en bootstrap; false = no aplica o se completó
   is_legacy: false                    # legacy project marker (set to true to activate legacy-impact-analyzer)
 
 rules:
@@ -267,19 +444,172 @@ def _build_test_runner_yaml(runner: str, runner_command: str, detected_from: str
     return "\n".join(lines)
 
 
-def create_audit_config(root: Path, stacks: list, runner: str, runner_command: str, detected_from: str) -> str:
+def create_audit_config(
+    root: Path,
+    stacks: list,
+    runner: str,
+    runner_command: str,
+    detected_from: str,
+    *,
+    pending_detection: bool = False,
+    last_detection: str | None = None,
+    vision_skipped: bool = False,
+) -> str:
     path = root / "docs" / "auditoria" / "config.yaml"
     if path.exists():
         return "preserved"
 
+    last_detection_str = "null" if last_detection is None else last_detection
     content = AUDIT_CONFIG_TEMPLATE.format(
         stacks_yaml=_build_stacks_yaml(stacks),
         test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
+        last_detection=last_detection_str,
+        pending_detection=str(pending_detection).lower(),
+        vision_skipped=str(vision_skipped).lower(),
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return "created"
+
+
+def create_arquitectura_docs(
+    root: Path,
+    overview_content: str,
+    stack_content: str,
+) -> dict:
+    """Crea docs/arquitectura/{overview,stack}.md. UTF-8. NO overwrite si existen.
+
+    Returns: {"overview": Path, "stack": Path, "created": list[str]}
+        created ∈ ([], ["overview"], ["stack"], ["overview", "stack"])
+    """
+    arch_dir = root / "docs" / "arquitectura"
+    arch_dir.mkdir(parents=True, exist_ok=True)
+
+    overview_path = arch_dir / "overview.md"
+    stack_path = arch_dir / "stack.md"
+    created = []
+
+    if not overview_path.exists():
+        overview_path.write_text(overview_content, encoding="utf-8")
+        created.append("overview")
+
+    if not stack_path.exists():
+        stack_path.write_text(stack_content, encoding="utf-8")
+        created.append("stack")
+
+    return {
+        "overview": overview_path,
+        "stack": stack_path,
+        "created": created,
+    }
+
+
+def _load_config_for_round_trip(root: Path):
+    """Load docs/auditoria/config.yaml using ruamel round-trip mode.
+
+    Returns (yaml_instance, data, config_path) if config exists, else None.
+    Ensures context block exists as CommentedMap.
+    """
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return None
+
+    YAML = _load_ruamel()
+    yaml = YAML()
+    yaml.preserve_quotes = True
+
+    with config_path.open(encoding="utf-8") as fh:
+        data = yaml.load(fh)
+
+    if "context" not in data:
+        from ruamel.yaml.comments import CommentedMap  # noqa: PLC0415
+        data["context"] = CommentedMap()
+
+    return yaml, data, config_path
+
+
+def _write_config_round_trip(yaml, data, config_path: Path) -> None:
+    """Write data back to config_path using ruamel dump."""
+    buf = StringIO()
+    yaml.dump(data, buf)
+    config_path.write_text(buf.getvalue(), encoding="utf-8")
+
+
+def patch_config_stacks(root: Path, stacks: list) -> bool:
+    """Round-trip ruamel.yaml. Mutates ONLY context.stacks. Preserva comments rules.*.
+
+    Returns: True si patcheó, False si config.yaml ausente o stacks vacío (no-op).
+    """
+    import warnings  # noqa: PLC0415
+
+    if not stacks:
+        return False
+
+    result = _load_config_for_round_trip(root)
+    if result is None:
+        warnings.warn(
+            f"patch_config_stacks: config.yaml not found at "
+            f"{root / 'docs' / 'auditoria' / 'config.yaml'}. No-op.",
+            stacklevel=2,
+        )
+        return False
+
+    yaml, data, config_path = result
+    data["context"]["stacks"] = stacks
+    _write_config_round_trip(yaml, data, config_path)
+    return True
+
+
+def mark_vision_skipped(root: Path) -> bool:
+    """Round-trip ruamel.yaml. Sets context.vision_skipped = True.
+
+    Returns: True si patcheó, False si config.yaml ausente (no-op).
+    """
+    result = _load_config_for_round_trip(root)
+    if result is None:
+        return False
+
+    yaml, data, config_path = result
+    data["context"]["vision_skipped"] = True
+    _write_config_round_trip(yaml, data, config_path)
+    return True
+
+
+def read_overview(root: Path) -> str | None:
+    """Read docs/arquitectura/overview.md content if present and non-empty.
+
+    Returns:
+        Content as string (UTF-8) if file exists and has non-whitespace content.
+        None if file does not exist OR is empty OR whitespace-only.
+    """
+    overview_path = root / "docs" / "arquitectura" / "overview.md"
+    if not overview_path.exists():
+        return None
+    content = overview_path.read_text(encoding="utf-8")
+    if not content.strip():
+        return None
+    return content
+
+
+def is_vision_skipped(root: Path) -> bool:
+    """Read context.vision_skipped from docs/auditoria/config.yaml.
+
+    Returns:
+        True if the flag is explicitly set to True.
+        False if config.yaml is missing, malformed, or flag is False/unset.
+    """
+    import yaml  # noqa: PLC0415
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return False
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+    except yaml.YAMLError:
+        return False
+    return bool(config.get("context", {}).get("vision_skipped", False))
 
 
 def update_gitignore(root: Path) -> str:
@@ -318,9 +648,21 @@ def generate_skill_registry_placeholder(root: Path) -> str:
     return "placeholder_created"
 
 
-def run(root: Path) -> dict:
+def run(root: Path, mode: str | None = None) -> dict:
+    """Run the forge bootstrap process.
+
+    Args:
+        root: Project root directory.
+        mode: One of 'bootstrap', 'adopt', 'upgrade'. If None, auto-detected via detect_mode().
+
+    Returns a report dict including 'mode' for callers (R-MODE-07).
+    """
+    if mode is None:
+        mode = detect_mode(root)
+
     report = {
         "project_root": str(root),
+        "mode": mode,
         "stacks": [],
         "test_runner": None,
         "dirs_ensured": [],
@@ -333,25 +675,45 @@ def run(root: Path) -> dict:
         "warnings": [],
     }
 
-    stacks = detect_stack(root)
-    report["stacks"] = stacks
-    if not stacks:
-        report["warnings"].append("No se detectó un stack reconocido (no hay manifiestos típicos).")
+    if mode == "bootstrap":
+        # Bootstrap: no manifests yet — skip stack detection, mark pending
+        stacks = []
+        runner, runner_command, detected_from = None, None, ""
+        report["warnings"].append(
+            "Modo bootstrap: no se detectaron manifiestos. "
+            "config.yaml queda con pending_detection: true. "
+            "Re-corré /fg-setup o la skill re-detectará el stack cuando aparezcan manifiestos."
+        )
+        pending_detection = True
+        last_detection = None
+    else:
+        # Adopt / upgrade: run full detection
+        stacks = detect_stack(root)
+        if not stacks:
+            report["warnings"].append("No se detectó un stack reconocido (no hay manifiestos típicos).")
 
-    runner, runner_command, detected_from = detect_test_runner(root, stacks)
+        runner, runner_command, detected_from = detect_test_runner(root, stacks)
+        if not runner:
+            report["warnings"].append(
+                "No se detectó test runner. docs/auditoria/config.yaml queda con test_runner: null. "
+                "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
+            )
+        pending_detection = False
+        last_detection = datetime.now(timezone.utc).isoformat()
+
+    report["stacks"] = stacks
     report["test_runner"] = (
         {"name": runner, "command": runner_command, "detected_from": detected_from}
         if runner else None
     )
-    if not runner:
-        report["warnings"].append(
-            "No se detectó test runner. docs/auditoria/config.yaml queda con test_runner: null. "
-            "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
-        )
 
     report["dirs_ensured"] = ensure_dirs(root)
     report["claude_md"] = merge_or_create_claude_md(root)
-    report["audit_config"] = create_audit_config(root, stacks, runner, runner_command, detected_from)
+    report["audit_config"] = create_audit_config(
+        root, stacks, runner, runner_command, detected_from,
+        pending_detection=pending_detection,
+        last_detection=last_detection,
+    )
 
     report["config_templates"] = copy_config_templates(root)
 
@@ -367,6 +729,8 @@ def run(root: Path) -> dict:
 
 
 def print_report(report: dict) -> None:
+    mode = report.get("mode", "adopt")
+    print(f"\nforge inicializado en modo: {mode}")
     print(f"forge instalado en {report['project_root']}\n")
     stacks = report["stacks"]
     print(f"Stack detectado: {', '.join(stacks) if stacks else 'ninguno'}")
@@ -400,7 +764,6 @@ def print_report(report: dict) -> None:
         for w in report["warnings"]:
             print(f"  - {w}")
         print()
-    print("Próximo paso: /fg-plan <descripción del cambio que querés hacer>")
 
 
 def is_legacy_project(root: Path) -> bool:

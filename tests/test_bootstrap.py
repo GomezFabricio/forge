@@ -20,9 +20,14 @@ Constraints (CC-*):
 - CC-NO-MODIFY: bootstrap.py no se modifica en este ciclo.
 """
 
+import builtins
+import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 
 import forge.bootstrap as bootstrap
@@ -40,9 +45,9 @@ from forge.bootstrap import (
     is_legacy_project,
     merge_or_create_claude_md,
     run,
+    update_detection_fields,
     update_gitignore,
 )
-
 
 # ---------------------------------------------------------------------------
 # Phase 3: Pure function tests (no filesystem I/O)
@@ -173,7 +178,7 @@ class TestBuildYamlHelpers:
     def test_build_stacks_preserves_order(self):
         """GIVEN ['Go', 'Rust', 'Java'], THEN orden preservado."""
         result = _build_stacks_yaml(["Go", "Rust", "Java"])
-        lines = [l.strip() for l in result.split("\n") if l.strip()]
+        lines = [line.strip() for line in result.split("\n") if line.strip()]
         assert lines == ["- Go", "- Rust", "- Java"]
 
     def test_build_test_runner_yaml_none(self):
@@ -978,3 +983,806 @@ class TestIsLegacyProject:
             "---\ntitle: My Project\n---\n# Overview\n", encoding="utf-8"
         )
         assert is_legacy_project(tmp_path) is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Mode Detection (B.1)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectMode:
+    """Tests para detect_mode(root). R-MODE-01 through R-MODE-04, NFR-04."""
+
+    def test_detect_mode_bootstrap_empty_dir(self, tmp_path):
+        """GIVEN empty dir (no .forge/, no .git/, no manifest), THEN 'bootstrap'."""
+        from forge.bootstrap import detect_mode
+        result = detect_mode(tmp_path)
+        assert result == "bootstrap"
+
+    def test_detect_mode_adopt_with_manifest(self, tmp_path):
+        """GIVEN pyproject.toml present but no .forge/ or .git/, THEN 'adopt'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / "pyproject.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "adopt"
+
+    def test_detect_mode_adopt_with_git(self, tmp_path):
+        """GIVEN .git/ present but no .forge/ and no manifest, THEN 'adopt'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".git").mkdir()
+        result = detect_mode(tmp_path)
+        assert result == "adopt"
+
+    def test_detect_mode_upgrade_with_dotforge(self, tmp_path):
+        """GIVEN .forge/ present, THEN 'upgrade' regardless of other state."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".forge").mkdir()
+        result = detect_mode(tmp_path)
+        assert result == "upgrade"
+
+    def test_detect_mode_upgrade_ignores_git_and_manifest(self, tmp_path):
+        """GIVEN .forge/ + .git/ + manifest, THEN 'upgrade' (.forge wins)."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "pyproject.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "upgrade"
+
+    def test_detect_mode_forge_plus_git_plus_manifest_is_upgrade(self, tmp_path):
+        """GIVEN all three signals, THEN .forge/ wins → 'upgrade'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "Cargo.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "upgrade"
+
+    def test_detect_mode_pure_filesystem_no_mutation(self, tmp_path):
+        """NFR-04: detect_mode does not create files or directories."""
+        from forge.bootstrap import detect_mode
+        before = set(tmp_path.iterdir())
+        detect_mode(tmp_path)
+        after = set(tmp_path.iterdir())
+        assert before == after, "detect_mode must not create or delete files"
+
+    def test_detect_mode_adopt_with_any_known_manifest(self, tmp_path):
+        """GIVEN Cargo.toml (not .git, not .forge), THEN 'adopt'."""
+        from forge.bootstrap import detect_mode
+        (tmp_path / "Cargo.toml").touch()
+        result = detect_mode(tmp_path)
+        assert result == "adopt"
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: update_detection_fields (B.2) — TDD cycle
+# ---------------------------------------------------------------------------
+
+# Helper: build a minimal config.yaml with rules comments for preservation tests
+MINIMAL_CONFIG_WITH_RULES = """\
+schema: forge
+
+context:
+  stacks:
+    []
+  test_runner:
+    null
+  last_detection: null
+  pending_detection: true
+
+rules:
+  workflow:
+    # cycle_mode controls how phases run
+    cycle_mode: interactive  # keep this comment
+  implement:
+    tdd: false  # TDD is off by default
+"""
+
+
+def _write_config(root, content=MINIMAL_CONFIG_WITH_RULES):
+    """Write config.yaml at docs/auditoria/config.yaml."""
+    config_dir = root / "docs" / "auditoria"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+    return config_dir / "config.yaml"
+
+
+class TestUpdateDetectionFields:
+    """Tests para update_detection_fields(root). R-LAZY-01 through R-LAZY-04."""
+
+    def test_update_detection_fields_refreshes_stacks(self, tmp_path):
+        """GIVEN bootstrap-mode config (stacks=[]) and pyproject.toml added, THEN stacks refreshed."""
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        result = update_detection_fields(tmp_path)
+        assert "stacks" in result
+        assert "Python" in result["stacks"]
+
+    def test_update_detection_fields_sets_pending_false(self, tmp_path):
+        """GIVEN config with pending_detection: true, THEN after call it is false."""
+        _write_config(tmp_path)
+        update_detection_fields(tmp_path)
+        config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is False
+
+    def test_update_detection_fields_sets_last_detection_iso8601(self, tmp_path):
+        """GIVEN config with last_detection: null, THEN after call it is an ISO 8601 timestamp."""
+        _write_config(tmp_path)
+        update_detection_fields(tmp_path)
+        config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
+        last = config["context"]["last_detection"]
+        assert last is not None
+        # Should be parseable as ISO 8601 (basic check)
+        datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+
+    def test_update_detection_fields_preserves_rules_comments(self, tmp_path):
+        """R-LAZY-02 CRITICAL: rules section comments are preserved after update."""
+        _write_config(tmp_path)
+        update_detection_fields(tmp_path)
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        # Comments must be preserved
+        assert "# cycle_mode controls how phases run" in raw
+        assert "# keep this comment" in raw
+        assert "# TDD is off by default" in raw
+
+    def test_update_detection_fields_returns_changed_true_on_diff(self, tmp_path):
+        """GIVEN stacks change from [] to Python, THEN changed=True."""
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").touch()
+        result = update_detection_fields(tmp_path)
+        assert result["changed"] is True
+
+    def test_update_detection_fields_returns_changed_false_on_same(self, tmp_path):
+        """GIVEN stacks already match filesystem, THEN changed=False."""
+        # First call to set the state
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        update_detection_fields(tmp_path)  # first call sets stacks=Python
+        result = update_detection_fields(tmp_path)  # second call: same state
+        assert result["changed"] is False
+
+    def test_update_detection_fields_noop_when_config_missing(self, tmp_path):
+        """EC: if config.yaml does not exist, return empty dict without crashing."""
+        result = update_detection_fields(tmp_path)
+        assert result == {}
+
+    def test_update_detection_fields_idempotent(self, tmp_path):
+        """NFR-01: calling twice on same filesystem state produces same YAML keys."""
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        update_detection_fields(tmp_path)
+        update_detection_fields(tmp_path)
+        config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is False
+        assert "Python" in config["context"]["stacks"]
+
+    def test_ruamel_not_installed_raises_runtime_error(self, monkeypatch):
+        """EC-01: if ruamel.yaml cannot be imported, RuntimeError with pip instruction."""
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "ruamel.yaml" or name.startswith("ruamel"):
+                raise ImportError("No module named 'ruamel'")
+            return real_import(name, *args, **kwargs)
+
+        import forge.bootstrap as bs
+
+        def raising_load():
+            raise RuntimeError(
+                "ruamel.yaml is required for comment-preserving config updates. "
+                "Install it with: pip install ruamel.yaml"
+            )
+
+        monkeypatch.setattr(bs, "_load_ruamel", raising_load)
+        with pytest.raises(RuntimeError, match="pip install ruamel.yaml"):
+            bs.update_detection_fields(Path("/fake"))
+
+
+# ---------------------------------------------------------------------------
+# Phase 11: run() mode dispatch + print_report (B.4)
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapRunMode:
+    """Tests for mode-aware run(). R-MODE-05, R-MODE-06, R-MODE-07."""
+
+    def _setup_for_run(self, monkeypatch, tmp_path):
+        """Setup fake PACKAGE_ROOT + disable codegraph binary."""
+        fake_pkg_root = tmp_path / "fake_pkg"
+        (fake_pkg_root / "templates").mkdir(parents=True)
+        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
+            "## Persona del orquestador\nContenido.\n", encoding="utf-8"
+        )
+        (fake_pkg_root / "config").mkdir()
+        (fake_pkg_root / "config" / "modulos-transversales.yaml").write_text(
+            "schema: forge\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+    def test_bootstrap_run_no_manifest_creates_config_pending(self, tmp_path, monkeypatch):
+        """R-MODE-05, R-MODE-07: empty dir → config created with pending_detection=true, stacks=[]."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        result = run(project, mode="bootstrap")
+        assert result["mode"] == "bootstrap"
+        assert result["stacks"] == []
+        assert result["audit_config"] == "created"
+        import yaml
+        config = yaml.safe_load((project / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is True
+        assert config["context"]["stacks"] == [] or config["context"]["stacks"] is None
+
+    def test_bootstrap_run_does_not_call_git_init(self, tmp_path, monkeypatch):
+        """R-MODE-06: bootstrap mode must NOT invoke git init or create .git/."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        with patch("subprocess.run") as mock_run:
+            run(project, mode="bootstrap")
+            # subprocess.run should never be called with git init
+            for call in mock_run.call_args_list:
+                args = call[0][0] if call[0] else []
+                assert "git" not in str(args), f"Unexpected git call: {args}"
+        assert not (project / ".git").exists()
+
+    def test_adopt_mode_runs_full_detection(self, tmp_path, monkeypatch):
+        """R-MODE-07: adopt mode runs stack detection."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        result = run(project, mode="adopt")
+        assert result["mode"] == "adopt"
+        assert "Python" in result["stacks"]
+
+    def test_upgrade_mode_returns_upgrade(self, tmp_path, monkeypatch):
+        """R-MODE-07: upgrade mode is accepted and reported."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".forge").mkdir()
+        result = run(project, mode="upgrade")
+        assert result["mode"] == "upgrade"
+
+    def test_config_schema_includes_new_fields(self, tmp_path, monkeypatch):
+        """R-LAZY-03: created config.yaml must include last_detection and pending_detection."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        run(project, mode="bootstrap")
+        import yaml
+        config = yaml.safe_load((project / "docs" / "auditoria" / "config.yaml").read_text())
+        assert "last_detection" in config["context"]
+        assert "pending_detection" in config["context"]
+
+    def test_adopt_mode_sets_pending_detection_false(self, tmp_path, monkeypatch):
+        """R-MODE-07: adopt mode writes pending_detection: false."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        run(project, mode="adopt")
+        import yaml
+        config = yaml.safe_load((project / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is False
+
+
+class TestPrintReportMode:
+    """Tests for print_report() R-ENV-03: no fg-plan line; mode in output."""
+
+    def test_print_report_no_proximo_paso_fg_plan(self, capsys, tmp_path, monkeypatch):
+        """R-ENV-03: output must NOT contain 'Próximo paso: /fg-plan'."""
+        report = {
+            "project_root": str(tmp_path),
+            "mode": "bootstrap",
+            "stacks": [],
+            "test_runner": None,
+            "dirs_ensured": [],
+            "claude_md": "created",
+            "audit_config": "created",
+            "config_templates": {},
+            "codegraph": {"status": None, "warning": "no binary"},
+            "skill_registry": "placeholder_created",
+            "gitignore": "created",
+            "warnings": [],
+        }
+        from forge.bootstrap import print_report
+        print_report(report)
+        out = capsys.readouterr().out
+        assert "Próximo paso: /fg-plan" not in out
+        assert "/fg-plan" not in out
+
+    def test_mode_appears_in_output(self, capsys, tmp_path):
+        """R-ENV-03: output must contain 'forge inicializado' with mode."""
+        report = {
+            "project_root": str(tmp_path),
+            "mode": "adopt",
+            "stacks": ["Python"],
+            "test_runner": {"name": "pytest", "command": "pytest", "detected_from": "pyproject.toml"},
+            "dirs_ensured": [],
+            "claude_md": "created",
+            "audit_config": "created",
+            "config_templates": {},
+            "codegraph": {"status": None, "warning": "no binary"},
+            "skill_registry": "placeholder_created",
+            "gitignore": "created",
+            "warnings": [],
+        }
+        from forge.bootstrap import print_report
+        print_report(report)
+        out = capsys.readouterr().out
+        assert "forge inicializado" in out
+        assert "adopt" in out
+
+
+# ---------------------------------------------------------------------------
+# Phase 12: needs_detection() (R-LAZY gate helper) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestNeedsDetection:
+    """Tests for needs_detection(root). Covers the testable GATE logic (R3)."""
+
+    def test_returns_true_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN needs_detection returns True."""
+        from forge.bootstrap import needs_detection
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_true_when_pending_detection_flag_set(self, tmp_path):
+        """GIVEN config with pending_detection: true, THEN needs_detection returns True."""
+        from forge.bootstrap import needs_detection
+        _write_config(tmp_path)  # MINIMAL_CONFIG_WITH_RULES has pending_detection: true
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_true_when_last_detection_null(self, tmp_path):
+        """GIVEN config with pending_detection: false but last_detection: null, THEN True."""
+        from forge.bootstrap import needs_detection
+        content = """\
+schema: forge
+context:
+  stacks: []
+  test_runner: null
+  last_detection: null
+  pending_detection: false
+rules:
+  workflow:
+    cycle_mode: interactive
+"""
+        _write_config(tmp_path, content)
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_true_when_manifest_mtime_newer(self, tmp_path):
+        """GIVEN manifest mtime > last_detection, THEN needs_detection returns True."""
+        from forge.bootstrap import needs_detection
+
+        # Create config with a past last_detection timestamp
+        past = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+        content = f"""\
+schema: forge
+context:
+  stacks: []
+  test_runner: null
+  last_detection: "{past}"
+  pending_detection: false
+rules:
+  workflow:
+    cycle_mode: interactive
+"""
+        _write_config(tmp_path, content)
+        # Create manifest with mtime in the future relative to past timestamp
+        manifest = tmp_path / "pyproject.toml"
+        manifest.write_text("[build-system]\n", encoding="utf-8")
+        future_time = time.time() + 10
+        os.utime(manifest, (future_time, future_time))
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_false_when_fresh(self, tmp_path):
+        """GIVEN pending_detection: false, last_detection recent, no manifest newer — False."""
+        from forge.bootstrap import needs_detection
+
+        # Create manifest first with a past mtime
+        manifest = tmp_path / "pyproject.toml"
+        manifest.write_text("[build-system]\n", encoding="utf-8")
+        past_mtime = time.time() - 3600  # 1 hour ago
+        os.utime(manifest, (past_mtime, past_mtime))
+
+        # Config with last_detection after manifest mtime
+        future_ts = datetime.now(tz=timezone.utc).isoformat()
+        content = f"""\
+schema: forge
+context:
+  stacks:
+    - Python
+  test_runner: null
+  last_detection: "{future_ts}"
+  pending_detection: false
+rules:
+  workflow:
+    cycle_mode: interactive
+"""
+        _write_config(tmp_path, content)
+        assert needs_detection(tmp_path) is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 13: EC-03 recovery — update_detection_fields on upgrade + missing config
+# ---------------------------------------------------------------------------
+
+
+class TestEC03Recovery:
+    """Tests for EC-03: re-create config.yaml when upgrade mode but file is missing."""
+
+    def test_upgrade_mode_recreates_config_when_missing(self, tmp_path):
+        """EC-03: .forge/ exists but config.yaml missing → update_detection_fields recreates it."""
+        from forge.bootstrap import update_detection_fields
+
+        # Simulate upgrade mode context (.forge/ exists, config.yaml absent)
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        config_path = tmp_path / "docs" / "auditoria" / "config.yaml"
+        assert not config_path.exists(), "pre-condition: config must be missing"
+
+        result = update_detection_fields(tmp_path, mode="upgrade")
+
+        assert config_path.exists(), "config.yaml must be recreated"
+        assert result != {}, "must return detection results, not empty dict"
+        assert "stacks" in result
+
+    def test_update_detection_fields_handles_missing_config_in_upgrade(self, tmp_path):
+        """EC-03: after recreation, context fields are properly set."""
+        from forge.bootstrap import update_detection_fields
+
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+
+        result = update_detection_fields(tmp_path, mode="upgrade")
+
+        config = yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text()
+        )
+        assert config["context"]["pending_detection"] is False
+        assert config["context"]["last_detection"] is not None
+        assert result["changed"] is True  # new config always counts as changed
+
+
+# ---------------------------------------------------------------------------
+# Phase 14: create_arquitectura_docs (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestCreateArquitecturaDocs:
+    """Tests for create_arquitectura_docs(root, overview_content, stack_content).
+    R-HELPER-01, NFR-01, NFR-03.
+    """
+
+    def test_creates_directory_if_missing(self, tmp_path):
+        """GIVEN docs/arquitectura/ does not exist, THEN it is created."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        assert (tmp_path / "docs" / "arquitectura").is_dir()
+
+    def test_writes_overview_and_stack(self, tmp_path):
+        """GIVEN content provided, THEN files exist with that content (UTF-8)."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "Mi overview\n", "Mi stack\n")
+        overview = (tmp_path / "docs" / "arquitectura" / "overview.md").read_text(encoding="utf-8")
+        stack = (tmp_path / "docs" / "arquitectura" / "stack.md").read_text(encoding="utf-8")
+        assert "Mi overview" in overview
+        assert "Mi stack" in stack
+
+    def test_does_not_overwrite_existing(self, tmp_path):
+        """GIVEN a file already exists, THEN it is NOT overwritten; 'overview' NOT in created."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "overview.md").write_text("original overview", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview must not be overwritten
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "original overview"
+        assert "overview" not in result["created"]
+
+    def test_idempotent_on_rerun(self, tmp_path):
+        """GIVEN called twice with same content, THEN no error and second call has empty created list."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "overview A", "stack A")
+        # second call must not raise
+        result2 = create_arquitectura_docs(tmp_path, "overview A", "stack A")
+        assert result2["created"] == []
+
+    def test_returns_correct_paths(self, tmp_path):
+        """GIVEN fresh dir, THEN returned dict has 'overview', 'stack', 'created' keys; paths absolute."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        result = create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        assert "overview" in result
+        assert "stack" in result
+        assert "created" in result
+        assert result["overview"].is_absolute()
+        assert result["stack"].is_absolute()
+
+    def test_partial_existing_overview_only(self, tmp_path):
+        """GIVEN overview exists but stack does not, THEN stack created, overview preserved."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "overview.md").write_text("existing overview", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview preserved
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "existing overview"
+        assert "overview" not in result["created"]
+        # stack created
+        assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "new stack"
+        assert "stack" in result["created"]
+
+    def test_partial_existing_stack_only(self, tmp_path):
+        """GIVEN stack exists but overview does not, THEN overview created, stack preserved."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "stack.md").write_text("existing stack", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview created
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "new overview"
+        assert "overview" in result["created"]
+        # stack preserved
+        assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "existing stack"
+        assert "stack" not in result["created"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 15: patch_config_stacks (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+# Config template for patch_config_stacks tests — includes comments in rules.*
+CONFIG_WITH_CONTEXT_AND_COMMENTS = """\
+schema: forge
+
+context:
+  stacks:
+    []
+  test_runner:
+    null
+  last_detection: null
+  pending_detection: true
+  vision_skipped: false
+
+rules:
+  workflow:
+    # cycle_mode controls how phases run
+    cycle_mode: interactive  # keep this comment
+  implement:
+    tdd: false  # TDD is off by default
+"""
+
+
+def _write_patch_config(root, content=CONFIG_WITH_CONTEXT_AND_COMMENTS):
+    """Write config.yaml for patch_config_stacks tests."""
+    config_dir = root / "docs" / "auditoria"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+    return config_dir / "config.yaml"
+
+
+class TestPatchConfigStacks:
+    """Tests for patch_config_stacks(root, stacks). R-HELPER-02, NFR-04, NFR-05."""
+
+    def test_updates_stacks_field(self, tmp_path):
+        """GIVEN config with context block, THEN context.stacks is updated."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        result = patch_config_stacks(tmp_path, ["python"])
+        config_text = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert "python" in config_text
+        assert result is True
+
+    def test_preserves_rules_comments(self, tmp_path):
+        """GIVEN config with comments in rules, THEN all comments survive round-trip."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert "# cycle_mode controls how phases run" in raw
+        assert "# keep this comment" in raw
+        assert "# TDD is off by default" in raw
+
+    def test_multi_stack_list(self, tmp_path):
+        """GIVEN stacks=['python','nextjs'], THEN both appear as separate list items."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python", "nextjs"])
+        import yaml as _yaml
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert "python" in config["context"]["stacks"]
+        assert "nextjs" in config["context"]["stacks"]
+        assert len(config["context"]["stacks"]) == 2
+
+    def test_noop_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN returns False, no exception."""
+        import warnings  # noqa: I001
+        from forge.bootstrap import patch_config_stacks
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = patch_config_stacks(tmp_path, ["python"])
+        assert result is False
+        assert len(w) >= 1
+
+    def test_noop_empty_list(self, tmp_path):
+        """GIVEN stacks=[], THEN returns False, no write."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        original = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        result = patch_config_stacks(tmp_path, [])
+        after = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert result is False
+        assert original == after
+
+    def test_idempotent_same_stacks(self, tmp_path):
+        """GIVEN called twice with same stacks, THEN file content same after second call."""
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        after_first = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        patch_config_stacks(tmp_path, ["python"])
+        after_second = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        assert after_first == after_second
+
+    def test_idempotent_no_duplicate_entries(self, tmp_path):
+        """GIVEN called twice with same stacks list, THEN config.stacks has no duplicates."""
+        import yaml as _yaml  # noqa: I001
+        from forge.bootstrap import patch_config_stacks
+
+        _write_patch_config(tmp_path)
+        patch_config_stacks(tmp_path, ["python"])
+        patch_config_stacks(tmp_path, ["python"])
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["stacks"].count("python") == 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 16: mark_vision_skipped (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestMarkVisionSkipped:
+    """Tests for mark_vision_skipped(root). R-VISION-08, R-HELPER-02, EC-01."""
+
+    def test_sets_vision_skipped_true(self, tmp_path):
+        """GIVEN config with context block, THEN context.vision_skipped == True after call."""
+        import yaml as _yaml  # noqa: I001
+        from forge.bootstrap import mark_vision_skipped
+
+        _write_patch_config(tmp_path)
+        result = mark_vision_skipped(tmp_path)
+        assert result is True
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["vision_skipped"] is True
+
+    def test_noop_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN returns False, no exception."""
+        from forge.bootstrap import mark_vision_skipped
+
+        result = mark_vision_skipped(tmp_path)
+        assert result is False
+
+    def test_idempotent_when_already_skipped(self, tmp_path):
+        """GIVEN called twice, THEN no error and value stays True."""
+        import yaml as _yaml  # noqa: I001
+        from forge.bootstrap import mark_vision_skipped
+
+        _write_patch_config(tmp_path)
+        mark_vision_skipped(tmp_path)
+        result = mark_vision_skipped(tmp_path)
+        assert result is True
+        config = _yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        )
+        assert config["context"]["vision_skipped"] is True
+
+
+# ─── Phase 17: read_overview + is_vision_skipped (C.1 + C.2) ─────────────────
+
+
+class TestReadOverview:
+    def test_returns_content_when_present(self, tmp_path):
+        """GIVEN overview.md exists with content, THEN returns the content."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("X", encoding="utf-8")
+        assert read_overview(tmp_path) == "X"
+
+    def test_returns_none_when_missing(self, tmp_path):
+        """GIVEN overview.md does not exist, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        assert read_overview(tmp_path) is None
+
+    def test_returns_none_when_empty(self, tmp_path):
+        """GIVEN overview.md exists with zero bytes, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_bytes(b"")
+        assert read_overview(tmp_path) is None
+
+    def test_returns_none_when_whitespace_only(self, tmp_path):
+        """GIVEN overview.md contains only whitespace, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("   \n", encoding="utf-8")
+        assert read_overview(tmp_path) is None
+
+    def test_utf8_content(self, tmp_path):
+        """GIVEN overview.md has non-ASCII UTF-8 content, THEN returns correctly decoded string."""
+        from forge.bootstrap import read_overview
+
+        content = "Descripción con ñ y tildes: á é í ó ú"
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(content, encoding="utf-8")
+        assert read_overview(tmp_path) == content
+
+
+class TestIsVisionSkipped:
+    def _write_vision_config(self, tmp_path, vision_skipped_value):
+        """Helper: creates docs/auditoria/config.yaml with the given vision_skipped flag."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        if vision_skipped_value is None:
+            content = "context: {}\n"
+        else:
+            content = f"context:\n  vision_skipped: {str(vision_skipped_value).lower()}\n"
+        (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+
+    def test_returns_true_when_flag_set(self, tmp_path):
+        """GIVEN config with context.vision_skipped: true, THEN returns True."""
+        from forge.bootstrap import is_vision_skipped
+
+        self._write_vision_config(tmp_path, True)
+        assert is_vision_skipped(tmp_path) is True
+
+    def test_returns_false_when_flag_unset(self, tmp_path):
+        """GIVEN config with context: {} (no vision_skipped key), THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        self._write_vision_config(tmp_path, None)
+        assert is_vision_skipped(tmp_path) is False
+
+    def test_returns_false_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml exists, THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        assert is_vision_skipped(tmp_path) is False
+
+    def test_returns_false_when_yaml_malformed(self, tmp_path):
+        """GIVEN config.yaml with invalid YAML syntax, THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.yaml").write_text(": invalid: [yaml", encoding="utf-8")
+        assert is_vision_skipped(tmp_path) is False

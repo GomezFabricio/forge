@@ -23,16 +23,24 @@ Antes de ejecutar cualquier paso, cada skill debe:
    - `rules.workflow.cycle_mode` → default sugerido del ciclo para `/fg-plan`.
    - `rules.implement.max_tasks_per_batch` → límite de tareas por batch para `/fg-implement`.
 
-2. **Cargar módulos condicionales**:
+2. **GATE de re-detección lazy** (corre ANTES de cualquier aborto skill-específico):
+   - Invocar `forge.bootstrap.needs_detection(root)`.
+   - Si retorna `True`:
+     - Invocar `forge.bootstrap.update_detection_fields(root)`.
+     - Recargar `docs/auditoria/config.yaml` antes de continuar.
+   - Si `pending_detection` queda en `true` después de la llamada (sin manifiestos detectados), reportar al dev claramente; NO abortar silenciosamente.
+   - `needs_detection` ya maneja: config ausente → True; `pending_detection` ausente (config legacy) → True (EC-05); `last_detection` null → True; mtime de manifiesto posterior → True (EC-02).
+
+3. **Cargar módulos condicionales**:
    - Si `rules.implement.tdd: true` → cargar `_shared/strict-tdd.md` (aplica en `/fg-implement`).
    - Si `rules.implement.tdd: true` y es `/fg-review` → cargar `_shared/strict-tdd-verify.md`.
 
-3. **Fallback si `docs/auditoria/config.yaml` no existe**:
+4. **Fallback si `docs/auditoria/config.yaml` no existe**:
    - Asumir TDD desactivado (`tdd: false`).
    - Usar `context.test_runner.command` como comando de test.
    - Emitir advertencia al dev: "No se encontró `docs/auditoria/config.yaml`. Corré `/fg-setup` primero."
 
-4. **Registrar en el envelope de retorno** el campo `skill_resolution` indicando qué módulos se cargaron.
+5. **Registrar en el envelope de retorno** el campo `skill_resolution` indicando qué módulos se cargaron.
 
 ---
 

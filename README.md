@@ -58,25 +58,41 @@ Ambas vías ejecutan los siguientes pasos en cadena:
 
 1. Verifica que haya **Python 3.10+** disponible. Si no encuentra `pipx`, lo instala (`python -m pip install --user pipx` + `pipx ensurepath`).
 2. Instala el paquete con **pipx**: `pipx install forge`. Esto aísla forge del Python global del sistema y permite upgrade/uninstall limpios.
-3. Ejecuta **`forge install --global`**, que deposita en `~/.claude/`:
-   - `skills/forge/fg-*.md` — las 6 skills del workflow.
-   - `agents/forge-*.md` — los 6 sub-agentes especialistas.
-   - `commands/fg-*.md` — los slash commands correspondientes.
-   - `skills/forge-shared/` — referencias compartidas (skill-resolver, persistence-contract, módulo Strict TDD).
+3. Ejecuta **`forge install`**, que deposita en `~/.claude/`:
+   - `skills/<stem>/SKILL.md` — las 6 skills del workflow (`fg-setup`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`), cada una en su propia carpeta.
+   - `skills/forge-shared/<name>/SKILL.md` — referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`), con frontmatter que evita invocación accidental por el modelo.
+   - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
+   - `agents/<name>.md` — los 6 sub-agentes especialistas (copia flat).
+   - `mcp/engram.json` — registro MCP de engram (solo si engram se instala durante `forge install`).
 
-> **v0.1.0**: el subcomando `forge install --global` está esqueletado pero no implementado en esta primera versión. Mientras tanto, los archivos del paquete se pueden copiar manualmente a `~/.claude/` para probar el workflow.
+> **v0.1.0**: `forge install` está implementado end-to-end. Deposita las skills y los sub-agentes en `~/.claude/`, registra opcionalmente el MCP de engram, y mergea el bloque de orquestación en `~/.claude/CLAUDE.md`.
 
 ### Después de instalar
 
-En cada proyecto donde quieras adoptar el workflow:
+Una vez instalado, forge se invoca solo según el contexto de cada conversación. Hablá normal con Claude — si la tarea encaja con el workflow, el orquestador inicializa forge y guía la sesión. No necesitás conocer los slash commands; existen para casos avanzados (scripts, automatización).
 
-```bash
-cd mi-proyecto/
-# desde Claude Code:
-/fg-setup
-```
+---
 
-`/fg-setup` adopta forge en el proyecto — detecta stack, activa Strict TDD si hay test runner, mergea un `CLAUDE.md` institucional con las reglas del workflow (incluida la regla operativa de privacidad para engram).
+## Cómo se activa forge
+
+Forge no se "activa" ni se "desactiva" — está latente desde que lo instalaste globalmente. El orquestador detecta tu intención conversacional y arranca el flujo correspondiente sin pedirte permiso.
+
+| Cuando le decís a Claude… | Forge hace |
+|---|---|
+| "quiero hacer un sistema de X" | Inicializa el proyecto si hace falta, charla con vos para entender el sistema, arma `docs/arquitectura/overview.md`, y te guía feature por feature. |
+| "implementá esto según docs/prd.md" | Lee el documento, valida consistencia, surface gaps, y te guía slice por slice. |
+| "agregame [feature] al sistema" | Adopta forge en el proyecto, analiza el código con CodeGraph, y planifica el cambio minimizando impacto. |
+| "necesito refactorizar este legacy" | Adopta + analiza dependencias ocultas + propone estrategia de migración (strangler fig, branch by abstraction, etc.) antes de tocar nada. |
+
+### Cuándo NO invocar forge
+
+El orquestador NO mete forge cuando:
+
+- El cambio es un fix de typo, una línea, o un ajuste de comentario.
+- Estás explorando o haciendo preguntas sin modificar código.
+- Decís explícitamente "sin forge" o "edición libre".
+
+No tenés que memorizar slash commands. Si querés invocar una skill manualmente para casos avanzados (scripts, automatización), los comandos `/fg-*` siguen disponibles.
 
 ---
 
@@ -251,7 +267,7 @@ Los **identificadores técnicos** (nombres de comandos, slash commands, hooks, t
 
 ## Estructura del repo (source)
 
-> Esta es la estructura del repo `forge` (source). **`forge install --global` distribuye estos archivos a `~/.claude/`** — el dev que adopta forge no necesita tener `skills/`, `agents/` ni `templates/` en su proyecto. La estructura del proyecto del dev tras `/fg-setup` se muestra más abajo.
+> Esta es la estructura del repo `forge` (source). **`forge install` distribuye estos archivos a `~/.claude/`** — el dev que adopta forge no necesita tener `skills/`, `agents/` ni `templates/` en su proyecto. La estructura del proyecto del dev tras `/fg-setup` se muestra más abajo.
 
 ```
 forge/
@@ -260,7 +276,7 @@ forge/
 │   ├── cli.py                   ← entry point del binario `forge`
 │   ├── bootstrap.py             ← ejecutor de /fg-setup (instala forge en un proyecto)
 │   └── structural_detector.py   ← detector usado por /fg-review
-├── skills/                      ← 6 skills + módulos compartidos (van a ~/.claude/skills/forge/)
+├── skills/                      ← 6 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
 │   ├── fg-setup.md
 │   ├── fg-plan.md
 │   ├── fg-design.md
@@ -367,7 +383,7 @@ El marcador es case-sensitive. `#FG-PASS`, `#fg_pass` o `# fg-pass` **no** activ
 
 ### Registro manual del hook
 
-Hasta que `forge install --global` sea end-to-end, registrar el hook manualmente en `~/.claude/settings.json`:
+Hasta que `forge install` registre el hook automáticamente, registralo manualmente en `~/.claude/settings.json`:
 
 ```json
 {
