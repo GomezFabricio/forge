@@ -472,6 +472,38 @@ def create_audit_config(
     return "created"
 
 
+def create_arquitectura_docs(
+    root: Path,
+    overview_content: str,
+    stack_content: str,
+) -> dict:
+    """Crea docs/arquitectura/{overview,stack}.md. UTF-8. NO overwrite si existen.
+
+    Returns: {"overview": Path, "stack": Path, "created": list[str]}
+        created ∈ ([], ["overview"], ["stack"], ["overview", "stack"])
+    """
+    arch_dir = root / "docs" / "arquitectura"
+    arch_dir.mkdir(parents=True, exist_ok=True)
+
+    overview_path = arch_dir / "overview.md"
+    stack_path = arch_dir / "stack.md"
+    created = []
+
+    if not overview_path.exists():
+        overview_path.write_text(overview_content, encoding="utf-8")
+        created.append("overview")
+
+    if not stack_path.exists():
+        stack_path.write_text(stack_content, encoding="utf-8")
+        created.append("stack")
+
+    return {
+        "overview": overview_path,
+        "stack": stack_path,
+        "created": created,
+    }
+
+
 def update_gitignore(root: Path) -> str:
     gitignore = root / ".gitignore"
     required = [

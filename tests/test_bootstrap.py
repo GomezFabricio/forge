@@ -1282,3 +1282,93 @@ class TestEC03Recovery:
         assert config["context"]["pending_detection"] is False
         assert config["context"]["last_detection"] is not None
         assert result["changed"] is True  # new config always counts as changed
+
+
+# ---------------------------------------------------------------------------
+# Phase 14: create_arquitectura_docs (B.3) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestCreateArquitecturaDocs:
+    """Tests for create_arquitectura_docs(root, overview_content, stack_content).
+    R-HELPER-01, NFR-01, NFR-03.
+    """
+
+    def test_creates_directory_if_missing(self, tmp_path):
+        """GIVEN docs/arquitectura/ does not exist, THEN it is created."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        result = create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        assert (tmp_path / "docs" / "arquitectura").is_dir()
+
+    def test_writes_overview_and_stack(self, tmp_path):
+        """GIVEN content provided, THEN files exist with that content (UTF-8)."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "Mi overview\n", "Mi stack\n")
+        overview = (tmp_path / "docs" / "arquitectura" / "overview.md").read_text(encoding="utf-8")
+        stack = (tmp_path / "docs" / "arquitectura" / "stack.md").read_text(encoding="utf-8")
+        assert "Mi overview" in overview
+        assert "Mi stack" in stack
+
+    def test_does_not_overwrite_existing(self, tmp_path):
+        """GIVEN a file already exists, THEN it is NOT overwritten; 'overview' NOT in created."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "overview.md").write_text("original overview", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview must not be overwritten
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "original overview"
+        assert "overview" not in result["created"]
+
+    def test_idempotent_on_rerun(self, tmp_path):
+        """GIVEN called twice with same content, THEN no error and second call has empty created list."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        create_arquitectura_docs(tmp_path, "overview A", "stack A")
+        # second call must not raise
+        result2 = create_arquitectura_docs(tmp_path, "overview A", "stack A")
+        assert result2["created"] == []
+
+    def test_returns_correct_paths(self, tmp_path):
+        """GIVEN fresh dir, THEN returned dict has 'overview', 'stack', 'created' keys; paths absolute."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        result = create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        assert "overview" in result
+        assert "stack" in result
+        assert "created" in result
+        assert result["overview"].is_absolute()
+        assert result["stack"].is_absolute()
+
+    def test_partial_existing_overview_only(self, tmp_path):
+        """GIVEN overview exists but stack does not, THEN stack created, overview preserved."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "overview.md").write_text("existing overview", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview preserved
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "existing overview"
+        assert "overview" not in result["created"]
+        # stack created
+        assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "new stack"
+        assert "stack" in result["created"]
+
+    def test_partial_existing_stack_only(self, tmp_path):
+        """GIVEN stack exists but overview does not, THEN overview created, stack preserved."""
+        from forge.bootstrap import create_arquitectura_docs
+
+        arch_dir = tmp_path / "docs" / "arquitectura"
+        arch_dir.mkdir(parents=True)
+        (arch_dir / "stack.md").write_text("existing stack", encoding="utf-8")
+        result = create_arquitectura_docs(tmp_path, "new overview", "new stack")
+        # overview created
+        assert (arch_dir / "overview.md").read_text(encoding="utf-8") == "new overview"
+        assert "overview" in result["created"]
+        # stack preserved
+        assert (arch_dir / "stack.md").read_text(encoding="utf-8") == "existing stack"
+        assert "stack" not in result["created"]
