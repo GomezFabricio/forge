@@ -86,6 +86,14 @@ _REQUIRED_FM_KEYS: dict = {"disable-model-invocation": True, "user-invocable": F
 # Cross-cutting _shared files that go to forge-shared/ (with frontmatter injection)
 _CROSS_CUTTING = {"skill-resolver", "engram-protocol", "fg-phase-common"}
 
+POST_INSTALL_MESSAGE = """\
+forge instalado. A partir de ahora, charlá normal con Claude en cualquier
+proyecto — el workflow se activa solo según el contexto.
+
+Las skills (/fg-setup, /fg-plan, /fg-design, /fg-implement, /fg-review,
+/fg-update-arch) existen como comandos por si las querés invocar manualmente,
+pero no necesitás conocerlas."""
+
 # =============================================================================
 # === Detection ===
 # =============================================================================
@@ -624,7 +632,7 @@ def print_report(report: dict) -> None:
     print()
     print("  Para que el cambio de PATH surta efecto, abrí una nueva terminal.")
     print()
-    print("  Próximo paso: /fg-setup")
+    print(POST_INSTALL_MESSAGE)
 
 
 def run(args) -> int:  # args: argparse.Namespace

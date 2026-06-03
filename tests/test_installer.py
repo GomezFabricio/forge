@@ -1293,3 +1293,55 @@ class TestPromptUserYn:
         from forge.installer import prompt_user_yn
         with patch("builtins.input", return_value="maybe"):
             assert prompt_user_yn() == "n"
+
+
+# ---------------------------------------------------------------------------
+# TestPrintReport — PRD §4.A.2 (latent activation message)
+# ---------------------------------------------------------------------------
+
+
+class TestPrintReport:
+    """Tests for print_report — PRD §4.A.2 (latent activation message)."""
+
+    def _minimal_report(self) -> dict:
+        """Helper: build a minimal report dict that exercises the function
+        without triggering optional branches (no warnings, engram via mcp_json)."""
+        return {
+            "engram": {"mcp_json": "/fake/path/engram"},
+            "assets": {
+                "skills_deposited": 6,
+                "shared_deposited": 3,
+                "agents_deposited": 6,
+                "warnings": [],
+            },
+        }
+
+    def test_shows_latent_activation_anchor(self, capsys):
+        """Output MUST contain the 'activates by context' anchor from
+        POST_INSTALL_MESSAGE."""
+        from forge.installer import print_report
+        print_report(self._minimal_report())
+        captured = capsys.readouterr()
+        assert "se activa solo según el contexto" in captured.out
+
+    def test_shows_skills_are_optional_anchor(self, capsys):
+        """Output MUST contain the 'no need to know them' anchor."""
+        from forge.installer import print_report
+        print_report(self._minimal_report())
+        captured = capsys.readouterr()
+        assert "no necesitás conocerlas" in captured.out
+
+    def test_does_not_mention_legacy_next_step(self, capsys):
+        """Output MUST NOT contain the old 'Próximo paso: /fg-setup' line.
+        Regression guard for PRD DoD #2."""
+        from forge.installer import print_report
+        print_report(self._minimal_report())
+        captured = capsys.readouterr()
+        assert "Próximo paso: /fg-setup" not in captured.out
+
+    def test_post_install_message_constant_is_exported(self):
+        """The module-level constant exists and contains both anchors.
+        Validates the constants-as-copy contract (importable by tests and tooling)."""
+        from forge.installer import POST_INSTALL_MESSAGE
+        assert "se activa solo según el contexto" in POST_INSTALL_MESSAGE
+        assert "no necesitás conocerlas" in POST_INSTALL_MESSAGE
