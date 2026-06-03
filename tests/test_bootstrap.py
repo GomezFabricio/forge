@@ -1533,3 +1533,92 @@ class TestMarkVisionSkipped:
             (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
         )
         assert config["context"]["vision_skipped"] is True
+
+
+# ─── Phase 17: read_overview + is_vision_skipped (C.1 + C.2) ─────────────────
+
+
+class TestReadOverview:
+    def test_returns_content_when_present(self, tmp_path):
+        """GIVEN overview.md exists with content, THEN returns the content."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("X", encoding="utf-8")
+        assert read_overview(tmp_path) == "X"
+
+    def test_returns_none_when_missing(self, tmp_path):
+        """GIVEN overview.md does not exist, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        assert read_overview(tmp_path) is None
+
+    def test_returns_none_when_empty(self, tmp_path):
+        """GIVEN overview.md exists with zero bytes, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_bytes(b"")
+        assert read_overview(tmp_path) is None
+
+    def test_returns_none_when_whitespace_only(self, tmp_path):
+        """GIVEN overview.md contains only whitespace, THEN returns None."""
+        from forge.bootstrap import read_overview
+
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("   \n", encoding="utf-8")
+        assert read_overview(tmp_path) is None
+
+    def test_utf8_content(self, tmp_path):
+        """GIVEN overview.md has non-ASCII UTF-8 content, THEN returns correctly decoded string."""
+        from forge.bootstrap import read_overview
+
+        content = "Descripción con ñ y tildes: á é í ó ú"
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(content, encoding="utf-8")
+        assert read_overview(tmp_path) == content
+
+
+class TestIsVisionSkipped:
+    def _write_vision_config(self, tmp_path, vision_skipped_value):
+        """Helper: creates docs/auditoria/config.yaml with the given vision_skipped flag."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        if vision_skipped_value is None:
+            content = "context: {}\n"
+        else:
+            content = f"context:\n  vision_skipped: {str(vision_skipped_value).lower()}\n"
+        (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+
+    def test_returns_true_when_flag_set(self, tmp_path):
+        """GIVEN config with context.vision_skipped: true, THEN returns True."""
+        from forge.bootstrap import is_vision_skipped
+
+        self._write_vision_config(tmp_path, True)
+        assert is_vision_skipped(tmp_path) is True
+
+    def test_returns_false_when_flag_unset(self, tmp_path):
+        """GIVEN config with context: {} (no vision_skipped key), THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        self._write_vision_config(tmp_path, None)
+        assert is_vision_skipped(tmp_path) is False
+
+    def test_returns_false_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml exists, THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        assert is_vision_skipped(tmp_path) is False
+
+    def test_returns_false_when_yaml_malformed(self, tmp_path):
+        """GIVEN config.yaml with invalid YAML syntax, THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.yaml").write_text(": invalid: [yaml", encoding="utf-8")
+        assert is_vision_skipped(tmp_path) is False

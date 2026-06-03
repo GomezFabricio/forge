@@ -575,6 +575,42 @@ def mark_vision_skipped(root: Path) -> bool:
     return True
 
 
+def read_overview(root: Path) -> str | None:
+    """Read docs/arquitectura/overview.md content if present and non-empty.
+
+    Returns:
+        Content as string (UTF-8) if file exists and has non-whitespace content.
+        None if file does not exist OR is empty OR whitespace-only.
+    """
+    overview_path = root / "docs" / "arquitectura" / "overview.md"
+    if not overview_path.exists():
+        return None
+    content = overview_path.read_text(encoding="utf-8")
+    if not content.strip():
+        return None
+    return content
+
+
+def is_vision_skipped(root: Path) -> bool:
+    """Read context.vision_skipped from docs/auditoria/config.yaml.
+
+    Returns:
+        True if the flag is explicitly set to True.
+        False if config.yaml is missing, malformed, or flag is False/unset.
+    """
+    import yaml  # noqa: PLC0415
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return False
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+    except yaml.YAMLError:
+        return False
+    return bool(config.get("context", {}).get("vision_skipped", False))
+
+
 def update_gitignore(root: Path) -> str:
     gitignore = root / ".gitignore"
     required = [
