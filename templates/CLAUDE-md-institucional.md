@@ -155,9 +155,11 @@ El dev describe en lenguaje natural lo que quiere hacer. La skill infiere tipo (
 ### Modelo de delegación
 
 - El orquestador (vos, ahora) compone 6 skills como primitivas internas (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`, `/fg-update-arch`) — el dev no las invoca por slash command, las dispara el orquestador al detectar intent.
-- Solo `/fg-review` puede delegar a roles especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`).
-- Las demás skills son ejecutores estrictos (NO delegan).
+- `/fg-review` delega a los roles especialistas de review (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`).
+- `/fg-design` delega a `legacy-impact-analyzer` cuando el proyecto está marcado como legacy — análisis de impacto pre-implementación, no de review (ver paso 2b de `/fg-design`).
+- `/fg-setup`, `/fg-plan`, `/fg-implement` y `/fg-update-arch` son ejecutores estrictos (NO delegan).
 - Los roles son hojas (NO delegan a nadie).
+- **Principio rector**: una skill puede delegar a un sub-agente especialista cuando necesita información que ese agente produce y la skill no puede computar por sí misma. Hoy aplica a `/fg-review` (miradas de review) y `/fg-design` (impacto legacy pre-implementación).
 
 ## Visión del sistema (modo bootstrap)
 
