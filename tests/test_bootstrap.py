@@ -29,6 +29,7 @@ import forge.bootstrap as bootstrap
 from forge.bootstrap import (
     _build_stacks_yaml,
     _build_test_runner_yaml,
+    copy_config_templates,
     create_audit_config,
     detect_stack,
     detect_test_runner,
@@ -36,8 +37,8 @@ from forge.bootstrap import (
     extract_section,
     generate_skill_registry_placeholder,
     init_codegraph,
+    is_legacy_project,
     merge_or_create_claude_md,
-    copy_config_templates,
     run,
     update_gitignore,
 )
@@ -333,6 +334,15 @@ class TestCreateAuditConfig:
         # stacks puede ser [] (lista vacía) según como PyYAML parsee "    []"
         stacks = config["context"]["stacks"]
         assert stacks == [] or stacks is None
+
+    def test_includes_is_legacy_field(self, tmp_path):
+        """R-LEGACY-05: AUDIT_CONFIG_TEMPLATE must include context.is_legacy: false."""
+        self._ensure_audit_dir(tmp_path)
+        create_audit_config(tmp_path, ["Python"], "pytest", "pytest", "pyproject.toml")
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        config = yaml.safe_load(raw)
+        assert "is_legacy" in config["context"], "context block must have is_legacy key"
+        assert config["context"]["is_legacy"] is False
 
 
 class TestUpdateGitignore:
@@ -814,3 +824,157 @@ class TestInitCodegraphSubprocessError:
         assert status is None
         assert warning is not None
         assert "codegraph" in warning.lower()
+
+
+# ---------------------------------------------------------------------------
+# is_legacy_project — R-LEGACY-02, R-LEGACY-03, R-LEGACY-04, OR-semantics
+# ---------------------------------------------------------------------------
+
+
+class TestIsLegacyProject:
+    """Tests para is_legacy_project(root). Strict TDD cycle."""
+
+    def test_returns_true_when_config_is_legacy(self, tmp_path):
+        """R-LEGACY-02: config.yaml context.is_legacy: true → True."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  is_legacy: true\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is True
+
+    def test_returns_false_when_config_flag_false(self, tmp_path):
+        """R-LEGACY-02: config.yaml context.is_legacy: false → False."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  is_legacy: false\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is False
+
+    def test_returns_false_when_config_field_missing(self, tmp_path):
+        """R-LEGACY-02: config.yaml exists, no is_legacy key → False."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  stacks: []\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is False
+
+    def test_returns_false_when_config_absent(self, tmp_path):
+        """R-LEGACY-04: no config file, no overview → False, no exception."""
+        assert is_legacy_project(tmp_path) is False
+
+    def test_returns_true_when_frontmatter_legacy(self, tmp_path):
+        """R-LEGACY-03: overview.md frontmatter legacy: true → True."""
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "---\nlegacy: true\n---\n# Overview\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is True
+
+    def test_returns_false_when_frontmatter_false(self, tmp_path):
+        """R-LEGACY-03: overview.md frontmatter legacy: false → False."""
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "---\nlegacy: false\n---\n# Overview\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is False
+
+    def test_returns_false_when_no_frontmatter_block(self, tmp_path):
+        """R-LEGACY-04: overview.md exists but no --- start → False."""
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "# Overview\nNo frontmatter here.\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is False
+
+    def test_returns_false_when_malformed_frontmatter(self, tmp_path):
+        """R-LEGACY-04, EC-malformed: malformed YAML (incl \\r\\n edge) → False, no exception."""
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        # Write malformed YAML with colon syntax error and Windows line endings
+        malformed = "---\nkey: :\r\n---\n"
+        (overview_dir / "overview.md").write_bytes(malformed.encode("utf-8"))
+        assert is_legacy_project(tmp_path) is False
+
+    def test_returns_false_when_overview_empty(self, tmp_path):
+        """R-LEGACY-04: empty overview.md → False."""
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text("", encoding="utf-8")
+        assert is_legacy_project(tmp_path) is False
+
+    def test_short_circuits_on_config_true(self, tmp_path, monkeypatch):
+        """OR-semantics: config=True → short-circuit, overview.md must NOT be read."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  is_legacy: true\n", encoding="utf-8"
+        )
+        # overview.md does NOT exist — if function tries to read it, it would have to handle
+        # the missing file. We assert it returns True without needing overview at all.
+        # To be rigorous, place a sentinel value that would return False if read.
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "---\nlegacy: false\n---\n", encoding="utf-8"
+        )
+        # Monkeypatch Path.read_text to track calls
+        original_read_text = Path.read_text
+        calls = []
+
+        def tracking_read_text(self, *args, **kwargs):
+            calls.append(str(self))
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", tracking_read_text)
+        result = is_legacy_project(tmp_path)
+        assert result is True
+        overview_path = str(tmp_path / "docs" / "arquitectura" / "overview.md")
+        assert overview_path not in calls, "overview.md must NOT be read when config already returns True"
+
+    def test_config_true_overview_false(self, tmp_path):
+        """OR-semantics: config=True wins even when overview=False."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  is_legacy: true\n", encoding="utf-8"
+        )
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "---\nlegacy: false\n---\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is True
+
+    def test_config_false_overview_true(self, tmp_path):
+        """OR-semantics: config=False, overview=True → True."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  is_legacy: false\n", encoding="utf-8"
+        )
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "---\nlegacy: true\n---\n# Overview\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is True
+
+    def test_no_markers_anywhere_returns_false(self, tmp_path):
+        """R-LEGACY-04: both files present, no legacy markers → False."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config.yaml").write_text(
+            "context:\n  stacks: [python]\n", encoding="utf-8"
+        )
+        overview_dir = tmp_path / "docs" / "arquitectura"
+        overview_dir.mkdir(parents=True)
+        (overview_dir / "overview.md").write_text(
+            "---\ntitle: My Project\n---\n# Overview\n", encoding="utf-8"
+        )
+        assert is_legacy_project(tmp_path) is False
