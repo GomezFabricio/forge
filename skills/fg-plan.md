@@ -20,6 +20,7 @@ El dev invoca `/fg-plan` seguido de una descripción libre. Ejemplos:
 - `/fg-plan arreglar el bug del rate limit del endpoint de búsqueda`
 - `/fg-plan migrar el módulo de notificaciones a una librería externa`
 - `/fg-plan optimizar el query del listado de expedientes`
+- `/fg-plan --from docs/prd.md "implementar login de usuarios"`
 
 Si el dev quiere forzar el tipo y nombre exactos, puede usar la sintaxis explícita `tipo:nombre descripción`. Ejemplo: `/fg-plan feat:login-oauth login con OAuth2`. Solo es necesario cuando se quiere precisión absoluta.
 
@@ -83,15 +84,39 @@ Donde `<YYYY-MM>` es el año-mes actual.
 
 Ejemplo: `docs/auditoria/cambios/2026-05-feat-login-usuarios/`
 
-### 5. Consultar CodeGraph para entender el contexto
+### 5. Resolver contexto (Branch 1, 2, 3a, 3b, o 3c)
 
-Antes de escribir el `README.md`, consultar el índice de CodeGraph para responder:
+El contexto de un cambio puede venir de tres fuentes en orden de prioridad: doc externa explícita (`--from`), overview de arquitectura, o análisis de código vía CodeGraph. Identificar el branch aplicable:
 
-- ¿Qué módulos del codebase están relacionados con el cambio?
-- ¿Hay entidades de dominio existentes que el cambio toca?
-- ¿Hay dependencias entre módulos que el dev debería conocer?
+**Branch 1 — `--from <doc>` provisto**
+- Leer el doc apuntado (resuelto desde la raíz del proyecto, salvo path absoluto) como contexto PRIMARIO.
+- Si `docs/arquitectura/overview.md` también existe, leerlo como contexto SECUNDARIO.
+- En el README del cambio, agregar sección "Alineación con arquitectura" notando coincidencias o divergencias entre las dos fuentes.
+- Si el doc apuntado por `--from` no existe, no es legible o está vacío → `status: blocked` con mensaje específico.
 
-Esta información se usa para enriquecer el `README.md` y para preguntarle al dev cuestiones específicas si algo no queda claro del prompt original.
+**Branch 2 — overview.md existe (sin `--from`)**
+- Llamar `bootstrap.read_overview(root)` para obtener el contenido.
+- Usar el overview como contexto PRIMARIO.
+- Consultar CodeGraph como contexto SECUNDARIO si está disponible.
+- En el README, referenciar el overview como fuente arquitectónica.
+
+**Branch 3a — sin overview pero hay código (`stacks != []`)**
+- CodeGraph como contexto único.
+- Comportamiento equivalente al `/fg-plan` clásico antes de C.1.
+
+**Branch 3b — sin overview, sin código, y vision NO declinada**
+- Condición: `read_overview(root) is None` AND `context.stacks == []` (o `pending_detection: true`) AND `context.vision_skipped == false`.
+- Acción: abortar con `status: blocked`. Mensaje al dev:
+  > "No hay contexto arquitectónico. Corré `/fg-setup` en modo bootstrap para inicializar la visión del sistema, después volvé a `/fg-plan`."
+
+**Branch 3c — sin overview, sin código, vision SÍ declinada**
+- Condición: lo mismo que 3b pero `context.vision_skipped == true`.
+- Acción: proceder en modo degradado. El dev eligió no tener visión — respetarla.
+- README incluye sección explícita: `Contexto: desconocido (visión declinada)`.
+- Generar el README del cambio sin contexto arquitectónico; el `/fg-design` que sigue trabajará con lo que tenga.
+- `status: success` con `warnings: [vision_skipped, degraded_context]`.
+
+**IMPORTANTE**: el orden de check es estricto: primero `--from` (Branch 1), luego `overview.md` (Branch 2), luego stacks (Branch 3a vs 3b/3c según vision_skipped).
 
 ### 6. Preguntar lo que no quede claro del problema
 
@@ -127,7 +152,7 @@ Imprimir:
 
 - Resolver el modo de ejecución del ciclo en el paso 0 — preguntar solo si no hay cache de sesión.
 - Inferir tipo y nombre del lenguaje natural del dev.
-- Consultar CodeGraph para enriquecer el contexto antes de escribir.
+- Resolver contexto según prioridad: `--from` > `overview.md` > CodeGraph.
 - Preguntar sobre el problema cuando algo no quede claro.
 - Escribir el `README.md` en español.
 - Usar `YYYY-MM` (año-mes) en el nombre de la carpeta, NO `YYYY-MM-DD`.
@@ -145,6 +170,7 @@ Imprimir:
 - Crear `diseño.md`, `tareas.md` ni `decisiones.md` (esos los crea `/fg-design`).
 - Tocar código del proyecto.
 - Imponer estilos de arquitectura o stack.
+- Asumir contexto cuando `context.vision_skipped == false` y no hay overview ni stacks — abortar con `status: blocked` y redirigir a `/fg-setup`.
 
 ## Envelope de retorno
 
