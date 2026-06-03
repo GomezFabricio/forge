@@ -20,9 +20,14 @@ Constraints (CC-*):
 - CC-NO-MODIFY: bootstrap.py no se modifica en este ciclo.
 """
 
+import builtins
+import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 
 import forge.bootstrap as bootstrap
@@ -39,6 +44,7 @@ from forge.bootstrap import (
     merge_or_create_claude_md,
     copy_config_templates,
     run,
+    update_detection_fields,
     update_gitignore,
 )
 
@@ -923,7 +929,6 @@ class TestUpdateDetectionFields:
 
     def test_update_detection_fields_refreshes_stacks(self, tmp_path):
         """GIVEN bootstrap-mode config (stacks=[]) and pyproject.toml added, THEN stacks refreshed."""
-        from forge.bootstrap import update_detection_fields
         _write_config(tmp_path)
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
         result = update_detection_fields(tmp_path)
@@ -932,29 +937,23 @@ class TestUpdateDetectionFields:
 
     def test_update_detection_fields_sets_pending_false(self, tmp_path):
         """GIVEN config with pending_detection: true, THEN after call it is false."""
-        from forge.bootstrap import update_detection_fields
         _write_config(tmp_path)
         update_detection_fields(tmp_path)
-        import yaml
         config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
         assert config["context"]["pending_detection"] is False
 
     def test_update_detection_fields_sets_last_detection_iso8601(self, tmp_path):
         """GIVEN config with last_detection: null, THEN after call it is an ISO 8601 timestamp."""
-        from forge.bootstrap import update_detection_fields
         _write_config(tmp_path)
         update_detection_fields(tmp_path)
-        import yaml
         config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
         last = config["context"]["last_detection"]
         assert last is not None
         # Should be parseable as ISO 8601 (basic check)
-        from datetime import datetime
         datetime.fromisoformat(str(last).replace("Z", "+00:00"))
 
     def test_update_detection_fields_preserves_rules_comments(self, tmp_path):
         """R-LAZY-02 CRITICAL: rules section comments are preserved after update."""
-        from forge.bootstrap import update_detection_fields
         _write_config(tmp_path)
         update_detection_fields(tmp_path)
         raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
@@ -965,7 +964,6 @@ class TestUpdateDetectionFields:
 
     def test_update_detection_fields_returns_changed_true_on_diff(self, tmp_path):
         """GIVEN stacks change from [] to Python, THEN changed=True."""
-        from forge.bootstrap import update_detection_fields
         _write_config(tmp_path)
         (tmp_path / "pyproject.toml").touch()
         result = update_detection_fields(tmp_path)
@@ -973,7 +971,6 @@ class TestUpdateDetectionFields:
 
     def test_update_detection_fields_returns_changed_false_on_same(self, tmp_path):
         """GIVEN stacks already match filesystem, THEN changed=False."""
-        from forge.bootstrap import update_detection_fields
         # First call to set the state
         _write_config(tmp_path)
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
@@ -983,14 +980,11 @@ class TestUpdateDetectionFields:
 
     def test_update_detection_fields_noop_when_config_missing(self, tmp_path):
         """EC: if config.yaml does not exist, return empty dict without crashing."""
-        from forge.bootstrap import update_detection_fields
         result = update_detection_fields(tmp_path)
         assert result == {}
 
     def test_update_detection_fields_idempotent(self, tmp_path):
         """NFR-01: calling twice on same filesystem state produces same YAML keys."""
-        from forge.bootstrap import update_detection_fields
-        import yaml
         _write_config(tmp_path)
         (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
         update_detection_fields(tmp_path)
@@ -1001,7 +995,6 @@ class TestUpdateDetectionFields:
 
     def test_ruamel_not_installed_raises_runtime_error(self, monkeypatch):
         """EC-01: if ruamel.yaml cannot be imported, RuntimeError with pip instruction."""
-        import builtins
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -1018,8 +1011,6 @@ class TestUpdateDetectionFields:
             )
 
         monkeypatch.setattr(bs, "_load_ruamel", raising_load)
-        from pathlib import Path
-        import pytest
         with pytest.raises(RuntimeError, match="pip install ruamel.yaml"):
             bs.update_detection_fields(Path("/fake"))
 
@@ -1161,3 +1152,133 @@ class TestPrintReportMode:
         out = capsys.readouterr().out
         assert "forge inicializado" in out
         assert "adopt" in out
+
+
+# ---------------------------------------------------------------------------
+# Phase 12: needs_detection() (R-LAZY gate helper) — TDD cycle
+# ---------------------------------------------------------------------------
+
+
+class TestNeedsDetection:
+    """Tests for needs_detection(root). Covers the testable GATE logic (R3)."""
+
+    def test_returns_true_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml, THEN needs_detection returns True."""
+        from forge.bootstrap import needs_detection
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_true_when_pending_detection_flag_set(self, tmp_path):
+        """GIVEN config with pending_detection: true, THEN needs_detection returns True."""
+        from forge.bootstrap import needs_detection
+        _write_config(tmp_path)  # MINIMAL_CONFIG_WITH_RULES has pending_detection: true
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_true_when_last_detection_null(self, tmp_path):
+        """GIVEN config with pending_detection: false but last_detection: null, THEN True."""
+        from forge.bootstrap import needs_detection
+        content = """\
+schema: forge
+context:
+  stacks: []
+  test_runner: null
+  last_detection: null
+  pending_detection: false
+rules:
+  workflow:
+    cycle_mode: interactive
+"""
+        _write_config(tmp_path, content)
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_true_when_manifest_mtime_newer(self, tmp_path):
+        """GIVEN manifest mtime > last_detection, THEN needs_detection returns True."""
+        from forge.bootstrap import needs_detection
+
+        # Create config with a past last_detection timestamp
+        past = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+        content = f"""\
+schema: forge
+context:
+  stacks: []
+  test_runner: null
+  last_detection: "{past}"
+  pending_detection: false
+rules:
+  workflow:
+    cycle_mode: interactive
+"""
+        _write_config(tmp_path, content)
+        # Create manifest with mtime in the future relative to past timestamp
+        manifest = tmp_path / "pyproject.toml"
+        manifest.write_text("[build-system]\n", encoding="utf-8")
+        future_time = time.time() + 10
+        os.utime(manifest, (future_time, future_time))
+        assert needs_detection(tmp_path) is True
+
+    def test_returns_false_when_fresh(self, tmp_path):
+        """GIVEN pending_detection: false, last_detection recent, no manifest newer — False."""
+        from forge.bootstrap import needs_detection
+
+        # Create manifest first with a past mtime
+        manifest = tmp_path / "pyproject.toml"
+        manifest.write_text("[build-system]\n", encoding="utf-8")
+        past_mtime = time.time() - 3600  # 1 hour ago
+        os.utime(manifest, (past_mtime, past_mtime))
+
+        # Config with last_detection after manifest mtime
+        future_ts = datetime.now(tz=timezone.utc).isoformat()
+        content = f"""\
+schema: forge
+context:
+  stacks:
+    - Python
+  test_runner: null
+  last_detection: "{future_ts}"
+  pending_detection: false
+rules:
+  workflow:
+    cycle_mode: interactive
+"""
+        _write_config(tmp_path, content)
+        assert needs_detection(tmp_path) is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 13: EC-03 recovery — update_detection_fields on upgrade + missing config
+# ---------------------------------------------------------------------------
+
+
+class TestEC03Recovery:
+    """Tests for EC-03: re-create config.yaml when upgrade mode but file is missing."""
+
+    def test_upgrade_mode_recreates_config_when_missing(self, tmp_path):
+        """EC-03: .forge/ exists but config.yaml missing → update_detection_fields recreates it."""
+        from forge.bootstrap import update_detection_fields
+
+        # Simulate upgrade mode context (.forge/ exists, config.yaml absent)
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        config_path = tmp_path / "docs" / "auditoria" / "config.yaml"
+        assert not config_path.exists(), "pre-condition: config must be missing"
+
+        result = update_detection_fields(tmp_path, mode="upgrade")
+
+        assert config_path.exists(), "config.yaml must be recreated"
+        assert result != {}, "must return detection results, not empty dict"
+        assert "stacks" in result
+
+    def test_update_detection_fields_handles_missing_config_in_upgrade(self, tmp_path):
+        """EC-03: after recreation, context fields are properly set."""
+        from forge.bootstrap import update_detection_fields
+
+        (tmp_path / ".forge").mkdir()
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+
+        result = update_detection_fields(tmp_path, mode="upgrade")
+
+        config = yaml.safe_load(
+            (tmp_path / "docs" / "auditoria" / "config.yaml").read_text()
+        )
+        assert config["context"]["pending_detection"] is False
+        assert config["context"]["last_detection"] is not None
+        assert result["changed"] is True  # new config always counts as changed

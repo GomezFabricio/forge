@@ -24,12 +24,12 @@ Antes de ejecutar cualquier paso, cada skill debe:
    - `rules.implement.max_tasks_per_batch` → límite de tareas por batch para `/fg-implement`.
 
 2. **GATE de re-detección lazy** (corre ANTES de cualquier aborto skill-específico):
-   - Si `context.pending_detection == true` OR `mtime(<manifiestos>)` es posterior a `context.last_detection`:
+   - Invocar `forge.bootstrap.needs_detection(root)`.
+   - Si retorna `True`:
      - Invocar `forge.bootstrap.update_detection_fields(root)`.
      - Recargar `docs/auditoria/config.yaml` antes de continuar.
    - Si `pending_detection` queda en `true` después de la llamada (sin manifiestos detectados), reportar al dev claramente; NO abortar silenciosamente.
-   - Si `context.pending_detection` está ausente (config legacy), tratar como `true` (EC-05).
-   - Si `context.last_detection` está ausente o es `null`, el check de mtime siempre dispara.
+   - `needs_detection` ya maneja: config ausente → True; `pending_detection` ausente (config legacy) → True (EC-05); `last_detection` null → True; mtime de manifiesto posterior → True (EC-02).
 
 3. **Cargar módulos condicionales**:
    - Si `rules.implement.tdd: true` → cargar `_shared/strict-tdd.md` (aplica en `/fg-implement`).

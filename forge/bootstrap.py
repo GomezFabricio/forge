@@ -92,7 +92,61 @@ def _load_ruamel():
         ) from exc
 
 
-def update_detection_fields(root: Path) -> dict:
+def needs_detection(root: Path) -> bool:
+    """Determine if stack/test_runner detection should re-run.
+
+    Returns True iff:
+      - config.yaml does not exist (no detection has been done), OR
+      - context.pending_detection is True, OR
+      - context.last_detection is null/missing, OR
+      - Any project manifest (pyproject.toml, package.json, go.mod, etc.)
+        has mtime > last_detection.
+
+    This is the Python helper that backs the Section A.2 lazy detection GATE
+    in _shared/fg-phase-common.md. Skills call this; if True, they call
+    update_detection_fields() before proceeding.
+
+    Pure filesystem read — no side effects (NFR-04).
+    """
+    import yaml as _yaml  # noqa: PLC0415
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return True
+
+    try:
+        config = _yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return True
+
+    context = config.get("context", {}) or {}
+
+    # pending_detection: missing → treat as True (EC-05 graceful migration)
+    if context.get("pending_detection", True):
+        return True
+
+    # last_detection: null or missing → mtime check always triggers
+    last_detection_raw = context.get("last_detection")
+    if last_detection_raw is None:
+        return True
+
+    try:
+        last_detection = datetime.fromisoformat(str(last_detection_raw).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return True
+
+    # Check if any known manifest has mtime newer than last_detection
+    for manifest in STACK_MANIFESTS:
+        manifest_path = root / manifest
+        if manifest_path.exists():
+            mtime = datetime.fromtimestamp(manifest_path.stat().st_mtime, tz=timezone.utc)
+            if mtime > last_detection:
+                return True
+
+    return False
+
+
+def update_detection_fields(root: Path, *, mode: str | None = None) -> dict:
     """Re-detect stack/test_runner and update context.* in docs/auditoria/config.yaml.
 
     Uses ruamel.yaml round-trip to preserve comments and key order in rules.*.
@@ -105,14 +159,33 @@ def update_detection_fields(root: Path) -> dict:
 
     Returns: {"stacks": [...], "test_runner": {...}, "changed": bool}
 
-    No-op (returns {}) if config.yaml does not exist, except in upgrade mode where
-    it re-creates the file (EC-03 handled in run()).
+    EC-03: if config.yaml is missing AND mode == "upgrade", re-creates the file
+    using AUDIT_CONFIG_TEMPLATE before proceeding with detection.
+    Otherwise (no mode specified), returns {} if config is missing (no-op).
     Idempotent: safe to call repeatedly (NFR-01).
     """
     YAML = _load_ruamel()
 
     config_path = root / "docs" / "auditoria" / "config.yaml"
     if not config_path.exists():
+        if mode == "upgrade":
+            # EC-03: corrupted state — recreate config, then proceed
+            stacks = detect_stack(root)
+            runner, runner_command, detected_from = detect_test_runner(root, stacks)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            last_detection_str = datetime.now(timezone.utc).isoformat()
+            content = AUDIT_CONFIG_TEMPLATE.format(
+                stacks_yaml=_build_stacks_yaml(stacks),
+                test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
+                last_detection=last_detection_str,
+                pending_detection="false",
+            )
+            config_path.write_text(content, encoding="utf-8")
+            new_runner = (
+                {"name": runner, "command": runner_command, "detected_from": detected_from}
+                if runner else None
+            )
+            return {"stacks": stacks, "test_runner": new_runner, "changed": True}
         return {}
 
     yaml = YAML()
