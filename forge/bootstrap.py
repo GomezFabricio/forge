@@ -19,6 +19,8 @@ import json
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 
 # TODO(forge-bootstrap-package-root): PACKAGE_ROOT broken in non-editable wheel installs
@@ -76,6 +78,85 @@ def detect_mode(root: Path) -> str:
         if (root / manifest).exists():
             return "adopt"
     return "bootstrap"
+
+
+def _load_ruamel():
+    """Import ruamel.yaml, raising RuntimeError with install instructions if missing."""
+    try:
+        from ruamel.yaml import YAML  # noqa: PLC0415
+        return YAML
+    except ImportError as exc:
+        raise RuntimeError(
+            "ruamel.yaml is required for comment-preserving config updates. "
+            "Install it with: pip install ruamel.yaml"
+        ) from exc
+
+
+def update_detection_fields(root: Path) -> dict:
+    """Re-detect stack/test_runner and update context.* in docs/auditoria/config.yaml.
+
+    Uses ruamel.yaml round-trip to preserve comments and key order in rules.*.
+    Mutates ONLY:
+      - context.stacks
+      - context.test_runner
+      - context.last_detection  (datetime.now(timezone.utc).isoformat())
+      - context.pending_detection → False
+    NEVER mutates rules.*.
+
+    Returns: {"stacks": [...], "test_runner": {...}, "changed": bool}
+
+    No-op (returns {}) if config.yaml does not exist, except in upgrade mode where
+    it re-creates the file (EC-03 handled in run()).
+    Idempotent: safe to call repeatedly (NFR-01).
+    """
+    YAML = _load_ruamel()
+
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if not config_path.exists():
+        return {}
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+
+    with config_path.open(encoding="utf-8") as fh:
+        data = yaml.load(fh)
+
+    # Re-run detection
+    stacks = detect_stack(root)
+    runner, runner_command, detected_from = detect_test_runner(root, stacks)
+
+    # Build new test_runner value
+    if runner:
+        new_runner = {"name": runner, "command": runner_command, "detected_from": detected_from}
+    else:
+        new_runner = None
+
+    # Determine changed flag
+    old_stacks = list(data.get("context", {}).get("stacks") or [])
+    old_runner = data.get("context", {}).get("test_runner")
+    if old_runner and isinstance(old_runner, dict):
+        old_runner_simple = {"name": old_runner.get("name"), "command": old_runner.get("command"), "detected_from": old_runner.get("detected_from")}
+    else:
+        old_runner_simple = old_runner
+
+    changed = (sorted(old_stacks) != sorted(stacks)) or (old_runner_simple != new_runner)
+
+    # Mutate ONLY context.* keys
+    if "context" not in data:
+        from ruamel.yaml.comments import CommentedMap  # noqa: PLC0415
+        data["context"] = CommentedMap()
+
+    data["context"]["stacks"] = stacks
+    data["context"]["test_runner"] = new_runner
+    data["context"]["last_detection"] = datetime.now(timezone.utc).isoformat()
+    data["context"]["pending_detection"] = False
+
+    # Write back preserving comments
+    buf = StringIO()
+    yaml.dump(data, buf)
+    config_path.write_text(buf.getvalue(), encoding="utf-8")
+
+    return {"stacks": stacks, "test_runner": new_runner, "changed": changed}
 
 
 def detect_stack(root: Path) -> list:

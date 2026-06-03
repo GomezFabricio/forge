@@ -883,3 +883,143 @@ class TestDetectMode:
         (tmp_path / "Cargo.toml").touch()
         result = detect_mode(tmp_path)
         assert result == "adopt"
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: update_detection_fields (B.2) — TDD cycle
+# ---------------------------------------------------------------------------
+
+# Helper: build a minimal config.yaml with rules comments for preservation tests
+MINIMAL_CONFIG_WITH_RULES = """\
+schema: forge
+
+context:
+  stacks:
+    []
+  test_runner:
+    null
+  last_detection: null
+  pending_detection: true
+
+rules:
+  workflow:
+    # cycle_mode controls how phases run
+    cycle_mode: interactive  # keep this comment
+  implement:
+    tdd: false  # TDD is off by default
+"""
+
+
+def _write_config(root, content=MINIMAL_CONFIG_WITH_RULES):
+    """Write config.yaml at docs/auditoria/config.yaml."""
+    config_dir = root / "docs" / "auditoria"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+    return config_dir / "config.yaml"
+
+
+class TestUpdateDetectionFields:
+    """Tests para update_detection_fields(root). R-LAZY-01 through R-LAZY-04."""
+
+    def test_update_detection_fields_refreshes_stacks(self, tmp_path):
+        """GIVEN bootstrap-mode config (stacks=[]) and pyproject.toml added, THEN stacks refreshed."""
+        from forge.bootstrap import update_detection_fields
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        result = update_detection_fields(tmp_path)
+        assert "stacks" in result
+        assert "Python" in result["stacks"]
+
+    def test_update_detection_fields_sets_pending_false(self, tmp_path):
+        """GIVEN config with pending_detection: true, THEN after call it is false."""
+        from forge.bootstrap import update_detection_fields
+        _write_config(tmp_path)
+        update_detection_fields(tmp_path)
+        import yaml
+        config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is False
+
+    def test_update_detection_fields_sets_last_detection_iso8601(self, tmp_path):
+        """GIVEN config with last_detection: null, THEN after call it is an ISO 8601 timestamp."""
+        from forge.bootstrap import update_detection_fields
+        _write_config(tmp_path)
+        update_detection_fields(tmp_path)
+        import yaml
+        config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
+        last = config["context"]["last_detection"]
+        assert last is not None
+        # Should be parseable as ISO 8601 (basic check)
+        from datetime import datetime
+        datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+
+    def test_update_detection_fields_preserves_rules_comments(self, tmp_path):
+        """R-LAZY-02 CRITICAL: rules section comments are preserved after update."""
+        from forge.bootstrap import update_detection_fields
+        _write_config(tmp_path)
+        update_detection_fields(tmp_path)
+        raw = (tmp_path / "docs" / "auditoria" / "config.yaml").read_text(encoding="utf-8")
+        # Comments must be preserved
+        assert "# cycle_mode controls how phases run" in raw
+        assert "# keep this comment" in raw
+        assert "# TDD is off by default" in raw
+
+    def test_update_detection_fields_returns_changed_true_on_diff(self, tmp_path):
+        """GIVEN stacks change from [] to Python, THEN changed=True."""
+        from forge.bootstrap import update_detection_fields
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").touch()
+        result = update_detection_fields(tmp_path)
+        assert result["changed"] is True
+
+    def test_update_detection_fields_returns_changed_false_on_same(self, tmp_path):
+        """GIVEN stacks already match filesystem, THEN changed=False."""
+        from forge.bootstrap import update_detection_fields
+        # First call to set the state
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        update_detection_fields(tmp_path)  # first call sets stacks=Python
+        result = update_detection_fields(tmp_path)  # second call: same state
+        assert result["changed"] is False
+
+    def test_update_detection_fields_noop_when_config_missing(self, tmp_path):
+        """EC: if config.yaml does not exist, return empty dict without crashing."""
+        from forge.bootstrap import update_detection_fields
+        result = update_detection_fields(tmp_path)
+        assert result == {}
+
+    def test_update_detection_fields_idempotent(self, tmp_path):
+        """NFR-01: calling twice on same filesystem state produces same YAML keys."""
+        from forge.bootstrap import update_detection_fields
+        import yaml
+        _write_config(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        update_detection_fields(tmp_path)
+        update_detection_fields(tmp_path)
+        config = yaml.safe_load((tmp_path / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is False
+        assert "Python" in config["context"]["stacks"]
+
+    def test_ruamel_not_installed_raises_runtime_error(self, monkeypatch):
+        """EC-01: if ruamel.yaml cannot be imported, RuntimeError with pip instruction."""
+        import builtins
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "ruamel.yaml" or name.startswith("ruamel"):
+                raise ImportError("No module named 'ruamel'")
+            return real_import(name, *args, **kwargs)
+
+        import forge.bootstrap as bs
+        original_load = bs._load_ruamel
+
+        def raising_load():
+            raise RuntimeError(
+                "ruamel.yaml is required for comment-preserving config updates. "
+                "Install it with: pip install ruamel.yaml"
+            )
+
+        monkeypatch.setattr(bs, "_load_ruamel", raising_load)
+        from pathlib import Path
+        import pytest
+        with pytest.raises(RuntimeError, match="pip install ruamel.yaml"):
+            bs.update_detection_fields(Path("/fake"))
