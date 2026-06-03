@@ -179,6 +179,7 @@ def update_detection_fields(root: Path, *, mode: str | None = None) -> dict:
                 test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
                 last_detection=last_detection_str,
                 pending_detection="false",
+                vision_skipped="false",
             )
             config_path.write_text(content, encoding="utf-8")
             new_runner = (
@@ -360,6 +361,7 @@ context:
 {test_runner_yaml}
   last_detection: {last_detection}    # ISO 8601 UTC timestamp of last detection run (null = never run)
   pending_detection: {pending_detection}  # true = no manifests detected yet; re-run on next skill load
+  vision_skipped: {vision_skipped}     # true = dev declinó conversación de visión en bootstrap; false = no aplica o se completó
 
 rules:
   workflow:
@@ -450,6 +452,7 @@ def create_audit_config(
     *,
     pending_detection: bool = False,
     last_detection: str | None = None,
+    vision_skipped: bool = False,
 ) -> str:
     path = root / "docs" / "auditoria" / "config.yaml"
     if path.exists():
@@ -461,6 +464,7 @@ def create_audit_config(
         test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
         last_detection=last_detection_str,
         pending_detection=str(pending_detection).lower(),
+        vision_skipped=str(vision_skipped).lower(),
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
