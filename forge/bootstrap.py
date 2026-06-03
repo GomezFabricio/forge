@@ -362,6 +362,7 @@ context:
   last_detection: {last_detection}    # ISO 8601 UTC timestamp of last detection run (null = never run)
   pending_detection: {pending_detection}  # true = no manifests detected yet; re-run on next skill load
   vision_skipped: {vision_skipped}     # true = dev declinó conversación de visión en bootstrap; false = no aplica o se completó
+  is_legacy: false                    # legacy project marker (set to true to activate legacy-impact-analyzer)
 
 rules:
   workflow:
@@ -763,6 +764,45 @@ def print_report(report: dict) -> None:
         for w in report["warnings"]:
             print(f"  - {w}")
         print()
+
+
+def is_legacy_project(root: Path) -> bool:
+    """Detect if project is tagged as legacy.
+
+    Detection paths (OR-semantics):
+    1. docs/auditoria/config.yaml -> context.is_legacy == True
+    2. docs/arquitectura/overview.md -> YAML frontmatter `legacy: true`
+
+    All other cases (missing files, malformed YAML, false values) -> False.
+    Pure function -- no side effects.
+    """
+    import yaml  # noqa: PLC0415
+
+    # Path 1: config.yaml
+    config_path = root / "docs" / "auditoria" / "config.yaml"
+    if config_path.exists():
+        try:
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            if config.get("context", {}).get("is_legacy") is True:
+                return True
+        except yaml.YAMLError:
+            pass
+
+    # Path 2: docs/arquitectura/overview.md frontmatter
+    overview_path = root / "docs" / "arquitectura" / "overview.md"
+    if not overview_path.exists():
+        return False
+    try:
+        content = overview_path.read_text(encoding="utf-8")
+        if not content.startswith("---"):
+            return False
+        end = content.find("---", 3)
+        if end == -1:
+            return False
+        fm = yaml.safe_load(content[3:end]) or {}
+        return fm.get("legacy") is True
+    except (yaml.YAMLError, OSError):
+        return False
 
 
 def main() -> None:

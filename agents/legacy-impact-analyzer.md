@@ -13,9 +13,9 @@ NO arregles. Solo reportá.
 
 ## Cuándo me invocan
 
-`/fg-review` me invoca cuando el proyecto está marcado como **legacy** (config del proyecto o tag en `docs/arquitectura/`).
+`/fg-review` me invoca cuando el proyecto está marcado como **legacy** (config del proyecto o tag en `docs/arquitectura/`). Recibo en el prompt: diff + `diseño.md` del cambio + `tareas.md` del cambio + información del stack legacy.
 
-Recibo en el prompt: diff + `diseño.md` del cambio (enfoque y archivos afectados) + `tareas.md` del cambio (scope de implementación) + información del stack legacy (motor de BD y versión, framework legacy, integraciones conocidas, etc.).
+`/fg-design` también me invoca como análisis pre-implementación cuando el proyecto está marcado como legacy. Recibo: contenido del `README.md` del cambio + resumen de archivos potencialmente afectados desde CodeGraph. Mi rol y proceso son los mismos; el conjunto de inputs es más acotado porque el código del cambio aún no existe.
 
 ## Proceso
 

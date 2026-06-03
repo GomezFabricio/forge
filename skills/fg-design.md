@@ -14,7 +14,7 @@ Convertir el qué/por qué del `README.md` en un plan técnico ejecutable. La sa
 
 ## Cuándo aplicarla
 
-Después de `/fg-plan`, cuando el dev quiere definir cómo se va a implementar el cambio. Si no existe `README.md` del cambio, abortar y sugerir correr `/fg-plan` primero.
+Después de `/fg-plan`, cuando el dev quiere definir cómo se va a implementar el cambio. Si no existe `README.md` del cambio, abortar y sugerir correr `/fg-plan` primero. Si el proyecto es legacy (`is_legacy_project` retorna True), el paso 2b invoca automáticamente el agente `legacy-impact-analyzer` antes de definir el enfoque técnico.
 
 ## Proceso
 
@@ -32,6 +32,40 @@ Con la información del `README.md`, consultar el índice de CodeGraph para resp
 - ¿Hay archivos que el cambio probablemente NO toca pero el dev podría pensar que sí?
 
 La idea es **no adivinar** archivos afectados con grep textual; usar el grafo estructural que CodeGraph ya indexó.
+
+### 2b. Análisis de impacto legacy (condicional)
+
+Si `bootstrap.is_legacy_project(root)` retorna True, invocar el sub-agente `legacy-impact-analyzer` ANTES de definir el enfoque técnico.
+
+**Razón**: en proyectos legacy, las dependencias ocultas y los breaking changes potenciales deben evaluarse antes de comprometer una arquitectura, no después de implementar.
+
+**Invocación**:
+- Llamar `Agent({subagent_type: "legacy-impact-analyzer"})` con prompt incluyendo:
+  - Contenido del `README.md` del cambio (qué/por qué/alcance/restricciones).
+  - Resumen de archivos potencialmente afectados según CodeGraph del paso 2.
+
+**Procesar el envelope retornado**:
+
+1. **Dependencias ocultas** (`hidden_dependencies_found`):
+   - Agregar a la lista de archivos afectados que se usará en el paso 5.
+   - Anotar en `diseño.md` Enfoque: "X consumidores detectados que el cambio inicial no contemplaba: Y, Z."
+
+2. **Breaking changes** (`breaking_changes_downstream`):
+   - Si `verdict: blocking` O `total_critical > 0`:
+     - Presentar tabla de issues al dev.
+     - Forzar elección de estrategia de migración: `1. Strangler Fig` / `2. Branch by Abstraction` / `3. Parallel Run` / `4. No-touch`.
+     - Append a `decisiones.md`:
+       ```
+       - YYYY-MM-DD: Estrategia de migración elegida: <choice>. Razón: breaking changes detectados por legacy-impact-analyzer (severidad: <X CRITICAL, Y HIGH>).
+       ```
+     - Continuar `/fg-design`.
+
+3. **Estrategia sugerida por el analyzer** (`migration_strategy_suggested`):
+   - Citar en `diseño.md` Enfoque como contexto.
+
+4. **Si verdict: clean**: incluir hallazgos como informacionales en `diseño.md`, no forzar decisión.
+
+Si `is_legacy_project` retorna False, **saltar este paso completamente**.
 
 ### 3. Definir el enfoque técnico
 
@@ -131,6 +165,7 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 
 - Leer el `README.md` del cambio antes de empezar.
 - Consultar CodeGraph para identificar archivos afectados reales.
+- Si el proyecto es legacy, ejecutar el paso 2b (análisis de impacto) antes de definir el enfoque técnico.
 - Crear los tres archivos (`diseño.md`, `tareas.md`, `decisiones.md`) desde los templates correspondientes.
 - Escribir todos los artefactos en español.
 - Cada decisión técnica registrada en `decisiones.md` con fecha y razón.
