@@ -285,6 +285,8 @@ context:
 {stacks_yaml}
   test_runner:                        # runner detectado al correr /fg-setup
 {test_runner_yaml}
+  last_detection: {last_detection}    # ISO 8601 UTC timestamp of last detection run (null = never run)
+  pending_detection: {pending_detection}  # true = no manifests detected yet; re-run on next skill load
 
 rules:
   workflow:
@@ -366,14 +368,26 @@ def _build_test_runner_yaml(runner: str, runner_command: str, detected_from: str
     return "\n".join(lines)
 
 
-def create_audit_config(root: Path, stacks: list, runner: str, runner_command: str, detected_from: str) -> str:
+def create_audit_config(
+    root: Path,
+    stacks: list,
+    runner: str,
+    runner_command: str,
+    detected_from: str,
+    *,
+    pending_detection: bool = False,
+    last_detection: str | None = None,
+) -> str:
     path = root / "docs" / "auditoria" / "config.yaml"
     if path.exists():
         return "preserved"
 
+    last_detection_str = "null" if last_detection is None else last_detection
     content = AUDIT_CONFIG_TEMPLATE.format(
         stacks_yaml=_build_stacks_yaml(stacks),
         test_runner_yaml=_build_test_runner_yaml(runner, runner_command, detected_from),
+        last_detection=last_detection_str,
+        pending_detection=str(pending_detection).lower(),
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -417,9 +431,21 @@ def generate_skill_registry_placeholder(root: Path) -> str:
     return "placeholder_created"
 
 
-def run(root: Path) -> dict:
+def run(root: Path, mode: str | None = None) -> dict:
+    """Run the forge bootstrap process.
+
+    Args:
+        root: Project root directory.
+        mode: One of 'bootstrap', 'adopt', 'upgrade'. If None, auto-detected via detect_mode().
+
+    Returns a report dict including 'mode' for callers (R-MODE-07).
+    """
+    if mode is None:
+        mode = detect_mode(root)
+
     report = {
         "project_root": str(root),
+        "mode": mode,
         "stacks": [],
         "test_runner": None,
         "dirs_ensured": [],
@@ -432,25 +458,45 @@ def run(root: Path) -> dict:
         "warnings": [],
     }
 
-    stacks = detect_stack(root)
-    report["stacks"] = stacks
-    if not stacks:
-        report["warnings"].append("No se detectó un stack reconocido (no hay manifiestos típicos).")
+    if mode == "bootstrap":
+        # Bootstrap: no manifests yet — skip stack detection, mark pending
+        stacks = []
+        runner, runner_command, detected_from = None, None, ""
+        report["warnings"].append(
+            "Modo bootstrap: no se detectaron manifiestos. "
+            "config.yaml queda con pending_detection: true. "
+            "Re-corré /fg-setup o la skill re-detectará el stack cuando aparezcan manifiestos."
+        )
+        pending_detection = True
+        last_detection = None
+    else:
+        # Adopt / upgrade: run full detection
+        stacks = detect_stack(root)
+        if not stacks:
+            report["warnings"].append("No se detectó un stack reconocido (no hay manifiestos típicos).")
 
-    runner, runner_command, detected_from = detect_test_runner(root, stacks)
+        runner, runner_command, detected_from = detect_test_runner(root, stacks)
+        if not runner:
+            report["warnings"].append(
+                "No se detectó test runner. docs/auditoria/config.yaml queda con test_runner: null. "
+                "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
+            )
+        pending_detection = False
+        last_detection = datetime.now(timezone.utc).isoformat()
+
+    report["stacks"] = stacks
     report["test_runner"] = (
         {"name": runner, "command": runner_command, "detected_from": detected_from}
         if runner else None
     )
-    if not runner:
-        report["warnings"].append(
-            "No se detectó test runner. docs/auditoria/config.yaml queda con test_runner: null. "
-            "Si después instalás uno, podés re-correr /fg-setup o editar el config a mano."
-        )
 
     report["dirs_ensured"] = ensure_dirs(root)
     report["claude_md"] = merge_or_create_claude_md(root)
-    report["audit_config"] = create_audit_config(root, stacks, runner, runner_command, detected_from)
+    report["audit_config"] = create_audit_config(
+        root, stacks, runner, runner_command, detected_from,
+        pending_detection=pending_detection,
+        last_detection=last_detection,
+    )
 
     report["config_templates"] = copy_config_templates(root)
 
@@ -466,6 +512,8 @@ def run(root: Path) -> dict:
 
 
 def print_report(report: dict) -> None:
+    mode = report.get("mode", "adopt")
+    print(f"\nforge inicializado en modo: {mode}")
     print(f"forge instalado en {report['project_root']}\n")
     stacks = report["stacks"]
     print(f"Stack detectado: {', '.join(stacks) if stacks else 'ninguno'}")
@@ -499,7 +547,6 @@ def print_report(report: dict) -> None:
         for w in report["warnings"]:
             print(f"  - {w}")
         print()
-    print("Próximo paso: /fg-plan <descripción del cambio que querés hacer>")
 
 
 def main() -> None:

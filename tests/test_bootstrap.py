@@ -1023,3 +1023,142 @@ class TestUpdateDetectionFields:
         import pytest
         with pytest.raises(RuntimeError, match="pip install ruamel.yaml"):
             bs.update_detection_fields(Path("/fake"))
+
+
+# ---------------------------------------------------------------------------
+# Phase 11: run() mode dispatch + print_report (B.4)
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapRunMode:
+    """Tests for mode-aware run(). R-MODE-05, R-MODE-06, R-MODE-07."""
+
+    def _setup_for_run(self, monkeypatch, tmp_path):
+        """Setup fake PACKAGE_ROOT + disable codegraph binary."""
+        fake_pkg_root = tmp_path / "fake_pkg"
+        (fake_pkg_root / "templates").mkdir(parents=True)
+        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
+            "## Persona del orquestador\nContenido.\n", encoding="utf-8"
+        )
+        (fake_pkg_root / "config").mkdir()
+        (fake_pkg_root / "config" / "modulos-transversales.yaml").write_text(
+            "schema: forge\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+    def test_bootstrap_run_no_manifest_creates_config_pending(self, tmp_path, monkeypatch):
+        """R-MODE-05, R-MODE-07: empty dir → config created with pending_detection=true, stacks=[]."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        result = run(project, mode="bootstrap")
+        assert result["mode"] == "bootstrap"
+        assert result["stacks"] == []
+        assert result["audit_config"] == "created"
+        import yaml
+        config = yaml.safe_load((project / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is True
+        assert config["context"]["stacks"] == [] or config["context"]["stacks"] is None
+
+    def test_bootstrap_run_does_not_call_git_init(self, tmp_path, monkeypatch):
+        """R-MODE-06: bootstrap mode must NOT invoke git init or create .git/."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        with patch("subprocess.run") as mock_run:
+            run(project, mode="bootstrap")
+            # subprocess.run should never be called with git init
+            for call in mock_run.call_args_list:
+                args = call[0][0] if call[0] else []
+                assert "git" not in str(args), f"Unexpected git call: {args}"
+        assert not (project / ".git").exists()
+
+    def test_adopt_mode_runs_full_detection(self, tmp_path, monkeypatch):
+        """R-MODE-07: adopt mode runs stack detection."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        result = run(project, mode="adopt")
+        assert result["mode"] == "adopt"
+        assert "Python" in result["stacks"]
+
+    def test_upgrade_mode_returns_upgrade(self, tmp_path, monkeypatch):
+        """R-MODE-07: upgrade mode is accepted and reported."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".forge").mkdir()
+        result = run(project, mode="upgrade")
+        assert result["mode"] == "upgrade"
+
+    def test_config_schema_includes_new_fields(self, tmp_path, monkeypatch):
+        """R-LAZY-03: created config.yaml must include last_detection and pending_detection."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        run(project, mode="bootstrap")
+        import yaml
+        config = yaml.safe_load((project / "docs" / "auditoria" / "config.yaml").read_text())
+        assert "last_detection" in config["context"]
+        assert "pending_detection" in config["context"]
+
+    def test_adopt_mode_sets_pending_detection_false(self, tmp_path, monkeypatch):
+        """R-MODE-07: adopt mode writes pending_detection: false."""
+        self._setup_for_run(monkeypatch, tmp_path)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+        run(project, mode="adopt")
+        import yaml
+        config = yaml.safe_load((project / "docs" / "auditoria" / "config.yaml").read_text())
+        assert config["context"]["pending_detection"] is False
+
+
+class TestPrintReportMode:
+    """Tests for print_report() R-ENV-03: no fg-plan line; mode in output."""
+
+    def test_print_report_no_proximo_paso_fg_plan(self, capsys, tmp_path, monkeypatch):
+        """R-ENV-03: output must NOT contain 'Próximo paso: /fg-plan'."""
+        report = {
+            "project_root": str(tmp_path),
+            "mode": "bootstrap",
+            "stacks": [],
+            "test_runner": None,
+            "dirs_ensured": [],
+            "claude_md": "created",
+            "audit_config": "created",
+            "config_templates": {},
+            "codegraph": {"status": None, "warning": "no binary"},
+            "skill_registry": "placeholder_created",
+            "gitignore": "created",
+            "warnings": [],
+        }
+        from forge.bootstrap import print_report
+        print_report(report)
+        out = capsys.readouterr().out
+        assert "Próximo paso: /fg-plan" not in out
+        assert "/fg-plan" not in out
+
+    def test_mode_appears_in_output(self, capsys, tmp_path):
+        """R-ENV-03: output must contain 'forge inicializado' with mode."""
+        report = {
+            "project_root": str(tmp_path),
+            "mode": "adopt",
+            "stacks": ["Python"],
+            "test_runner": {"name": "pytest", "command": "pytest", "detected_from": "pyproject.toml"},
+            "dirs_ensured": [],
+            "claude_md": "created",
+            "audit_config": "created",
+            "config_templates": {},
+            "codegraph": {"status": None, "warning": "no binary"},
+            "skill_registry": "placeholder_created",
+            "gitignore": "created",
+            "warnings": [],
+        }
+        from forge.bootstrap import print_report
+        print_report(report)
+        out = capsys.readouterr().out
+        assert "forge inicializado" in out
+        assert "adopt" in out
