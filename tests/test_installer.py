@@ -65,6 +65,38 @@ class TestInstallerConstants:
         assert isinstance(installer.PROMPT_TEXT, str)
         assert len(installer.PROMPT_TEXT.strip()) > 0
 
+    def test_prompt_text_contains_four_numbered_steps(self):
+        """GIVEN PROMPT_TEXT WHEN se evalúa su contenido
+        THEN contiene los 4 pasos numerados del diseño — REQ-PROMPT-01."""
+        from forge import installer
+        text = installer.PROMPT_TEXT
+        assert "1." in text, "Falta el paso 1 (Descargar binario)"
+        assert "2." in text, "Falta el paso 2 (Instalar en path)"
+        assert "3." in text, "Falta el paso 3 (Agregar al PATH)"
+        assert "4." in text, "Falta el paso 4 (Registrar MCP)"
+
+    def test_prompt_text_contains_manual_install_paragraph(self):
+        """GIVEN PROMPT_TEXT WHEN se evalúa su contenido
+        THEN contiene el párrafo de alternativa manual — REQ-PROMPT-01."""
+        from forge import installer
+        text = installer.PROMPT_TEXT
+        assert "preferís instalarlo por tu cuenta" in text
+
+    def test_prompt_text_ends_with_yn_prompt(self):
+        """GIVEN PROMPT_TEXT WHEN se evalúa su final
+        THEN termina con la pregunta [y/N]: — REQ-PROMPT-01."""
+        from forge import installer
+        text = installer.PROMPT_TEXT
+        assert text.rstrip().endswith("[y/N]:") or text.endswith("[y/N]: ")
+
+    def test_prompt_text_contains_engram_bin_path(self):
+        """GIVEN PROMPT_TEXT WHEN se evalúa su contenido
+        THEN menciona ~/.engram/bin/engram (Unix) y %USERPROFILE% (Windows) — REQ-PROMPT-01."""
+        from forge import installer
+        text = installer.PROMPT_TEXT
+        assert "~/.engram/bin/engram" in text, "Falta la ruta ~/.engram/bin/engram en el prompt Unix"
+        assert "%USERPROFILE%" in text, "Falta la ruta %USERPROFILE% en el prompt Windows"
+
     def test_exit_aborted_no_collision(self):
         """GIVEN EXIT_ABORTED=10 WHEN se compara con exit codes estándar
         THEN no colisiona con pytest (0-5) ni pip (0-3)."""

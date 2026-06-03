@@ -66,9 +66,17 @@ sesiones. Sin engram, cada nuevo prompt arranca sin contexto previo —
 perdés continuidad entre el lunes y el martes, entre features, entre
 ciclos.
 
-Engram es un servidor MCP local. Se instala en ~/.local/bin/engram (Unix)
-o %USERPROFILE%\\.engram\\bin\\engram.exe (Windows) y se registra
-automáticamente como MCP en ~/.claude/mcp/engram.json.
+Si confirmás, voy a:
+  1. Descargar el binario oficial de engram desde GitHub Releases
+     (~12 MB, no requiere Go ni otras herramientas).
+  2. Instalarlo en %USERPROFILE%\\.engram\\bin\\engram.exe
+     (en Linux/macOS: ~/.engram/bin/engram).
+  3. Agregarlo al PATH del usuario.
+  4. Registrar el MCP en ~/.claude/mcp/engram.json para que Claude
+     Code lo levante automáticamente.
+
+Si preferís instalarlo por tu cuenta (brew, pacman, manual), respondé N
+y volvé a correr 'forge install' cuando lo tengas listo.
 
 ¿Lo instalo ahora? [y/N]: """
 
