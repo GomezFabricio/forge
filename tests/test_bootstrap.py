@@ -1582,3 +1582,44 @@ class TestReadOverview:
         overview_dir.mkdir(parents=True)
         (overview_dir / "overview.md").write_text(content, encoding="utf-8")
         assert read_overview(tmp_path) == content
+
+
+class TestIsVisionSkipped:
+    def _write_vision_config(self, tmp_path, vision_skipped_value):
+        """Helper: creates docs/auditoria/config.yaml with the given vision_skipped flag."""
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        if vision_skipped_value is None:
+            content = "context: {}\n"
+        else:
+            content = f"context:\n  vision_skipped: {str(vision_skipped_value).lower()}\n"
+        (config_dir / "config.yaml").write_text(content, encoding="utf-8")
+
+    def test_returns_true_when_flag_set(self, tmp_path):
+        """GIVEN config with context.vision_skipped: true, THEN returns True."""
+        from forge.bootstrap import is_vision_skipped
+
+        self._write_vision_config(tmp_path, True)
+        assert is_vision_skipped(tmp_path) is True
+
+    def test_returns_false_when_flag_unset(self, tmp_path):
+        """GIVEN config with context: {} (no vision_skipped key), THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        self._write_vision_config(tmp_path, None)
+        assert is_vision_skipped(tmp_path) is False
+
+    def test_returns_false_when_config_missing(self, tmp_path):
+        """GIVEN no config.yaml exists, THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        assert is_vision_skipped(tmp_path) is False
+
+    def test_returns_false_when_yaml_malformed(self, tmp_path):
+        """GIVEN config.yaml with invalid YAML syntax, THEN returns False."""
+        from forge.bootstrap import is_vision_skipped
+
+        config_dir = tmp_path / "docs" / "auditoria"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.yaml").write_text(": invalid: [yaml", encoding="utf-8")
+        assert is_vision_skipped(tmp_path) is False
