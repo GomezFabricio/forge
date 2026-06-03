@@ -1,10 +1,11 @@
 """forge install — global asset installer.
 
 Orchestrates:
-  1. detect_engram()       — check if engram is already available
-  2. install_engram()      — download binary, edit PATH, register MCP (optional)
-  3. install_assets()      — deposit skills, agents into ~/.claude/
-  4. print_report()        — human-readable summary
+  1. detect_engram()            — check if engram is already available
+  2. install_engram()           — download binary, edit PATH, register MCP (optional)
+  3. install_assets()           — deposit skills, agents into ~/.claude/
+  4. inject_orchestrator_rule() — inject forge block into ~/.claude/CLAUDE.md
+  5. print_report()             — human-readable summary
 
 Exit codes:
   EXIT_OK                  = 0   — success
@@ -720,8 +721,9 @@ def run(args) -> int:  # args: argparse.Namespace
            else:
                print abort message; return EXIT_ABORTED
       3. manifest = install_assets()
-      4. print_report(...)
-      5. return EXIT_OK
+      4. inject_orchestrator_rule()
+      5. print_report(...)
+      6. return EXIT_OK
 
     REQ-FLAGS-02: --install-engram wins over --skip-engram-check.
     REQ-FLAGS-03: if detected + --install-engram → log and skip reinstall.
@@ -760,5 +762,6 @@ def run(args) -> int:  # args: argparse.Namespace
 
     # Deposit skills and agents
     manifest = install_assets()
+    inject_orchestrator_rule()
     print_report({"engram": info, "assets": manifest})
     return EXIT_OK

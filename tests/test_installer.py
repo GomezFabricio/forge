@@ -1004,6 +1004,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
 
@@ -1020,6 +1021,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(skip_engram_check=True))
 
@@ -1037,6 +1039,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(install_engram=True))
 
@@ -1066,6 +1069,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
 
@@ -1107,6 +1111,7 @@ class TestRun:
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
                                                                       "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(install_engram=True, skip_engram_check=True))
 
@@ -1135,6 +1140,7 @@ class TestRunAdditional:
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
                  "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"), \
              patch("builtins.print") as mock_print:
             result = installer.run(self._make_args(install_engram=True))
