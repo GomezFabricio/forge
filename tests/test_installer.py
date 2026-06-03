@@ -1293,3 +1293,53 @@ class TestPromptUserYn:
         from forge.installer import prompt_user_yn
         with patch("builtins.input", return_value="maybe"):
             assert prompt_user_yn() == "n"
+
+
+# ---------------------------------------------------------------------------
+# TestInjectOrchestratorRule — 4 TDD cycles (PRD A.3 scenarios)
+# ---------------------------------------------------------------------------
+
+
+class TestInjectOrchestratorRule:
+    """Tests for inject_orchestrator_rule() — 4 scenarios from PRD A.3."""
+
+    @pytest.fixture
+    def fake_home(self, tmp_path, monkeypatch):
+        """Isolate CLAUDE_HOME to tmp_path. Returns the fake claude home dir."""
+        from forge import installer
+        fake_claude = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", fake_claude)
+        return fake_claude
+
+    @pytest.fixture
+    def fake_template(self, tmp_path, monkeypatch):
+        """Provide a fake template via monkeypatched get_share_root."""
+        from forge import installer
+        share = tmp_path / "share"
+        templates = share / "templates"
+        templates.mkdir(parents=True)
+        (templates / "orchestrator-rule.md").write_text(
+            "<!-- forge:orchestrator -->\nTEMPLATE BODY\n<!-- /forge:orchestrator -->\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        return templates / "orchestrator-rule.md"
+
+    def test_first_time_creates_file(self, fake_home, fake_template):
+        """GIVEN ~/.claude/ does not exist AND no CLAUDE.md
+        WHEN inject_orchestrator_rule() is called
+        THEN returns 'created', CLAUDE.md is created with template content,
+        and a second call returns 'replaced' (idempotency invariant)."""
+        from forge.installer import inject_orchestrator_rule
+
+        result = inject_orchestrator_rule()
+
+        assert result == "created"
+        claude_md = fake_home / "CLAUDE.md"
+        assert claude_md.exists()
+        content = claude_md.read_text(encoding="utf-8")
+        assert content == "<!-- forge:orchestrator -->\nTEMPLATE BODY\n<!-- /forge:orchestrator -->\n"
+
+        # Idempotency invariant: second call must return 'replaced', not 'created'
+        result2 = inject_orchestrator_rule()
+        assert result2 == "replaced"
