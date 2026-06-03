@@ -1444,3 +1444,47 @@ class TestInjectOrchestratorRule:
         assert content.endswith(suffix)
         assert "TEMPLATE BODY" in content
         assert content.count("<!-- forge:orchestrator -->") == 1
+
+    def test_preserves_gentle_ai_block(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md contains a Gentle AI block AND a stale forge block
+        WHEN inject_orchestrator_rule() is called
+        THEN returns 'replaced', Gentle AI block is byte-for-byte unchanged,
+        only the forge block body is updated, and no other content is modified."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        gentle_ai_block = (
+            "<!-- gentle-ai:persona -->\n"
+            "You are a senior architect.\n"
+            "<!-- /gentle-ai:persona -->\n"
+        )
+        forge_block_stale = (
+            "<!-- forge:orchestrator -->\n"
+            "OLD FORGE CONTENT\n"
+            "<!-- /forge:orchestrator -->\n"
+        )
+        after_content = "\n## After forge block\n\nMore user content.\n"
+        initial = gentle_ai_block + "\n" + forge_block_stale + after_content
+        (fake_home / "CLAUDE.md").write_text(initial, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "replaced"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+
+        # Gentle AI block is byte-for-byte unchanged (R-INJECT-05)
+        assert gentle_ai_block in content
+        # Specifically verify the gentle-ai:persona string is unchanged (R-INJECT-05 test oracle)
+        assert "gentle-ai:persona" in content
+        assert "You are a senior architect." in content
+
+        # Forge block is updated to new template
+        assert "TEMPLATE BODY" in content
+        assert "OLD FORGE CONTENT" not in content
+
+        # Content after forge block (suffix) is byte-for-byte unchanged
+        assert content.endswith(after_content)
+
+        # Only the forge body changed — no duplication
+        assert content.count("<!-- forge:orchestrator -->") == 1
+        assert content.count("<!-- gentle-ai:persona -->") == 1
