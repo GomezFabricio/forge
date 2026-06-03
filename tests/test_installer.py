@@ -1343,3 +1343,51 @@ class TestInjectOrchestratorRule:
         # Idempotency invariant: second call must return 'replaced', not 'created'
         result2 = inject_orchestrator_rule()
         assert result2 == "replaced"
+
+    def test_appends_to_existing_without_block(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md exists with content but NO forge markers
+        WHEN inject_orchestrator_rule() is called
+        THEN returns 'appended', original content preserved, template appended,
+        blank-line separator present, and template appears exactly once."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        original = "# Gentle AI Rules\n\nSome instructions.\n"
+        (fake_home / "CLAUDE.md").write_text(original, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "appended"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+
+        # Original content byte-for-byte unchanged at start (R-INJECT-05)
+        assert content.startswith(original)
+
+        # Template block appears at the end
+        template_block = "<!-- forge:orchestrator -->\nTEMPLATE BODY\n<!-- /forge:orchestrator -->\n"
+        assert content.endswith(template_block)
+
+        # Blank-line separator present between original and block (EC-05)
+        assert original + "\n" + template_block == content
+
+        # Template block appears exactly once
+        assert content.count("<!-- forge:orchestrator -->") == 1
+
+    def test_appends_separator_when_no_trailing_newline(self, fake_home, fake_template):
+        """GIVEN CLAUDE.md exists ending WITHOUT trailing newline (EC-05 edge)
+        WHEN inject_orchestrator_rule() is called
+        THEN a double-newline separator ensures blank line before forge block."""
+        from forge.installer import inject_orchestrator_rule
+
+        fake_home.mkdir(parents=True)
+        # File ends WITHOUT trailing newline
+        original_no_nl = "# Rules without trailing newline"
+        (fake_home / "CLAUDE.md").write_text(original_no_nl, encoding="utf-8")
+
+        result = inject_orchestrator_rule()
+
+        assert result == "appended"
+        content = (fake_home / "CLAUDE.md").read_text(encoding="utf-8")
+        # Double-newline separator must be present (sep = "\n\n" when no trailing \n)
+        assert "\n\n<!-- forge:orchestrator -->" in content
+        assert content.count("<!-- forge:orchestrator -->") == 1
