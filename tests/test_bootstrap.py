@@ -1010,7 +1010,6 @@ class TestUpdateDetectionFields:
             return real_import(name, *args, **kwargs)
 
         import forge.bootstrap as bs
-        original_load = bs._load_ruamel
 
         def raising_load():
             raise RuntimeError(
