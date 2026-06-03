@@ -1,8 +1,8 @@
 # CLAUDE.md — Convenciones institucionales del proyecto
 
-> Este archivo lo genera o mergea `/fg-setup` cuando se incorpora forge al proyecto.
+> Este archivo lo genera o mergea el orquestador cuando se incorpora forge al proyecto.
 > Documenta la persona del orquestador, las reglas de engram, la mecánica de Strict TDD y el workflow de las skills.
-> Si ya existía `CLAUDE.md` en el proyecto, `/fg-setup` mergea estas secciones sin sobrescribir lo existente.
+> Si ya existía `CLAUDE.md` en el proyecto, el orquestador mergea estas secciones sin sobrescribir lo existente.
 
 ## Persona del orquestador — Mentor cordial con rigor profesional
 
@@ -57,9 +57,9 @@ Si detectás que estás por persistir contenido del dominio, abstenete y avisá 
 El proyecto controla Strict TDD desde `docs/auditoria/config.yaml`. La clave `rules.implement.tdd` define si el ciclo TDD está activo:
 
 - `tdd: true` → `/fg-implement` aplica el ciclo de 7 pasos (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR → Complete) para cada tarea del checklist, y `/fg-review` valida la TDD Cycle Evidence + audita assertion quality + reporta coverage de archivos cambiados.
-- `tdd: false` (default que viene de `/fg-setup`) → `/fg-implement` corre en modo estándar y `/fg-review` aplica validación básica.
+- `tdd: false` (default que inicializa el orquestador) → `/fg-implement` corre en modo estándar y `/fg-review` aplica validación básica.
 
-El comando de test sale de `rules.implement.test_command` (con fallback a `context.test_runner.command` y luego al runner detectado al re-ejecutar `/fg-setup`). El threshold de coverage de `/fg-review` viene de `rules.review.coverage_threshold` (0 = sin enforcement).
+El comando de test sale de `rules.implement.test_command` (con fallback a `context.test_runner.command` y luego al runner detectado cuando el orquestador re-detecta el stack). El threshold de coverage de `/fg-review` viene de `rules.review.coverage_threshold` (0 = sin enforcement).
 
 Para activar TDD: editar `docs/auditoria/config.yaml` y cambiar `rules.implement.tdd` a `true`. El cambio queda versionado con el proyecto.
 
@@ -125,9 +125,9 @@ Hay banned assertion patterns que se reportan en `/fg-review` (tautologías, gho
 El proyecto usa forge: un workflow de 4 fases por cambio, con setup inicial y mantenimiento de arquitectura.
 
 ```
-Setup del proyecto (una vez):  /fg-setup
-Por cambio:                    /fg-plan → /fg-design → /fg-implement → /fg-review
-Mantenimiento arq:             /fg-update-arch  (sugerido por /fg-review, invocable manualmente)
+Inicializa solo según contexto:  el orquestador detecta intent
+Por cambio:                      /fg-plan → /fg-design → /fg-implement → /fg-review
+Mantenimiento arq:               /fg-update-arch  (sugerido por /fg-review, invocable manualmente)
 ```
 
 Estructura de cambios:
@@ -154,10 +154,16 @@ El dev describe en lenguaje natural lo que quiere hacer. La skill infiere tipo (
 
 ### Modelo de delegación
 
-- El orquestador (vos, ahora) delega a las 6 skills (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`, `/fg-update-arch`).
+- El orquestador (vos, ahora) compone 6 skills como primitivas internas (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`, `/fg-update-arch`) — el dev no las invoca por slash command, las dispara el orquestador al detectar intent.
 - Solo `/fg-review` puede delegar a roles especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`).
 - Las demás skills son ejecutores estrictos (NO delegan).
 - Los roles son hojas (NO delegan a nadie).
+
+## Visión del sistema (modo bootstrap)
+
+Si este proyecto está en modo bootstrap y no tiene `overview.md` todavía, el orquestador dispara conversación de visión antes del primer ciclo.
+
+Esta regla aplica una sola vez: cuando `docs/arquitectura/overview.md` no existe al arrancar `/fg-plan`, el orquestador pausa el flujo, conversa con el dev para capturar la visión del sistema (problema, usuarios, alcance, restricciones) y la persiste en `overview.md`. A partir del segundo ciclo el archivo ya existe y la regla no vuelve a dispararse.
 
 ## Idioma
 
@@ -227,7 +233,7 @@ Incluso con `#fg-pass`, el hook registra un evento `action: "passthrough"` en `.
 ## Convenciones del proyecto
 
 <!--
-/fg-setup deja esta sección como placeholder.
+El orquestador deja esta sección como placeholder cuando inicializa el proyecto.
 Acá el equipo puede agregar convenciones específicas del proyecto:
 - Estilo de naming de endpoints.
 - Estructura de carpetas.
