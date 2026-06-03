@@ -87,6 +87,14 @@ _REQUIRED_FM_KEYS: dict = {"disable-model-invocation": True, "user-invocable": F
 # Cross-cutting _shared files that go to forge-shared/ (with frontmatter injection)
 _CROSS_CUTTING = {"skill-resolver", "engram-protocol", "fg-phase-common"}
 
+POST_INSTALL_MESSAGE = """\
+forge instalado. A partir de ahora, charlá normal con Claude en cualquier
+proyecto — el workflow se activa solo según el contexto.
+
+Las skills (/fg-setup, /fg-plan, /fg-design, /fg-implement, /fg-review,
+/fg-update-arch) existen como comandos por si las querés invocar manualmente,
+pero no necesitás conocerlas."""
+
 # Orchestrator rule injection markers
 ORCHESTRATOR_OPEN_MARKER = "<!-- forge:orchestrator -->"
 ORCHESTRATOR_CLOSE_MARKER = "<!-- /forge:orchestrator -->"
@@ -161,7 +169,6 @@ def inject_orchestrator_rule() -> str:
     new_content = before + template_content + after
     target.write_text(new_content, encoding="utf-8")
     return "replaced"
-
 
 # =============================================================================
 # === Detection ===
@@ -701,7 +708,7 @@ def print_report(report: dict) -> None:
     print()
     print("  Para que el cambio de PATH surta efecto, abrí una nueva terminal.")
     print()
-    print("  Próximo paso: /fg-setup")
+    print(POST_INSTALL_MESSAGE)
 
 
 def run(args) -> int:  # args: argparse.Namespace

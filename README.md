@@ -69,15 +69,30 @@ Ambas vías ejecutan los siguientes pasos en cadena:
 
 ### Después de instalar
 
-En cada proyecto donde quieras adoptar el workflow:
+Una vez instalado, forge se invoca solo según el contexto de cada conversación. Hablá normal con Claude — si la tarea encaja con el workflow, el orquestador inicializa forge y guía la sesión. No necesitás conocer los slash commands; existen para casos avanzados (scripts, automatización).
 
-```bash
-cd mi-proyecto/
-# desde Claude Code:
-/fg-setup
-```
+---
 
-`/fg-setup` adopta forge en el proyecto — detecta stack, activa Strict TDD si hay test runner, mergea un `CLAUDE.md` institucional con las reglas del workflow (incluida la regla operativa de privacidad para engram).
+## Cómo se activa forge
+
+Forge no se "activa" ni se "desactiva" — está latente desde que lo instalaste globalmente. El orquestador detecta tu intención conversacional y arranca el flujo correspondiente sin pedirte permiso.
+
+| Cuando le decís a Claude… | Forge hace |
+|---|---|
+| "quiero hacer un sistema de X" | Inicializa el proyecto si hace falta, charla con vos para entender el sistema, arma `docs/arquitectura/overview.md`, y te guía feature por feature. |
+| "implementá esto según docs/prd.md" | Lee el documento, valida consistencia, surface gaps, y te guía slice por slice. |
+| "agregame [feature] al sistema" | Adopta forge en el proyecto, analiza el código con CodeGraph, y planifica el cambio minimizando impacto. |
+| "necesito refactorizar este legacy" | Adopta + analiza dependencias ocultas + propone estrategia de migración (strangler fig, branch by abstraction, etc.) antes de tocar nada. |
+
+### Cuándo NO invocar forge
+
+El orquestador NO mete forge cuando:
+
+- El cambio es un fix de typo, una línea, o un ajuste de comentario.
+- Estás explorando o haciendo preguntas sin modificar código.
+- Decís explícitamente "sin forge" o "edición libre".
+
+No tenés que memorizar slash commands. Si querés invocar una skill manualmente para casos avanzados (scripts, automatización), los comandos `/fg-*` siguen disponibles.
 
 ---
 
