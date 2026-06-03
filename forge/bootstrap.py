@@ -185,6 +185,7 @@ context:
 {stacks_yaml}
   test_runner:                        # runner detectado al correr /fg-setup
 {test_runner_yaml}
+  is_legacy: false                    # legacy project marker (set to true to activate legacy-impact-analyzer)
 
 rules:
   workflow:
