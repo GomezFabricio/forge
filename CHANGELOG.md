@@ -8,6 +8,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Modelo de activación latente
+
+Implementa el PRD `.forge/prd-activacion-latente.md`: forge se vuelve latente e
+invocable por intent natural en lugar de comando explícito.
+
 ### Added
 
 - **`forge install` implementado** (`forge/installer.py`, ~270 LOC): depósito de skills, agents y registro de MCP de engram en `~/.claude/`. Incluye detección automática de engram (3 indicadores), prompt Y/N interactivo, flag `--install-engram` (non-interactive), flag `--skip-engram-check`, e idempotencia completa.
@@ -15,6 +20,16 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - **Deposit de skills con transformación de layout**: `fg-*.md` → `~/.claude/skills/<stem>/SKILL.md`; co-located companions (`strict-tdd.md`, `strict-tdd-verify.md`) depositados junto a su skill consumidora; archivos cross-cutting (`skill-resolver`, `engram-protocol`, `fg-phase-common`) → `~/.claude/skills/forge-shared/<name>/SKILL.md` con frontmatter `disable-model-invocation: true` inyectado.
 - **Exit codes claros**: `EXIT_OK=0`, `EXIT_ABORTED=10`, `EXIT_ENGRAM_INSTALL_FAILED=20`, `EXIT_DEPOSIT_FAILED=30`, `EXIT_PLATFORM_UNSUPPORTED=40`.
 - **Test suite** (`tests/test_installer.py`, `tests/test_cli.py`): 201 tests nuevos, cobertura ≥88% sobre `forge/installer.py` y 100% sobre `forge/cli.py` modificado. Strict TDD ciclo RED→GREEN→TRIANGULATE→REFACTOR por tarea.
+- **Inyección de regla `<!-- forge:orchestrator -->`** en `~/.claude/CLAUDE.md` global desde `forge install` (#13).
+- **`bootstrap.detect_mode(root)`** devuelve `bootstrap | adopt | upgrade` según estado del directorio (#16).
+- **Lazy detection de stack/test_runner**: `bootstrap.needs_detection` + `bootstrap.update_detection_fields` para re-detección post-`/fg-setup` (#16).
+- **GATE de lazy detection** en `_shared/fg-phase-common.md` Sección A — fuerza re-detección cuando `pending_detection: true` (#16).
+- **`/fg-setup` modo bootstrap**: dispara conversación de visión del sistema y produce `docs/arquitectura/overview.md` + `stack.md` antes del primer código (#17).
+- **Helpers de bootstrap para modo greenfield**: `bootstrap.create_arquitectura_docs`, `bootstrap.patch_config_stacks`, `bootstrap.mark_vision_skipped`, `bootstrap.read_overview`, `bootstrap.is_vision_skipped`, `bootstrap.is_legacy_project` (#17, #18, #19).
+- **`/fg-plan` lee `overview.md`** como contexto primario via `bootstrap.read_overview` antes de consultar CodeGraph (#18).
+- **`/fg-plan --from <ruta-doc>`**: ingesta de doc externa (PRD, RFC) como contexto primario para el plan (#18).
+- **`/fg-design` invoca `legacy-impact-analyzer`** ANTES de definir enfoque cuando `context.is_legacy: true` (#19).
+- **Campos nuevos en `config.yaml.context`**: `last_detection`, `pending_detection`, `vision_skipped`, `is_legacy` (#16, #17, #19).
 
 ### Changed
 
@@ -22,6 +37,17 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - **`forge/bootstrap.py`**: agregado `TODO(forge-bootstrap-package-root)` documentando el bug de `PACKAGE_ROOT` en instalaciones wheel non-editable (sin fix en este ciclo).
 - **Rename de paths a español**: `docs/audit/changes/` → `docs/auditoria/cambios/`, `docs/audit/config.yaml` → `docs/auditoria/config.yaml`, `docs/architecture/` → `docs/arquitectura/`. Todas las skills, agentes, templates y `bootstrap.py` actualizados.
 - **Split de template de diseño**: `templates/design-change.md` reemplazado por tres archivos con responsabilidad exclusiva: `templates/diseño.md` (estable), `templates/tareas.md` (mutable), `templates/decisiones.md` (append-only). Mapping canónico de sub-docs por agente documentado en `/fg-review`.
+- **`print_report` del installer**: ya no menciona `/fg-setup` como próximo paso — refleja modelo latente (#15).
+- **README "Después de instalar"**: reescrita — forge se invoca por intent natural, no por comando (#15).
+- **README "Cómo se activa forge"** (sección nueva): tabla intent → cadena de skills disparada (#15).
+- **Template `CLAUDE-md-institucional.md`**: reframeado a voz "el orquestador detecta intent"; nueva sección "Visión del sistema (modo bootstrap)" (#20).
+- **Regla "nunca crear `docs/arquitectura/` vacío"**: relajada en `fg-setup.md` y `fg-update-arch.md` — modo bootstrap puede crearlos antes del primer código (#17).
+
+### Removed
+
+- **Línea `print("  Próximo paso: /fg-setup")`** del `print_report` del installer (#15).
+- **Flag `--global` del README**: ya removida del CLI en `6e4763b`, ahora también limpia en docs (#14).
+- **Referencias stale a `commands/fg-*.md`** en README: la estructura de depósito no usa `commands/` (#14).
 
 ### Pendiente para próximas iteraciones
 
