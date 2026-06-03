@@ -1298,7 +1298,7 @@ class TestCreateArquitecturaDocs:
         """GIVEN docs/arquitectura/ does not exist, THEN it is created."""
         from forge.bootstrap import create_arquitectura_docs
 
-        result = create_arquitectura_docs(tmp_path, "overview content", "stack content")
+        create_arquitectura_docs(tmp_path, "overview content", "stack content")
         assert (tmp_path / "docs" / "arquitectura").is_dir()
 
     def test_writes_overview_and_stack(self, tmp_path):
@@ -1448,7 +1448,7 @@ class TestPatchConfigStacks:
 
     def test_noop_when_config_missing(self, tmp_path):
         """GIVEN no config.yaml, THEN returns False, no exception."""
-        import warnings
+        import warnings  # noqa: I001
         from forge.bootstrap import patch_config_stacks
 
         with warnings.catch_warnings(record=True) as w:
@@ -1481,7 +1481,7 @@ class TestPatchConfigStacks:
 
     def test_idempotent_no_duplicate_entries(self, tmp_path):
         """GIVEN called twice with same stacks list, THEN config.stacks has no duplicates."""
-        import yaml as _yaml
+        import yaml as _yaml  # noqa: I001
         from forge.bootstrap import patch_config_stacks
 
         _write_patch_config(tmp_path)
@@ -1503,7 +1503,7 @@ class TestMarkVisionSkipped:
 
     def test_sets_vision_skipped_true(self, tmp_path):
         """GIVEN config with context block, THEN context.vision_skipped == True after call."""
-        import yaml as _yaml
+        import yaml as _yaml  # noqa: I001
         from forge.bootstrap import mark_vision_skipped
 
         _write_patch_config(tmp_path)
@@ -1523,7 +1523,7 @@ class TestMarkVisionSkipped:
 
     def test_idempotent_when_already_skipped(self, tmp_path):
         """GIVEN called twice, THEN no error and value stays True."""
-        import yaml as _yaml
+        import yaml as _yaml  # noqa: I001
         from forge.bootstrap import mark_vision_skipped
 
         _write_patch_config(tmp_path)
