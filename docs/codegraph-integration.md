@@ -41,7 +41,7 @@ La sección "Archivos afectados" de `diseño.md` se llena con esta información,
 
 `/fg-review` invoca el detector estructural (`forge/structural_detector.py`) que consulta CodeGraph para:
 
-- Identificar módulos top-level nuevos en HEAD vs HEAD~N (N = cambios del checklist).
+- Confirmar qué archivos cambiados (provistos por git) tocan módulos top-level reales con símbolos, consultando el índice actual de CodeGraph (`codegraph files`). CodeGraph no compara revisiones: el eje temporal lo aporta git vía la lista de archivos cambiados; CodeGraph solo valida la realidad estructural del estado actual.
 - Detectar nuevas entidades de dominio (clases, structs, interfaces).
 - Detectar cambios en aristas de dependencia entre módulos centrales.
 - Detectar cambios en módulos marcados como transversales (config `modulos-transversales.yaml`).
