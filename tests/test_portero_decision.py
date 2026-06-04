@@ -102,6 +102,64 @@ class TestThreshold:
 class TestOptIn:
     """El dev declara; el portero no adivina (ADR-4: opt-in > tipo > palabras)."""
 
+    # ------------------------------------------------------------------
+    # R-PORTERO-04 — opt_in="completo" fuerza Completo sin importar el tipo
+    # ------------------------------------------------------------------
+
+    def test_opt_in_completo_con_tipo_docs_retorna_completo(self):
+        """GIVEN opt_in=completo + tipo=docs (ligero) + arch al día → THEN Completo.
+
+        Reproduce el bug: sin este manejo, un tipo ligero cae a inferencia
+        y el portero propone Rápido en vez de respetar el opt-in del dev.
+        """
+        senales = _senales_base(
+            opt_in="completo",
+            tipo_inferido="docs",
+            arquitectura_al_dia=True,
+            threshold="auto",
+        )
+        resultado = decidir_nivel(senales)
+        assert resultado["nivel_propuesto"] == COMPLETO
+
+    def test_opt_in_completo_razon_menciona_declaracion_dev(self):
+        """GIVEN opt_in=completo → THEN la razón menciona que el dev lo declaró."""
+        senales = _senales_base(opt_in="completo")
+        resultado = decidir_nivel(senales)
+        razon = resultado["razon"].lower()
+        assert "completo" in razon
+
+    def test_opt_in_completo_retorna_confianza_alta(self):
+        """GIVEN opt_in=completo → confianza debe ser alta (dev declaró explícitamente)."""
+        senales = _senales_base(opt_in="completo")
+        resultado = decidir_nivel(senales)
+        assert resultado["confianza"] == "alta"
+
+    def test_opt_in_completo_con_tipo_feat_retorna_completo(self):
+        """GIVEN opt_in=completo + tipo=feat → THEN Completo.
+
+        Triangulación: confirma consistencia con tipo pesado, no solo ligero.
+        El opt-in gana sobre la inferencia sin importar el tipo.
+        """
+        senales = _senales_base(
+            opt_in="completo",
+            tipo_inferido="feat",
+            arquitectura_al_dia=True,
+            threshold="auto",
+        )
+        resultado = decidir_nivel(senales)
+        assert resultado["nivel_propuesto"] == COMPLETO
+
+    def test_opt_in_completo_threshold_full_sigue_siendo_completo(self):
+        """GIVEN threshold=full + opt_in=completo → THEN Completo (threshold gana pero resultado es igual)."""
+        senales = _senales_base(
+            threshold="full",
+            opt_in="completo",
+            tipo_inferido="docs",
+            arquitectura_al_dia=True,
+        )
+        resultado = decidir_nivel(senales)
+        assert resultado["nivel_propuesto"] == COMPLETO
+
     def test_opt_in_rapido_con_arquitectura_al_dia_retorna_rapido(self):
         """GIVEN opt_in=rapido + arquitectura al día → propone Rápido."""
         senales = _senales_base(opt_in="rapido", arquitectura_al_dia=True)
