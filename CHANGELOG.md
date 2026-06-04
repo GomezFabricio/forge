@@ -8,6 +8,42 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Portero proporcional (Fase 1)
+
+Implementa el portero de ceremonia proporcional: antes de iniciar un cambio, el workflow evalúa
+señales del contexto y propone el nivel de ritual mínimo adecuado (Libre / Rápido / Completo).
+El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento explícito.
+
+#### Added
+
+- **`forge/portero_decision.py`** — función pura `decidir_nivel(senales)` que aplica la precedencia
+  de señales (threshold → opt-in → tipo → palabras de escala → regla conservadora) y retorna
+  `nivel_propuesto`, `razon` y `confianza`. Sin I/O, 100% testeable.
+- **`forge/arch_freshness.py`** — función `check_arch_freshness(cambios_dir, arch_overview)` que
+  escanea los READMEs de cambios buscando `structural: true` sin `arch_synced: true` y reporta
+  `al_dia`, `pendientes` y `sin_overview`.
+- **Campo `rules.workflow.ceremonial_threshold`** en `docs/auditoria/config.yaml` (valores:
+  `auto` / `lite` / `full`; default `auto`). Controla el sesgo del portero a nivel de proyecto.
+- **`templates/tareas-lite.md`** — template de tareas reducido para modo Rápido (sin sección de
+  diseño técnico ni decisiones estructurales; mantiene el checklist básico de implementación).
+- **Paso 0.5 en `skills/fg-plan.md`** — el portero se ejecuta entre la resolución del modo de
+  ciclo (paso 0) y la inferencia del tipo (paso 1). Incluye las 5 señales de evaluación, la
+  lógica UX propone-y-confirma, y el cacheo del `ceremony_level` en el envelope de retorno.
+- **Niveles de ceremonia**:
+  - **Libre** — forge no entra al ciclo; el dev trabaja sin estructura impuesta.
+  - **Rápido** — saltea solo `/fg-design`; `/fg-review` siempre corre (R-PORTERO-02).
+  - **Completo** — ritual completo, sin cambios respecto al flujo estándar.
+
+#### Fixed
+
+- **F811 eliminado** (`forge/arch_freshness.py`): redefinición de variable local que generaba
+  warning de Ruff; reescrita la sección afectada con nombre de variable único.
+- **Parser de frontmatter migrado a `yaml.safe_load`** (`forge/arch_freshness.py`): el parser
+  anterior usaba `yaml.load()` sin `Loader`, disparando el warning de seguridad `YAMLLoadWarning`.
+  Migrado a `yaml.safe_load()` con manejo explícito de `yaml.YAMLError`.
+
+---
+
 ### Modelo de activación latente
 
 Implementa el PRD `.forge/prd-activacion-latente.md`: forge se vuelve latente e
