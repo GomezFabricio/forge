@@ -157,7 +157,7 @@ docs/
 
 ## Sub-agentes especialistas
 
-`/fg-review` delega a sub-agentes según el contexto del cambio. Cada uno aporta una mirada especializada al envelope final:
+`/fg-review` delega a sub-agentes de review según el contexto del cambio; además, `/fg-design` invoca al `legacy-impact-analyzer` antes de implementar en proyectos legacy. Cada uno aporta una mirada especializada al envelope final:
 
 | Sub-agente | Cuándo se invoca |
 |---|---|
@@ -166,9 +166,9 @@ docs/
 | `dba-reviewer` | Cuando hay migraciones o queries pesadas. |
 | `frontend-reviewer` | Cuando toca UI/UX (componentes, páginas). |
 | `qa-reviewer` | Cuando hay tests complejos o de integración nuevos. |
-| `legacy-impact-analyzer` | Cuando el proyecto está marcado como legacy. Mapea acoplamientos ocultos con CodeGraph. |
+| `legacy-impact-analyzer` | Cuando el proyecto está marcado como legacy. Invocado por `/fg-design` (impacto pre-implementación) y por `/fg-review`. Mapea acoplamientos ocultos con CodeGraph. |
 
-Las demás skills (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-update-arch`) son **ejecutores estrictos** — no delegan. Solo `/fg-review` puede invocar sub-agentes.
+Las demás skills (`/fg-setup`, `/fg-plan`, `/fg-implement`, `/fg-update-arch`) son **ejecutores estrictos** — no delegan.
 
 ---
 

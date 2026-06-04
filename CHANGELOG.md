@@ -78,6 +78,7 @@ invocable por intent natural en lugar de comando explícito.
 - **README "Cómo se activa forge"** (sección nueva): tabla intent → cadena de skills disparada (#15).
 - **Template `CLAUDE-md-institucional.md`**: reframeado a voz "el orquestador detecta intent"; nueva sección "Visión del sistema (modo bootstrap)" (#20).
 - **Regla "nunca crear `docs/arquitectura/` vacío"**: relajada en `fg-setup.md` y `fg-update-arch.md` — modo bootstrap puede crearlos antes del primer código (#17).
+- **Doctrina del modelo de delegación sincronizada con el código**: `templates/CLAUDE-md-institucional.md` y `README.md` ahora reflejan que `/fg-design` delega a `legacy-impact-analyzer` en proyectos legacy (comportamiento introducido en #19); la redacción previa afirmaba que solo `/fg-review` delegaba. Agregado un principio rector de delegación para evitar que la lista de skills delegadoras envejezca.
 
 ### Removed
 
