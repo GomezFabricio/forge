@@ -28,8 +28,14 @@ El comando de test a usar es `rules.implement.test_command`. Si está vacío, fa
 
 ### 1. Leer el contexto del cambio
 
+> `diseño.md` es **opcional**; `tareas.md` es **obligatorio**.
+
+- Leer `tareas.md` para el checklist de tareas a ejecutar. Si no existe, abortar y sugerir correr `/fg-design` (o `/fg-plan` en modo Rápido) primero.
 - Leer `diseño.md` del cambio activo para entender el enfoque y la arquitectura.
-- Leer `tareas.md` para el checklist de tareas a ejecutar.
+  Si `diseño.md` **no existe** (escenario de modo Rápido del portero proporcional):
+  - No abortar ni advertir — es un caso válido.
+  - Usar el `README.md` del cambio como contexto de enfoque en su lugar.
+  - El contrato de lectura de `tareas.md` no cambia.
 - Leer `docs/auditoria/config.yaml` del proyecto para conocer el modo TDD y el comando de test.
 - Si hay tareas ya tachadas en `tareas.md` (ej: vienes a continuar un cambio iniciado antes), retomar desde la primera tarea no tachada.
 
