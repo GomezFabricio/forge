@@ -1,7 +1,7 @@
 # Módulo Strict TDD — fase review (validación)
 
-> Este módulo se carga **únicamente** cuando Strict TDD Mode está activo (`/fg-setup` detectó test runner en el proyecto).
-> Si estás leyendo esto, ya se verificaron las dos condiciones. Aplicá cada instrucción.
+> Este módulo se carga **únicamente** cuando Strict TDD Mode está activo (`rules.implement.tdd: true` en `docs/auditoria/config.yaml` del proyecto). Está `false` por defecto — el equipo lo activa editando el config y commiteando el cambio.
+> Si estás leyendo esto, la condición ya fue verificada. Aplicá cada instrucción.
 
 ## Filosofía de la verificación TDD
 
@@ -9,11 +9,18 @@ Cuando Strict TDD está activo, la verificación va más allá de "¿el código 
 
 ## Paso 5a: TDD Compliance Check (incluye Assertion Quality Audit)
 
-Leer el artifact `apply-progress` y verificar que TDD se siguió:
+> **Fuente de la evidencia TDD**: `/fg-implement` persiste la tabla de evidencia en disco como `evidencia-tdd.md` dentro de la carpeta del cambio al cerrar cada batch (completo o parcial). Si el cambio requirió múltiples batches, el archivo acumula todas las filas mergeadas. Esta es la fuente primaria y garantiza que la evidencia sobreviva entre sesiones.
+
+Verificar que TDD se siguió leyendo la evidencia de la fuente disponible:
 
 ```
-Leer apply-progress:
-├── Encontrar la tabla "Evidencia del ciclo TDD".
+Leer evidencia TDD (fuente en orden de prioridad):
+├── 1. docs/auditoria/cambios/<cambio>/evidencia-tdd.md (fuente primaria — en disco).
+├── 2. Envelope de retorno de /fg-implement en la sesión activa (fuente secundaria, mismo ciclo).
+├── 3. tareas.md del cambio (fallback final).
+├── 4. Si ninguna fuente está disponible → Flag: CRITICAL — evidencia TDD no encontrada.
+│
+Encontrar la tabla "Evidencia del ciclo TDD":
 ├── PARA CADA fila de tarea:
 │   ├── Columna RED:
 │   │   ├── Debe decir "✅ Escrito".
@@ -138,7 +145,7 @@ Cuando Strict TDD Mode está activo, tu reporte de verificación DEBE incluir es
 ### TDD Compliance
 | Check | Resultado | Detalles |
 |-------|-----------|----------|
-| Evidencia TDD reportada | ✅ / ❌ | {Encontrada en apply-progress / Ausente} |
+| Evidencia TDD reportada | ✅ / ❌ | {Encontrada en evidencia-tdd.md / envelope de sesión / tareas.md / Ausente} |
 | Todas las tareas tienen tests | ✅ / ❌ | {N}/{total} tareas tienen archivos de test |
 | RED confirmado (tests existen) | ✅ / ⚠️ | {N}/{total} archivos de test verificados |
 | GREEN confirmado (tests pasan) | ✅ / ❌ | {N}/{total} tests pasan en ejecución |
@@ -258,10 +265,10 @@ Si no se encontraron issues, reportar: "**Calidad de assertions**: ✅ Todas las
 
 ## Reglas (Strict TDD Verify)
 
-- SIEMPRE chequear la tabla "Evidencia del ciclo TDD" de apply-progress — es el artifact primario.
+- SIEMPRE buscar la tabla "Evidencia del ciclo TDD" — primero en `evidencia-tdd.md` de la carpeta del cambio (fuente primaria en disco), luego en el envelope de sesión de `/fg-implement`, luego en `tareas.md`. Es el artifact primario.
 - SIEMPRE cross-referenciar archivos de test reportados contra ejecución real — no confiar ciegamente en el reporte.
 - SIEMPRE correr el Assertion Quality Audit (paso 5f) — tests triviales son PEORES que tests ausentes.
-- Si apply-progress no tiene tabla de evidencia TDD, flag como CRITICAL — el protocolo no se siguió.
+- Si no se encuentra tabla de evidencia TDD en ninguna fuente disponible, flag como CRITICAL — el protocolo no se siguió.
 - Si se encuentran tautologías (expect(true).toBe(true)), flag como CRITICAL — DEBEN reescribirse.
 - Cobertura y quality metrics son INFORMATIVOS, NO bloqueantes — flag como WARNING, nunca CRITICAL.
 - Distribución de test layers es informativa — solo SUGGESTION.
