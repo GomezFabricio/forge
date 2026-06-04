@@ -50,6 +50,23 @@ cuánto expediente aplica.
 o cualquier variante futura: `/fg-review` ejecuta incondicionalmente al final del ciclo.
 Esta garantía no la controla el dev, no la controla la config, no la controla el portero.
 
+### Cómo el orquestador deriva el opt-in del lenguaje natural
+
+Forge es latente: el dev no tipea slash commands ni banderas — habla en lenguaje natural.
+El orquestador interpreta el intent del pedido y lo traduce a la señal `opt_in` antes de
+llamar al portero. Esta derivación es la primera lectura del pedido, antes de inferir el tipo.
+
+| Intent natural del dev | opt_in derivado |
+|------------------------|-----------------|
+| "esto es delicado, hacelo completo" / "quiero el ciclo completo" | `"completo"` |
+| "es un toque rápido" / "algo simple, sin mucho proceso" | `"rapido"` |
+| "sin forge" / "no quiero el ciclo" / "sin ritual" | `"libre"` |
+| Sin señal de nivel en el pedido | `None` (portero infiere por tipo y palabras de escala) |
+
+Las banderas `--rapido`, `--completo`, `--libre` (y sus alias) son la forma explícita del
+mismo mecanismo y tienen precedencia sobre la interpretación del lenguaje natural.
+Cuando el dev incluye una bandera, se usa directamente sin interpretación adicional.
+
 ### Condición habilitante de Rápido: arquitectura al día
 
 Rápido solo está disponible si `docs/arquitectura/` está al día. El portero lo verifica

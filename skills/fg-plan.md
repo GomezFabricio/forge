@@ -53,11 +53,20 @@ necesita la descripción del dev y el contexto del proyecto, pero no el tipo fin
 
 1. **`ceremonial_threshold`** — leer `rules.workflow.ceremonial_threshold` de `docs/auditoria/config.yaml`.
    Si no existe el campo o el archivo, asumir `auto`.
-2. **opt-in del dev** — detectar si la invocación incluye una bandera de nivel:
+2. **opt-in del dev** — el orquestador interpreta el intent natural del pedido y
+   lo traduce a la señal de opt-in que recibe el portero. El lenguaje natural
+   es el camino principal; las banderas son la forma explícita/manual del mismo mecanismo.
+
+   Ejemplos de interpretación desde lenguaje natural:
+   - "esto es delicado, hacelo completo" / "quiero el ciclo completo" → `opt_in = "completo"`
+   - "es un toque rápido" / "algo simple, sin mucho proceso" → `opt_in = "rapido"`
+   - "sin forge" / "no quiero el ciclo" → `opt_in = "libre"`
+   - Sin señal de nivel en el pedido → `opt_in = None`
+
+   Banderas explícitas (equivalentes, mayor precedencia que la interpretación):
    - `--rapido` o `--lite` → `opt_in = "rapido"`
    - `--completo` o `--full` → `opt_in = "completo"`
    - `--libre` o `--sin-forge` → `opt_in = "libre"`
-   - Sin bandera → `opt_in = None`
 3. **tipo inferido (lectura rápida)** — hacer una lectura preliminar y barata del tipo
    usando las heurísticas del paso 1 (docs/chore/test/style → ligero; feat/refactor → pesado).
    Esta lectura es provisional; el paso 1 sigue siendo la fuente de verdad del tipo final.
