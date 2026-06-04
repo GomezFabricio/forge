@@ -167,7 +167,9 @@ inicial, y sigue con el ciclo.
 
 **Lo que forge hace:**
 
-1. Corre `/fg-setup` en modo `bootstrap` (idéntico al escenario 1).
+1. Corre `/fg-setup` en modo `bootstrap` si el directorio no tiene `.git/` ni manifiestos
+   (idéntico al escenario 1); si ya es un repo con manifiesto, entra en modo `adopt`, pero
+   la ingesta del documento es la misma.
 2. Lee `docs/prd.md` como contexto primario del cambio.
 3. Si existe `docs/arquitectura/overview.md`, lo usa como contexto secundario y anota
    coincidencias o divergencias.
@@ -256,7 +258,7 @@ nunca impone el nivel sin consentimiento (salvo `ceremonial_threshold: full`).
 | Nivel | Flujo | Cuándo aplica |
 |---|---|---|
 | **Libre** | forge no entra. Sin carpeta de cambio, sin ciclo. | Typo, una línea, pregunta, o el dev escribe `--libre`. |
-| **Rápido** | `/fg-plan` → `/fg-implement` → `/fg-review`. Salta `/fg-design`; genera `tareas.md` desde un template reducido. | Cambio chico, tipo ligero (`docs`/`chore`/`fix`/`style`/`test`), arquitectura al día. |
+| **Rápido** | `/fg-plan` → `/fg-implement` → `/fg-review`. Salta `/fg-design`; genera `tareas.md` desde un template reducido. | Cambio chico, tipo ligero (`docs`/`chore`/`test`/`style`), arquitectura al día. |
 | **Completo** | Plan → design → implement → review. Flujo sin saltos. | Feature nueva, refactor, palabras de escala ("migrar", "reescribir", "rediseñar"), o arquitectura desactualizada. |
 
 ### El piso innegociable
@@ -284,10 +286,15 @@ El dev puede incluir una bandera en la invocación de `/fg-plan`:
 |---|---|
 | `--libre` o `--sin-forge` | Libre |
 | `--rapido` o `--lite` | Rápido (solo si arch al día) |
-| `--completo` o `--full` | Completo |
 
-Si el dev pide `--rapido` pero la arquitectura está desactualizada, el portero aplica
-Completo de todas formas e informa al dev.
+Si el dev pide `--rapido` pero la arquitectura está desactualizada, o la descripción
+contiene palabras de escala, el portero aplica Completo de todas formas e informa al dev.
+
+> **Nota (Fase 1):** para forzar Completo no uses una bandera de invocación —
+> configurá `ceremonial_threshold: full` en `config.yaml`. El override `--completo` todavía
+> no está implementado en el núcleo de decisión (`decidir_nivel`). De todos modos, un tipo
+> pesado (`feat`/`refactor`), las palabras de escala o una arquitectura desactualizada ya
+> llevan a Completo por sí solos.
 
 ### Config de proyecto: `ceremonial_threshold`
 
@@ -532,8 +539,9 @@ Causas posibles:
 1. Hay cambios estructurales sin sincronizar en `docs/auditoria/cambios/`. Correr
    `/fg-update-arch` para sincronizarlos, y después el portero va a poder proponer
    Rápido.
-2. CodeGraph no está disponible y el portero no puede estimar impacto → aplica regla
-   conservadora (Completo). Instalar CodeGraph resuelve esto.
+2. El tipo inferido del cambio es pesado (`feat`/`refactor`): estos van a Completo por
+   regla conservadora, sin importar el tamaño. Si el cambio es realmente chico, declará un
+   tipo ligero (`docs`/`chore`/`test`/`style`) o forzá `--rapido`.
 3. La descripción contiene palabras de escala ("migrar", "reescribir", etc.) aunque el
    cambio sea chico. Reformular la descripción.
 
