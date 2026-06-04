@@ -373,6 +373,12 @@ rules:
     # al primer comando del ciclo y cachea la respuesta. "1 sesión = 1 ciclo" es la norma sana.
     cycle_mode: interactive
 
+    # ceremonial_threshold: cuánta ceremonia aplica el portero proporcional.
+    #   "auto" = el portero propone el nivel (Libre/Rápido/Completo) y el dev confirma (default).
+    #   "lite" = sesga a Rápido siempre que se pueda; nunca fuerza Completo salvo arquitectura desactualizada.
+    #   "full" = fuerza Completo SIEMPRE, sin preguntar (entornos críticos / auditoría estricta).
+    ceremonial_threshold: auto
+
   pr_size:
     # Cuando /fg-design cierra, calcula un "Review Workload Forecast" estimando
     # las líneas que va a tener el PR. Este bloque controla qué hacer con ese forecast.
