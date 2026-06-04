@@ -28,33 +28,36 @@ forge **no reemplaza** Claude Code — vive encima de él, agregando las skills,
 
 ### Vía rápida (devs personales, equipos abiertos)
 
-**Linux / Mac**:
+> **Estado**: los scripts `install.sh` (Linux/Mac) e `install.ps1` (Windows) están **pendientes de implementación** — los comandos de abajo no funcionan todavía. La vía funcional hoy es la institucional (ver más abajo).
+
+**Linux / Mac** *(pendiente)*:
 
 ```bash
 curl -sSL https://github.com/GomezFabricio/forge/raw/main/install.sh | bash
 ```
 
-**Windows (PowerShell)**:
+**Windows (PowerShell)** *(pendiente)*:
 
 ```powershell
 iwr https://github.com/GomezFabricio/forge/raw/main/install.ps1 -useb | iex
 ```
 
-### Vía institucional (entornos con compliance estricto)
+### Vía institucional (entornos con compliance estricto) — vía funcional hoy
 
-Para equipos con políticas que no permiten ejecutar scripts remotos sin auditoría previa:
+Para equipos con políticas que no permiten ejecutar scripts remotos sin auditoría previa, o mientras los scripts de instalación rápida estén pendientes:
 
 ```bash
 git clone https://github.com/GomezFabricio/forge
 cd forge
-make install
+pipx install --editable . --include-deps
+forge install
 ```
 
-El comando `make install` invoca el mismo `install.sh` localmente — el dev puede revisar el código antes de ejecutar.
+Esto instala el paquete en modo editable con pipx y ejecuta `forge install` directamente, que deposita las skills, agents y MCP en `~/.claude/`.
 
 ### Qué hace el instalador
 
-Ambas vías ejecutan los siguientes pasos en cadena:
+La instalación ejecuta los siguientes pasos en cadena:
 
 1. Verifica que haya **Python 3.10+** disponible. Si no encuentra `pipx`, lo instala (`python -m pip install --user pipx` + `pipx ensurepath`).
 2. Instala el paquete con **pipx**: `pipx install forge`. Esto aísla forge del Python global del sistema y permite upgrade/uninstall limpios.
@@ -105,6 +108,18 @@ Setup del proyecto (una vez):  /fg-setup
 Por cada cambio:               /fg-plan → /fg-design → /fg-implement → /fg-review
 Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 ```
+
+### Gradación de ceremonia
+
+`/fg-plan` incluye un **portero proporcional** que evalúa el cambio y propone el nivel de ritual mínimo adecuado. El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento.
+
+| Nivel | Qué saltea | Piso innegociable |
+|---|---|---|
+| **Libre** | Todo el ciclo — forge no interviene | — |
+| **Rápido** | Solo `/fg-design`; tareas se generan desde `templates/tareas-lite.md` | `/fg-review` siempre corre |
+| **Completo** | Nada — ritual completo sin cambios | `/fg-review` siempre corre |
+
+**Condición para modo Rápido**: la arquitectura debe estar al día (`check_arch_freshness()` retorna `al_dia: true`). Si hay cambios estructurales sin sincronizar, el portero eleva automáticamente a Completo.
 
 ### Las 6 skills
 
@@ -200,6 +215,22 @@ La norma sana es **"1 sesión = 1 ciclo"** — si un cambio requiere múltiples 
 
 Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive` o `automatic`). `/fg-plan` lo lee al arrancar y lo usa como valor pre-seleccionado en la pregunta de modo — el dev siempre puede cambiar la elección por sesión.
 
+#### `rules.workflow.ceremonial_threshold` — Sesgo del portero proporcional
+
+Controla el nivel de ceremonia que el portero propone por defecto para el proyecto.
+
+| Valor | Comportamiento |
+|---|---|
+| `auto` | El portero infiere el nivel por tipo de cambio y señales contextuales. **Default**. |
+| `lite` | Sesga hacia Rápido para tipos ligeros (`docs`, `chore`, `test`, `style`) cuando la arquitectura está al día. Tipos no triviales (`feat`, `refactor`) siguen yendo a Completo. |
+| `full` | Fuerza Completo en todos los cambios sin preguntar. Útil en proyectos críticos o bajo auditoría estricta. |
+
+```yaml
+rules:
+  workflow:
+    ceremonial_threshold: auto   # auto | lite | full
+```
+
 ### `config/modulos-transversales.yaml`
 
 Le indica al detector de cambios estructurales qué paths del proyecto son **transversales** — es decir, su modificación impacta varias áreas y debe disparar `/fg-update-arch`.
@@ -275,7 +306,22 @@ forge/
 │   ├── __init__.py
 │   ├── cli.py                   ← entry point del binario `forge`
 │   ├── bootstrap.py             ← ejecutor de /fg-setup (instala forge en un proyecto)
-│   └── structural_detector.py   ← detector usado por /fg-review
+│   ├── installer.py             ← lógica de `forge install` (deposita skills, agents, MCP)
+│   ├── arch_freshness.py        ← detecta drift entre cambios estructurales y docs/arquitectura/
+│   ├── portero_decision.py      ← función pura del portero proporcional (nivel de ceremonia)
+│   ├── structural_detector.py   ← detector de cambios estructurales usado por /fg-review
+│   └── filters/                 ← capa de filtrado PII (hook UserPromptSubmit)
+│       ├── __init__.py
+│       ├── analyzer.py          ← orquesta los recognizers y produce detecciones
+│       ├── anonymizer.py        ← reemplaza entidades detectadas con placeholders
+│       ├── hook_user_prompt.py  ← punto de entrada del hook UserPromptSubmit
+│       ├── redaction_log.py     ← registro append-only de eventos de redacción
+│       └── recognizers/         ← recognizers por tipo de entidad
+│           ├── __init__.py
+│           ├── ar_cbu.py        ← CBU argentino
+│           ├── ar_cuit.py       ← CUIT/CUIL con dígito verificador AFIP
+│           ├── ar_dni.py        ← DNI argentino
+│           └── secrets.py       ← secretos técnicos (JWT, AWS keys, GitHub PAT, etc.)
 ├── skills/                      ← 6 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
 │   ├── fg-setup.md
 │   ├── fg-plan.md
@@ -297,10 +343,10 @@ forge/
 │   ├── README-change.md
 │   ├── diseño.md
 │   ├── tareas.md
+│   ├── tareas-lite.md           ← template reducido para modo Rápido (portero proporcional)
 │   ├── decisiones.md
 │   └── CLAUDE-md-institucional.md
 ├── docs/                        ← documentación interna del paquete
-│   ├── herencias.md
 │   └── codegraph-integration.md
 ├── pyproject.toml
 ├── README.md
