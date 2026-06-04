@@ -1,7 +1,7 @@
 # Módulo Strict TDD — fase implement
 
-> Este módulo se carga **únicamente** cuando Strict TDD Mode está activo (`/fg-setup` detectó test runner en el proyecto).
-> Si estás leyendo esto, ya se verificaron las dos condiciones. Aplicá cada instrucción.
+> Este módulo se carga **únicamente** cuando Strict TDD Mode está activo (`rules.implement.tdd: true` en `docs/auditoria/config.yaml` del proyecto). Está `false` por defecto — el equipo lo activa editando el config y commiteando el cambio.
+> Si estás leyendo esto, la condición ya fue verificada. Aplicá cada instrucción.
 
 ## Filosofía TDD
 

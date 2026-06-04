@@ -30,9 +30,10 @@ El comando que `/fg-review` usa para correr la suite completa es `rules.review.t
 
 Los sub-docs del cambio, según el mapping canónico:
 - `diseño.md`: enfoque técnico y arquitectura (input para `code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`).
+  **Fallback modo Rápido**: si `diseño.md` no existe (el cambio usó nivel Rápido y se saltó `/fg-design`), usar `README.md` del cambio como sustituto para los sub-agentes que necesitan contexto de diseño. Notarlo explícitamente en el prompt de cada sub-agente invocado.
 - `tareas.md`: checklist de tareas y estado de completitud (input para `qa-reviewer`).
-- `decisiones.md`: decisiones técnicas y flags_for_review de `/fg-implement` (input para `code-reviewer`).
-- `README.md`: Estado actual.
+- `decisiones.md`: decisiones técnicas y flags_for_review de `/fg-implement` (input para `code-reviewer`). Puede no existir en modo Rápido — en ese caso, omitir.
+- `README.md`: Estado actual y contexto del cambio.
 - `docs/auditoria/config.yaml` del proyecto: modo TDD activo y comando de test/coverage threshold.
 - La TDD Cycle Evidence que generó `/fg-implement`.
 
@@ -126,7 +127,14 @@ structural: true
 
 ### 9. Sugerir `/fg-update-arch` si corresponde
 
-Si el cambio fue marcado como estructural, sugerirle al dev correr `/fg-update-arch` antes de cerrar. No invocarla automáticamente — el dev decide.
+Si el cambio fue marcado como estructural (`structural: true`), reportar la sugerencia de correr `/fg-update-arch` como parte del cierre. **Comportamiento esperado: sugerir y reportar — nunca auto-invocar.**
+
+El dev evalúa el alcance real del cambio estructural y decide si y cuándo sincronizar la arquitectura. Forzar la invocación automática rompe el principio de autonomía del workflow y puede generar documentación prematura antes de que el dev confirme los cambios.
+
+La sugerencia debe ser concreta y accionable:
+> "Este cambio modificó [archivos/módulos estructurales detectados]. Se recomienda correr `/fg-update-arch` para sincronizar `docs/arquitectura/`. El dev decide cuándo."
+
+`suggest_update_arch: true` en el envelope de retorno es la señal al orquestador — no una instrucción de invocación.
 
 ### 10. Escribir la sección Cierre del README.md
 

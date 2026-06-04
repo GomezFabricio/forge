@@ -67,11 +67,22 @@ necesita la descripción del dev y el contexto del proyecto, pero no el tipo fin
    - `cambios_dir = docs/auditoria/cambios/`
    - `arch_overview = docs/arquitectura/overview.md`
 
+   > **Contrato de `check_arch_freshness`** (módulo: `forge/arch_freshness.py`):
+   > - **Recibe**: `cambios_dir: Path`, `arch_overview: Path`
+   > - **Retorna**: `dict` con claves `al_dia: bool`, `pendientes: int`, `sin_overview: bool`
+   > - `al_dia` es `True` cuando `pendientes == 0` y `overview.md` existe.
+   > - Detecta solo cambios que pasaron por forge y fueron marcados `structural: true` — limitación declarada.
+
 #### b) Decidir el nivel
 
 Llamar a `decidir_nivel(señales)` con las 5 señales del paso anterior.
 La función aplica la precedencia: threshold > opt-in > tipo > palabras_de_escala.
 Ambigüedad sin CodeGraph → Completo (regla conservadora).
+
+   > **Contrato de `decidir_nivel`** (módulo: `forge/portero_decision.py`):
+   > - **Recibe**: `senales: dict` con claves `threshold` (str), `opt_in` (str|None), `tipo_inferido` (str), `palabras_de_escala` (list[str]), `arquitectura_al_dia` (bool)
+   > - **Retorna**: `dict` con claves `nivel_propuesto` (str: `"libre"` | `"rapido"` | `"completo"`), `razon` (str), `confianza` (str: `"alta"` | `"media"` | `"baja"`)
+   > - Función pura: sin I/O, sin lectura de filesystem.
 
 #### c) UX propone-y-confirma
 
