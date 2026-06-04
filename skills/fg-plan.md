@@ -43,6 +43,70 @@ Pregunta al dev (solo si no hay cache):
 
 El cache vive solo en el contexto del orquestador — no se persiste en filesystem ni engram. Sesión nueva → vuelve a preguntar.
 
+### 0.5. Portero proporcional — decidir el nivel de ceremonia
+
+Antes de inferir el tipo (paso 1), el portero evalúa qué nivel de ritual aplicar al cambio.
+Este paso vive entre el modo de ciclo (paso 0) y la inferencia del tipo (paso 1) porque
+necesita la descripción del dev y el contexto del proyecto, pero no el tipo final.
+
+#### a) Leer las señales
+
+1. **`ceremonial_threshold`** — leer `rules.workflow.ceremonial_threshold` de `docs/auditoria/config.yaml`.
+   Si no existe el campo o el archivo, asumir `auto`.
+2. **opt-in del dev** — detectar si la invocación incluye una bandera de nivel:
+   - `--rapido` o `--lite` → `opt_in = "rapido"`
+   - `--completo` o `--full` → `opt_in = "completo"`
+   - `--libre` o `--sin-forge` → `opt_in = "libre"`
+   - Sin bandera → `opt_in = None`
+3. **tipo inferido (lectura rápida)** — hacer una lectura preliminar y barata del tipo
+   usando las heurísticas del paso 1 (docs/chore/test/style → ligero; feat/refactor → pesado).
+   Esta lectura es provisional; el paso 1 sigue siendo la fuente de verdad del tipo final.
+4. **palabras de escala** — buscar en la descripción del dev: "migrar", "reemplazar",
+   "rediseñar", "reescribir", "módulo de", "todo el", "sistema de".
+5. **arquitectura al día** — llamar a `check_arch_freshness(cambios_dir, arch_overview)` donde:
+   - `cambios_dir = docs/auditoria/cambios/`
+   - `arch_overview = docs/arquitectura/overview.md`
+
+#### b) Decidir el nivel
+
+Llamar a `decidir_nivel(señales)` con las 5 señales del paso anterior.
+La función aplica la precedencia: threshold > opt-in > tipo > palabras_de_escala.
+Ambigüedad sin CodeGraph → Completo (regla conservadora).
+
+#### c) UX propone-y-confirma
+
+El portero NUNCA aplica el nivel solo — siempre lo propone al dev primero.
+
+**Excepción — threshold=full**: avisar en una línea y seguir sin preguntar.
+> "ceremonial_threshold=full: modo Completo forzado por configuración del proyecto."
+
+**Para cualquier otro nivel propuesto**:
+
+> "Esto parece un cambio {chico/mediano/grande}. Propongo modo **{Rápido/Completo/Libre}**
+> ({razón breve, ej: 'tipo docs, descripción acotada, arquitectura al día'}).
+> ¿Seguimos en {nivel} o preferís {alternativa}? [Enter = aceptar / rapido / completo / libre]"
+
+**Interacción con `cycle_mode`**:
+- **Interactivo**: siempre mostrar la propuesta y esperar confirmación del dev.
+- **Automático**: auto-confirmar la propuesta de la función, salvo que exista conflicto
+  entre lo que el dev pidió y lo que la regla conservadora fuerza (ej: dev pide `--rapido`
+  pero arquitectura desactualizada → Completo). En ese caso, aplicar el nivel conservador
+  y reportarlo en el envelope sin bloquear el ciclo.
+
+**Si el dev propone Libre**: forge NO crea la carpeta de cambio ni sigue con el ciclo.
+Reportar `status: skipped` y explicar que el portero clasificó el cambio como Libre.
+
+#### d) Cachear y reportar
+
+Guardar el nivel resuelto como `ceremony_level` en el contexto de la sesión (igual que
+`cycle_mode`). Reportarlo en el envelope de `/fg-plan` bajo la clave `ceremony_level`.
+
+Si el nivel es **Rápido**: después del paso 4 (crear carpeta), generar `tareas.md` directamente
+desde `templates/tareas-lite.md` en lugar de dejar que `/fg-design` lo genere. NO crear
+`diseño.md`. Continuar con paso 5 y siguientes como de costumbre.
+
+Si el nivel es **Completo**: flujo estándar sin cambios.
+
 ### 1. Inferir el tipo del cambio
 
 Aplicar las siguientes heurísticas sobre la descripción del dev. El tipo final debe ser uno de: `feat`, `fix`, `refactor`, `chore`, `docs`, `perf`, `test`.
@@ -167,7 +231,8 @@ Imprimir:
 
 - Pedirle al dev que escriba el tipo o el nombre en kebab-case por su cuenta.
 - Asumir alcance o restricciones que el dev no mencionó. Si no se sabe, preguntar.
-- Crear `diseño.md`, `tareas.md` ni `decisiones.md` (esos los crea `/fg-design`).
+- Crear `diseño.md` (eso lo crea `/fg-design`).
+- Crear `tareas.md` en modo Completo (eso lo crea `/fg-design`); en modo Rápido `/fg-plan` sí lo crea desde `templates/tareas-lite.md`.
 - Tocar código del proyecto.
 - Imponer estilos de arquitectura o stack.
 - Asumir contexto cuando `context.vision_skipped == false` y no hay overview ni stacks — abortar con `status: blocked` y redirigir a `/fg-setup`.
@@ -175,14 +240,17 @@ Imprimir:
 ## Envelope de retorno
 
 ```yaml
-status: success | partial | blocked
+status: success | partial | blocked | skipped
 executive_summary: 1-2 oraciones de lo que se hizo
 cycle_mode: interactivo | automatico
+ceremony_level: libre | rapido | completo   # resuelto por el portero en paso 0.5
 artifacts:
   - docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/README.md
+  # en modo Rápido, también:
+  # - docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/tareas.md
 inferred:
   tipo: <tipo inferido>
   nombre: <nombre kebab-case inferido>
-next_recommended: /fg-design
+next_recommended: /fg-design   # modo Completo; en modo Rápido → /fg-implement
 risks: None | <riesgos detectados durante la conversación>
 ```

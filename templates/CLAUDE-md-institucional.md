@@ -108,6 +108,46 @@ rules:
 
 La norma sana es "1 sesión = 1 ciclo" — si un cambio requiere múltiples batches, cada uno debería correrse en una sesión nueva para mantener el contexto del modelo fresco.
 
+### Portero proporcional — niveles de ceremonia
+
+Cuando el dev invoca forge, el portero proporcional decide cuánto ritual aplica antes
+de arrancar el ciclo. El portero propone el nivel y espera confirmación — nunca actúa solo.
+
+#### Los 3 niveles
+
+| Nivel | Flujo | Cuándo aplica |
+|-------|-------|---------------|
+| **Libre** | forge no entra. Sin carpeta, sin ciclo. | Typo, 1 línea, pregunta, opt-in `--libre`. |
+| **Rápido** | `/fg-plan` → `/fg-implement` → `/fg-review` (sin `/fg-design`). | Cambio chico, tipo ligero (docs/chore/fix), arquitectura al día. |
+| **Completo** | Ritual completo: plan → design → implement → review. | Feat, refactor, palabras de escala, ambigüedad, arch desactualizada. |
+
+#### La condición "arquitectura al día"
+
+Rápido solo está disponible si no hay cambios estructurales sin sincronizar.
+El portero verifica leyendo `docs/auditoria/cambios/*/README.md`: si alguno tiene
+`structural: true` sin `arch_synced: true`, la arquitectura está desactualizada
+y el portero fuerza Completo.
+
+**Limitación declarada**: este detector solo ve cambios que pasaron por forge y
+fueron marcados `structural`. Cambios manuales externos no se detectan.
+Es una señal de piso, no de techo. Si reporta "al día", es "al día hasta donde forge sabe".
+`/fg-review` (piso innegociable) sigue cubriendo el resto.
+
+#### El campo `ceremonial_threshold`
+
+Configurable en `docs/auditoria/config.yaml → rules.workflow.ceremonial_threshold`:
+
+| Valor | Comportamiento |
+|-------|----------------|
+| `auto` (default) | El portero propone el nivel y espera confirmación del dev. |
+| `lite` | Sesga hacia Rápido siempre que se pueda. Respeta la condición de arch al día. |
+| `full` | Fuerza Completo siempre, sin preguntar. Para entornos de auditoría estricta. |
+
+#### Piso innegociable
+
+`/fg-review` siempre corre. En cualquier nivel (Rápido, Completo) y cualquier config.
+No es negociable, no es configurable. Es la garantía mínima del sistema.
+
 ### Las tres leyes (cuando TDD está activo)
 
 1. **NO escribir código de producción** sin un test fallando.
