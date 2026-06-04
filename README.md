@@ -149,6 +149,7 @@ docs/
             ├── diseño.md        ← técnico estable (solo escribe /fg-design)
             ├── tareas.md        ← checklist mutable (/fg-implement tacha)
             ├── decisiones.md    ← decisiones técnicas (append-only)
+            ├── evidencia-tdd.md ← evidencia del ciclo TDD (/fg-implement; solo si TDD activo)
             └── assets/          ← opcional
 ```
 
@@ -371,10 +372,11 @@ mi-proyecto/
 │       ├── index.md
 │       └── cambios/             ← un cambio = una carpeta
 │           └── 2026-05-feat-login/
-│               ├── README.md       ← portada (lectura humano)
-│               ├── diseño.md       ← técnico estable
-│               ├── tareas.md       ← checklist mutable
-│               └── decisiones.md   ← decisiones técnicas
+│               ├── README.md        ← portada (lectura humano)
+│               ├── diseño.md        ← técnico estable
+│               ├── tareas.md        ← checklist mutable
+│               ├── decisiones.md    ← decisiones técnicas
+│               └── evidencia-tdd.md ← evidencia del ciclo TDD (solo si TDD activo)
 ├── .atl/
 │   └── skill-registry.md        ← registry de skills resueltas para este proyecto
 ├── .codegraph/                  ← índice de CodeGraph (gitignored)

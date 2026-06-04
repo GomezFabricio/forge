@@ -582,10 +582,11 @@ mi-proyecto/
 │       ├── config.yaml               ← configuración del workflow forge
 │       └── cambios/                  ← un cambio = una carpeta
 │           └── 2026-06-feat-login/
-│               ├── README.md         ← portada (humano)
-│               ├── diseño.md         ← técnico estable (solo escribe /fg-design)
-│               ├── tareas.md         ← checklist mutable (/fg-implement tacha)
-│               └── decisiones.md     ← decisiones técnicas (append-only)
+│               ├── README.md          ← portada (humano)
+│               ├── diseño.md          ← técnico estable (solo escribe /fg-design)
+│               ├── tareas.md          ← checklist mutable (/fg-implement tacha)
+│               ├── decisiones.md      ← decisiones técnicas (append-only)
+│               └── evidencia-tdd.md   ← evidencia del ciclo TDD (solo si TDD activo)
 ├── .atl/
 │   └── skill-registry.md             ← registry de skills del proyecto
 ├── .codegraph/                       ← índice de CodeGraph (gitignored)
