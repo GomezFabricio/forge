@@ -7,10 +7,7 @@ frontmatter con structural=true sin arch_synced=true.
 Si no existe docs/arquitectura/overview.md → al_dia=False, sin_overview=True.
 """
 
-import pytest
-
 from forge.arch_freshness import check_arch_freshness
-
 
 # ---------------------------------------------------------------------------
 # Helpers de fixtures

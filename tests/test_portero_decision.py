@@ -8,10 +8,7 @@ Precedencia de señales (ADR-4):
   Ambigüedad → Completo (regla conservadora).
 """
 
-import pytest
-
 from forge.portero_decision import decidir_nivel
-
 
 # ---------------------------------------------------------------------------
 # Constantes de salida esperada
