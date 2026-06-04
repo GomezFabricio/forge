@@ -186,3 +186,84 @@ class TestCheckArchFreshnessTriangulacion:
 
         assert resultado["al_dia"] is False
         assert resultado["pendientes"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Fix pyyaml — casos que el parser regex no maneja correctamente
+# ---------------------------------------------------------------------------
+
+
+class TestCheckArchFreshnessPyyaml:
+    """Tests que fallan con el parser regex y deben pasar con yaml.safe_load."""
+
+    def test_structural_con_comentario_inline_detectado(self, tmp_path):
+        """GIVEN structural: true  # comentario inline → debe contar como pendiente.
+
+        El parser regex captura 'true  # comentario inline' como valor string
+        y falla al comparar con ('true', 'yes'). pyyaml ignora el comentario
+        y retorna True nativo.
+        """
+        _crear_overview(tmp_path)
+        carpeta = tmp_path / "docs" / "auditoria" / "cambios" / "con-comentario"
+        carpeta.mkdir(parents=True, exist_ok=True)
+        (carpeta / "README.md").write_text(
+            "---\nstructural: true  # requiere sync\n---\n# Cambio\n",
+            encoding="utf-8",
+        )
+        cambios_dir = tmp_path / "docs" / "auditoria" / "cambios"
+
+        resultado = check_arch_freshness(
+            cambios_dir=cambios_dir,
+            arch_overview=tmp_path / "docs" / "arquitectura" / "overview.md",
+        )
+
+        assert resultado["al_dia"] is False
+        assert resultado["pendientes"] == 1
+
+    def test_arch_synced_comentario_inline_no_cuenta_como_pendiente(self, tmp_path):
+        """GIVEN structural: true + arch_synced: true  # comentario → no debe contar.
+
+        El parser regex rompería arch_synced también si tiene comentario,
+        dejando ya_sincronizado=False y contándolo como pendiente (falso positivo).
+        pyyaml lo parsea correctamente.
+        """
+        _crear_overview(tmp_path)
+        carpeta = tmp_path / "docs" / "auditoria" / "cambios" / "synced-con-comentario"
+        carpeta.mkdir(parents=True, exist_ok=True)
+        (carpeta / "README.md").write_text(
+            "---\nstructural: true\narch_synced: true  # revisado\n---\n# Cambio\n",
+            encoding="utf-8",
+        )
+        cambios_dir = tmp_path / "docs" / "auditoria" / "cambios"
+
+        resultado = check_arch_freshness(
+            cambios_dir=cambios_dir,
+            arch_overview=tmp_path / "docs" / "arquitectura" / "overview.md",
+        )
+
+        assert resultado["al_dia"] is True
+        assert resultado["pendientes"] == 0
+
+    def test_frontmatter_yaml_invalido_no_explota(self, tmp_path):
+        """GIVEN frontmatter YAML malformado → no debe explotar, se ignora el archivo.
+
+        pyyaml lanza YAMLError; la implementación debe capturarlo y retornar None
+        (el archivo se salta, no cuenta como pendiente).
+        """
+        _crear_overview(tmp_path)
+        carpeta = tmp_path / "docs" / "auditoria" / "cambios" / "malformado"
+        carpeta.mkdir(parents=True, exist_ok=True)
+        (carpeta / "README.md").write_text(
+            "---\n: clave sin nombre: [sin cerrar\n---\n# Cambio\n",
+            encoding="utf-8",
+        )
+        cambios_dir = tmp_path / "docs" / "auditoria" / "cambios"
+
+        # No debe lanzar excepción y no debe contar el archivo malformado
+        resultado = check_arch_freshness(
+            cambios_dir=cambios_dir,
+            arch_overview=tmp_path / "docs" / "arquitectura" / "overview.md",
+        )
+
+        assert resultado["al_dia"] is True
+        assert resultado["pendientes"] == 0

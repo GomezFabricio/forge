@@ -9,13 +9,14 @@ y fueron marcados structural. NO detecta cambios manuales externos.
 Es una señal de piso, no de techo — si dice desactualizada, lo está;
 si dice al día, es "al día hasta donde forge sabe".
 
-Dependencias: solo stdlib (pathlib, re) — sin dependencias extras.
+Dependencias: pathlib (stdlib) + pyyaml (dependencia runtime declarada en pyproject.toml).
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
+
+import yaml
 
 # ---------------------------------------------------------------------------
 # API pública
@@ -73,35 +74,34 @@ def _contar_pendientes(cambios_dir: Path) -> int:
     return pendientes
 
 
-_RE_FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
-_RE_CLAVE_VALOR = re.compile(r"^(\w[\w_]*):\s*(.+)$", re.MULTILINE)
-
-
 def _leer_frontmatter(readme: Path) -> dict | None:
-    """Extrae el frontmatter YAML del README. Retorna None si no hay frontmatter."""
+    """Extrae el frontmatter YAML del README usando yaml.safe_load.
+
+    Retorna None si el archivo no tiene bloque frontmatter (no comienza con
+    '---'), si el YAML es inválido, o si el resultado no es un dict.
+    """
     try:
         texto = readme.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
 
-    match = _RE_FRONTMATTER.match(texto)
-    if not match:
+    if not texto.startswith("---"):
         return None
 
-    bloque = match.group(1)
-    campos: dict = {}
-    for m in _RE_CLAVE_VALOR.finditer(bloque):
-        clave = m.group(1)
-        valor_str = m.group(2).strip().lower()
-        # Parseo simple de bool YAML
-        if valor_str in ("true", "yes"):
-            campos[clave] = True
-        elif valor_str in ("false", "no"):
-            campos[clave] = False
-        else:
-            campos[clave] = valor_str
+    end = texto.find("---", 3)
+    if end == -1:
+        return None
 
-    return campos
+    bloque = texto[3:end]
+    try:
+        resultado = yaml.safe_load(bloque)
+    except yaml.YAMLError:
+        return None
+
+    if not isinstance(resultado, dict):
+        return None
+
+    return resultado
 
 
 def _es_structural_pendiente(frontmatter: dict) -> bool:
