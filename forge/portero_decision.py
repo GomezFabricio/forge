@@ -88,6 +88,13 @@ def decidir_nivel(senales: dict) -> dict:
     if opt_in == "libre":
         return _resultado(NIVEL_LIBRE, "dev declaró modo Libre explícitamente", "alta")
 
+    if opt_in in ("completo", "full"):
+        return _resultado(
+            NIVEL_COMPLETO,
+            "dev declaró modo Completo explícitamente — se usa sin inferencia adicional",
+            "alta",
+        )
+
     if opt_in in ("rapido", "lite"):
         if not arch_ok:
             return _resultado(
