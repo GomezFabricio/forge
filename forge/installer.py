@@ -3,9 +3,12 @@
 Orchestrates:
   1. detect_engram()            — check if engram is already available
   2. install_engram()           — download binary, edit PATH, register MCP (optional)
-  3. install_assets()           — deposit skills, agents into ~/.claude/
-  4. inject_orchestrator_rule() — inject forge block into ~/.claude/CLAUDE.md
-  5. print_report()             — human-readable summary
+  3. detect_codegraph()         — check if codegraph is already available
+  4. install_codegraph()        — download binary, verify SHA256, extract, edit PATH
+  5. register_codegraph_mcp()   — merge mcpServers.codegraph into ~/.claude.json
+  6. install_assets()           — deposit skills, agents into ~/.claude/
+  7. inject_orchestrator_rule() — inject forge block into ~/.claude/CLAUDE.md
+  8. print_report()             — human-readable summary
 
 CodeGraph helpers (PR-A — puros, sin red ni subprocess):
   detect_codegraph()       — detecta binario codegraph en PATH (shutil.which)
@@ -76,6 +79,9 @@ CODEGRAPH_GITHUB_RELEASES_API = (
 CODEGRAPH_BIN_DIR_UNIX = Path.home() / ".codegraph" / "bin"
 CODEGRAPH_BIN_DIR_WIN = Path.home() / ".codegraph" / "bin"
 
+# Path monkeypatcheable para tests — NO usar Path.home() directamente en lógica testeable.
+CODEGRAPH_CLAUDE_JSON: Path = Path.home() / ".claude.json"
+
 # Mapa de tokens (os, arch) → nombre de asset en el release de CodeGraph.
 # IMPORTANTE: tokens DISTINTOS a engram.
 #   OS tokens:   darwin | linux | win32   (engram usa: darwin | linux | windows)
@@ -89,6 +95,40 @@ _CODEGRAPH_ASSET_MAP: dict[tuple[str, str], str] = {
     ("win32",  "x64"):   "codegraph-win32-x64.zip",
     ("win32",  "arm64"): "codegraph-win32-arm64.zip",
 }
+
+# Bloque MCP que se registra en ~/.claude.json bajo mcpServers.codegraph
+_CODEGRAPH_MCP_BLOCK: dict = {
+    "type": "stdio",
+    "command": "codegraph",
+    "args": ["serve", "--mcp"],
+}
+
+# Mapa OS/arch para CodeGraph (tokens distintos a engram — win32/x64 en vez de windows/amd64)
+_CODEGRAPH_OS_MAP: dict[str, str] = {
+    "linux": "linux",
+    "darwin": "darwin",
+    "win32": "win32",
+}
+_CODEGRAPH_ARCH_MAP: dict[str, str] = {
+    "x86_64": "x64",
+    "amd64":  "x64",
+    "arm64":  "arm64",
+    "aarch64": "arm64",
+}
+
+PROMPT_CODEGRAPH_TEXT = """\
+CodeGraph no detectado.
+
+Forge puede instalar CodeGraph automáticamente para habilitar el análisis
+estructural del codebase en tus sesiones de Claude Code.
+
+Si confirmás, voy a:
+  1. Descargar el binario oficial de CodeGraph desde GitHub Releases.
+  2. Verificar su integridad SHA256.
+  3. Instalarlo en ~/.codegraph/bin/.
+  4. Registrar el MCP en ~/.claude.json para que Claude Code lo levante.
+
+¿Lo instalo ahora? [Y/n]: """
 
 PROMPT_TEXT = """\
 Engram no detectado.
@@ -347,6 +387,230 @@ def _verify_sha256(file_path: Path, sha256sums_content: str, asset_name: str) ->
         return False, f"hash mismatch: expected {expected_hash} got {actual_hash}"
 
     return True, "ok"
+
+
+# =============================================================================
+# === CodeGraph install (PR-B) ===
+# =============================================================================
+
+
+def _detect_codegraph_platform() -> tuple[str, str]:
+    """Detecta OS y arch con los tokens propios de CodeGraph (win32/x64, no windows/amd64).
+
+    Returns:
+        (os_token, arch_token) donde los tokens coinciden con el naming de releases de CodeGraph.
+
+    Raises:
+        SystemExit(EXIT_PLATFORM_UNSUPPORTED): si la plataforma no está soportada.
+    """
+    plat = sys.platform           # 'linux', 'darwin', 'win32'
+    mach = platform.machine().lower()
+    if plat not in _CODEGRAPH_OS_MAP or mach not in _CODEGRAPH_ARCH_MAP:
+        raise SystemExit(EXIT_PLATFORM_UNSUPPORTED)
+    return _CODEGRAPH_OS_MAP[plat], _CODEGRAPH_ARCH_MAP[mach]
+
+
+def install_codegraph() -> tuple[bool, str]:
+    """Descarga, verifica e instala el binario de CodeGraph.
+
+    Nunca lanza excepciones — devuelve (False, mensaje de error) ante cualquier fallo.
+
+    Flujo:
+      1. _detect_codegraph_platform() → (os_tok, arch_tok)
+      2. GET CODEGRAPH_GITHUB_RELEASES_API → tag_name + assets
+      3. Encontrar asset y SHA256SUMS por nombre
+      4. Descargar asset a tmpfile con _download_binary()
+      5. GET SHA256SUMS → verificar con _verify_sha256()
+      6. Extraer binario (tar.gz en unix, zip en win32) — flatten a bin_dir
+      7. chmod +x en unix, _xattr_cleanup_darwin en darwin
+      8. Editar PATH (_edit_path_unix/_edit_path_windows)
+
+    Returns:
+        (True, mensaje de éxito con ruta del binario)
+        (False, mensaje de error descriptivo)
+    """
+    import tarfile
+    import tempfile
+    import zipfile
+
+    try:
+        os_tok, arch_tok = _detect_codegraph_platform()
+    except SystemExit:
+        return False, f"Plataforma no soportada para CodeGraph: {sys.platform}/{platform.machine()}"
+
+    try:
+        asset_name = _codegraph_asset_name(os_tok, arch_tok)
+    except ValueError as exc:
+        return False, str(exc)
+
+    # Obtener metadata del release
+    try:
+        with urllib.request.urlopen(CODEGRAPH_GITHUB_RELEASES_API, timeout=15) as resp:
+            release = json.loads(resp.read())
+    except (urllib.error.URLError, OSError) as exc:
+        return False, f"No se pudo obtener la release de CodeGraph: {exc}"
+
+    assets = release.get("assets", [])
+
+    # Buscar el asset del binario
+    asset = next((a for a in assets if a["name"] == asset_name), None)
+    if asset is None:
+        available = [a["name"] for a in assets]
+        return False, (
+            f"Asset no encontrado para {os_tok}/{arch_tok}: {asset_name}. "
+            f"Assets disponibles: {available}"
+        )
+
+    # Buscar SHA256SUMS
+    sha256sums_asset = next((a for a in assets if a["name"] == "SHA256SUMS"), None)
+
+    # Elegir directorio destino
+    bin_dir = CODEGRAPH_BIN_DIR_WIN if os_tok == "win32" else CODEGRAPH_BIN_DIR_UNIX
+    ext = ".zip" if os_tok == "win32" else ".tar.gz"
+    bin_name = "codegraph.exe" if os_tok == "win32" else "codegraph"
+    binary_dest = bin_dir / bin_name
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp_path_str = tmp.name
+
+        _download_binary(asset["browser_download_url"], Path(tmp_path_str))
+
+        # Verificar SHA256 si está disponible
+        if sha256sums_asset is not None:
+            try:
+                with urllib.request.urlopen(sha256sums_asset["browser_download_url"], timeout=15) as resp:
+                    sha256sums_content = resp.read().decode("utf-8")
+                ok, verify_msg = _verify_sha256(Path(tmp_path_str), sha256sums_content, asset_name)
+                if not ok:
+                    os.unlink(tmp_path_str)
+                    return False, f"Verificación SHA256 fallida: {verify_msg}"
+            except (urllib.error.URLError, OSError):
+                # Si no se puede descargar SHA256SUMS, continuar sin verificar (advertencia)
+                pass
+
+        binary_dest.parent.mkdir(parents=True, exist_ok=True)
+
+        if ext == ".tar.gz":
+            with tarfile.open(tmp_path_str, "r:gz") as tf:
+                # Encontrar el binario dentro del archivo (puede estar en subcarpeta)
+                member = next(
+                    (m for m in tf.getmembers()
+                     if m.name.endswith("codegraph") or m.name.endswith("codegraph.exe")),
+                    None,
+                )
+                if member is None:
+                    os.unlink(tmp_path_str)
+                    return False, "Binario 'codegraph' no encontrado dentro del tarball."
+                member.name = bin_name  # flatten: eliminar subcarpetas del path
+                tf.extract(member, path=str(binary_dest.parent))
+        else:
+            with zipfile.ZipFile(tmp_path_str, "r") as zf:
+                member = next(
+                    (n for n in zf.namelist()
+                     if n.endswith("codegraph") or n.endswith("codegraph.exe")),
+                    None,
+                )
+                if member is None:
+                    os.unlink(tmp_path_str)
+                    return False, "Binario 'codegraph' no encontrado dentro del zip."
+                with zf.open(member) as src, open(binary_dest, "wb") as dst:
+                    dst.write(src.read())
+
+        os.unlink(tmp_path_str)
+
+    except (urllib.error.URLError, OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        return False, f"Error descargando/extrayendo CodeGraph: {exc}"
+
+    # chmod +x en unix
+    if os_tok != "win32":
+        os.chmod(binary_dest, 0o755)
+
+    # macOS quarantine cleanup (best-effort)
+    _xattr_cleanup_darwin(binary_dest)
+
+    # Editar PATH
+    if os_tok == "win32":
+        _edit_path_windows(bin_dir)
+    else:
+        _edit_path_unix(bin_dir)
+
+    return True, f"codegraph instalado en {binary_dest}"
+
+
+def register_codegraph_mcp() -> str:
+    """Registra el bloque MCP de CodeGraph en ~/.claude.json con merge idempotente.
+
+    Lee el JSON existente (o {} si ausente/corrupto), verifica si mcpServers.codegraph
+    ya existe (idempotencia), crea backup .forge-bak antes de escribir y hace merge
+    preservando el resto de la configuración.
+
+    Returns:
+        'present'  — el bloque ya existía y es válido, no se modificó nada
+        'created'  — el archivo no existía o estaba vacío, se creó con el bloque
+        'merged'   — el archivo existía con otra config, se hizo merge
+    """
+    claude_json_path = CODEGRAPH_CLAUDE_JSON
+
+    # Leer configuración existente
+    existing_content: str | None = None
+    config: dict = {}
+    if claude_json_path.exists():
+        try:
+            existing_content = claude_json_path.read_text(encoding="utf-8")
+            config = json.loads(existing_content) or {}
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError):
+            config = {}
+
+    # Idempotencia: si el bloque ya existe y es válido, no tocar nada
+    mcp_servers = config.get("mcpServers", {})
+    if isinstance(mcp_servers, dict) and "codegraph" in mcp_servers:
+        return "present"
+
+    # Crear backup antes de escribir
+    if existing_content is not None:
+        backup_path = claude_json_path.with_suffix(".json.forge-bak")
+        with contextlib.suppress(OSError):
+            backup_path.write_text(existing_content, encoding="utf-8")
+
+    # Merge: agregar mcpServers.codegraph preservando el resto
+    if "mcpServers" not in config or not isinstance(config.get("mcpServers"), dict):
+        config["mcpServers"] = {}
+    config["mcpServers"]["codegraph"] = _CODEGRAPH_MCP_BLOCK
+
+    # Determinar status antes de escribir
+    was_empty = existing_content is None or existing_content.strip() == ""
+
+    claude_json_path.parent.mkdir(parents=True, exist_ok=True)
+    claude_json_path.write_text(
+        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    return "created" if was_empty else "merged"
+
+
+def prompt_codegraph_yn() -> str:
+    """Muestra el prompt de instalación de CodeGraph y lee la respuesta y/N.
+
+    Default: instalar (Y). En entorno no-interactivo (stdin no es tty) retorna 'y'
+    sin mostrar prompt ni llamar a input(), para no colgar en CI.
+
+    Returns:
+        'y' — instalar (incluyendo default por enter vacío y entornos no-interactivos)
+        'n' — no instalar
+    """
+    # Entorno no-interactivo/CI: no colgar, instalar por defecto
+    if not sys.stdin.isatty():
+        return "y"
+
+    response = input(PROMPT_CODEGRAPH_TEXT).strip().lower()
+    # Default Y: vacío o afirmativo
+    if response in {"", "y", "yes"}:
+        return "y"
+    return "n"
 
 
 # =============================================================================
@@ -806,6 +1070,7 @@ def print_report(report: dict) -> None:
     """
     engram_info = report.get("engram", {})
     assets = report.get("assets", {})
+    codegraph_info = report.get("codegraph", {})
 
     print("\nforge install — resumen\n")
 
@@ -819,6 +1084,23 @@ def print_report(report: dict) -> None:
         print(f"  engram: instalado en {engram_info['installed']}")
     else:
         print("  engram: no detectado (salteado por flag)")
+
+    # Sección CodeGraph
+    if codegraph_info:
+        cg_status = codegraph_info.get("status", "")
+        cg_msg = codegraph_info.get("msg", "")
+        if cg_status == "already_present":
+            print(f"  codegraph: ya instalado ({cg_msg})")
+        elif cg_status == "installed":
+            print(f"  codegraph: instalado — {cg_msg}")
+        elif cg_status == "skipped":
+            print(f"  codegraph: omitido ({cg_msg})")
+        elif cg_status == "failed":
+            print(f"  codegraph: fallo en instalación — {cg_msg}")
+        elif cg_status == "mcp_only":
+            print(f"  codegraph: MCP registrado — {cg_msg}")
+        else:
+            print(f"  codegraph: {cg_msg}")
 
     print(f"  skills depositadas: {assets.get('skills_deposited', 0)}")
     print(f"  shared (forge-shared): {assets.get('shared_deposited', 0)}")
@@ -841,24 +1123,21 @@ def run(args) -> int:  # args: argparse.Namespace
 
     Flow:
       1. detected, info = detect_engram()
-      2. if not detected:
-           if args.install_engram (wins over --skip):
-               ok, msg = install_engram()
-               if not ok: return EXIT_ENGRAM_INSTALL_FAILED
-           elif args.skip_engram_check:
-               proceed without engram install
-           elif prompt_user_yn() == 'y':
-               ok, msg = install_engram()
-               if not ok: return EXIT_ENGRAM_INSTALL_FAILED
-           else:
-               print abort message; return EXIT_ABORTED
-      3. manifest = install_assets()
-      4. inject_orchestrator_rule()
-      5. print_report(...)
-      6. return EXIT_OK
+      2. if not detected: install/skip/prompt engram
+      3. Paso CodeGraph (try/except amplio — fallo NO aborta ni cambia exit code):
+         - detect_codegraph() → si ya está, reportar y registrar MCP
+         - --skip-codegraph → omitir
+         - --install-codegraph → instalar sin prompt
+         - else → prompt_codegraph_yn()
+      4. manifest = install_assets()
+      5. inject_orchestrator_rule()
+      6. print_report(...)
+      7. return EXIT_OK
 
     REQ-FLAGS-02: --install-engram wins over --skip-engram-check.
     REQ-FLAGS-03: if detected + --install-engram → log and skip reinstall.
+    R-INST-04: --skip-codegraph omite instalación; --install-codegraph fuerza sin prompt.
+    R-INST-05: fallo de CodeGraph → warning en reporte, NO cambia exit code.
     """
     detected, info = detect_engram()
 
@@ -892,8 +1171,47 @@ def run(args) -> int:  # args: argparse.Namespace
                 return EXIT_ENGRAM_INSTALL_FAILED
             info["installed"] = msg
 
+    # Paso CodeGraph — try/except amplio: fallo no aborta ni cambia exit code (R-INST-05)
+    codegraph_report: dict = {}
+    try:
+        if getattr(args, "skip_codegraph", False):
+            codegraph_report = {"status": "skipped", "msg": "omitido por --skip-codegraph"}
+        else:
+            cg_detected, cg_info = detect_codegraph()
+
+            if cg_detected:
+                # Ya instalado — solo verificar/registrar MCP
+                mcp_status = register_codegraph_mcp()
+                which_path = cg_info.get("which", "")
+                codegraph_report = {"status": "already_present", "msg": which_path}
+                if mcp_status == "created" or mcp_status == "merged":
+                    codegraph_report["mcp"] = mcp_status
+
+            else:
+                # No instalado — determinar si instalar
+                do_install: bool
+                if getattr(args, "install_codegraph", False):
+                    # --install-codegraph: sin prompt (CI-safe)
+                    do_install = True
+                else:
+                    answer_cg = prompt_codegraph_yn()
+                    do_install = answer_cg == "y"
+
+                if do_install:
+                    ok_cg, msg_cg = install_codegraph()
+                    if ok_cg:
+                        mcp_status = register_codegraph_mcp()
+                        codegraph_report = {"status": "installed", "msg": msg_cg, "mcp": mcp_status}
+                    else:
+                        codegraph_report = {"status": "failed", "msg": msg_cg}
+                else:
+                    codegraph_report = {"status": "skipped", "msg": "omitido por elección del usuario"}
+
+    except Exception as exc:  # noqa: BLE001 — defensa en profundidad R-INST-05
+        codegraph_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
+
     # Deposit skills and agents
     manifest = install_assets()
     inject_orchestrator_rule()
-    print_report({"engram": info, "assets": manifest})
+    print_report({"engram": info, "assets": manifest, "codegraph": codegraph_report})
     return EXIT_OK
