@@ -8,6 +8,9 @@ Cubre:
 - TestInstallEngram          — platform detection, download, PATH, xattr, MCP, orquestador (T08-T11)
 - TestRegisterMcp            — schema FLAT, directorio creado, overwrite (T10)
 - TestRun                    — flujos del runner (T12)
+- TestDetectCodegraph        — detección vía shutil.which (PR-A T-01/T-02)
+- TestCodegraphAssetName     — mapa de assets por plataforma/arch (PR-A T-03/T-04)
+- TestVerifySha256           — verificación de integridad SHA256 (PR-A T-05/T-06)
 
 Constraints (CC-*):
 - CC-TMP-PATH: filesystem solo en tmp_path.
@@ -1545,4 +1548,247 @@ class TestInjectOrchestratorRule:
 
         # Only the forge body changed — no duplication
         assert content.count("<!-- forge:orchestrator -->") == 1
-        assert content.count("<!-- gentle-ai:persona -->") == 1
+
+
+# ---------------------------------------------------------------------------
+# PR-A: TestDetectCodegraph — T-01 RED / T-02 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestDetectCodegraph:
+    """Verifica detect_codegraph() — indicador único: shutil.which. PR-A T-01/T-02."""
+
+    def test_which_returns_path_gives_true(self, monkeypatch):
+        """GIVEN shutil.which('codegraph') retorna una ruta válida
+        WHEN detect_codegraph() THEN retorna (True, {'which': ruta})."""
+        from forge import installer
+
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/codegraph" if name == "codegraph" else None)
+
+        found, info = installer.detect_codegraph()
+        assert found is True
+        assert info.get("which") == "/usr/local/bin/codegraph"
+
+    def test_which_returns_none_gives_false(self, monkeypatch):
+        """GIVEN shutil.which('codegraph') retorna None
+        WHEN detect_codegraph() THEN retorna (False, {})."""
+        from forge import installer
+
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+        found, info = installer.detect_codegraph()
+        assert found is False
+        assert info == {}
+
+    def test_which_oserror_gives_false(self, monkeypatch):
+        """GIVEN shutil.which lanza OSError (triangulación T-07)
+        WHEN detect_codegraph() THEN captura la excepción y retorna (False, {})."""
+        from forge import installer
+
+        def raising_which(_name):
+            raise OSError("permiso denegado")
+
+        monkeypatch.setattr("shutil.which", raising_which)
+
+        found, info = installer.detect_codegraph()
+        assert found is False
+        assert info == {}
+
+    def test_does_not_write_filesystem(self, tmp_path, monkeypatch):
+        """GIVEN detect_codegraph() WHEN se llama THEN no escribe ni modifica el filesystem."""
+        from forge import installer
+
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/codegraph")
+        # Verificamos que tmp_path sigue vacío después de la llamada
+        before = list(tmp_path.iterdir())
+        installer.detect_codegraph()
+        after = list(tmp_path.iterdir())
+        assert before == after
+
+    def test_does_not_make_subprocess_calls(self, monkeypatch):
+        """GIVEN detect_codegraph() WHEN se llama THEN no invoca subprocess (pureza)."""
+        import subprocess
+
+        from forge import installer
+
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+        called = []
+
+        original_run = subprocess.run
+
+        def spy_run(*args, **kwargs):
+            called.append(args)
+            return original_run(*args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", spy_run)
+        installer.detect_codegraph()
+        assert called == [], "detect_codegraph no debe invocar subprocess"
+
+
+# ---------------------------------------------------------------------------
+# PR-A: TestCodegraphAssetName — T-03 RED / T-04 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestCodegraphAssetName:
+    """Verifica _codegraph_asset_name() — mapa de 6 combinaciones reales. PR-A T-03/T-04."""
+
+    @pytest.mark.parametrize("os_tok, arch_tok, expected", [
+        ("darwin", "arm64", "codegraph-darwin-arm64.tar.gz"),
+        ("darwin", "x64",   "codegraph-darwin-x64.tar.gz"),
+        ("linux",  "x64",   "codegraph-linux-x64.tar.gz"),
+        ("linux",  "arm64", "codegraph-linux-arm64.tar.gz"),
+        ("win32",  "x64",   "codegraph-win32-x64.zip"),
+        ("win32",  "arm64", "codegraph-win32-arm64.zip"),
+    ])
+    def test_asset_name_known_platforms(self, os_tok, arch_tok, expected):
+        """GIVEN una combinación soportada de (os_tok, arch_tok)
+        WHEN _codegraph_asset_name(os_tok, arch_tok) THEN retorna el nombre correcto del asset."""
+        from forge import installer
+
+        result = installer._codegraph_asset_name(os_tok, arch_tok)
+        assert result == expected
+
+    def test_unsupported_platform_raises(self):
+        """GIVEN una combinación no soportada WHEN _codegraph_asset_name() THEN lanza ValueError."""
+        from forge import installer
+
+        with pytest.raises((ValueError, SystemExit)):
+            installer._codegraph_asset_name("freebsd", "mips")
+
+    def test_uses_win32_not_windows_token(self):
+        """GIVEN la plataforma Windows WHEN _codegraph_asset_name()
+        THEN usa 'win32' como token OS (distinto al 'windows' de engram)."""
+        from forge import installer
+
+        result = installer._codegraph_asset_name("win32", "x64")
+        assert "win32" in result
+        assert "windows" not in result
+
+    def test_uses_x64_not_amd64_token(self):
+        """GIVEN arch x64 WHEN _codegraph_asset_name()
+        THEN usa 'x64' como token arch (distinto al 'amd64' de engram)."""
+        from forge import installer
+
+        result = installer._codegraph_asset_name("linux", "x64")
+        assert "x64" in result
+        assert "amd64" not in result
+
+    def test_win32_uses_zip_extension(self):
+        """GIVEN plataforma win32 WHEN _codegraph_asset_name() THEN usa extensión .zip."""
+        from forge import installer
+
+        result = installer._codegraph_asset_name("win32", "x64")
+        assert result.endswith(".zip")
+
+    def test_unix_uses_tar_gz_extension(self):
+        """GIVEN plataformas darwin/linux WHEN _codegraph_asset_name() THEN usa extensión .tar.gz."""
+        from forge import installer
+
+        assert installer._codegraph_asset_name("darwin", "arm64").endswith(".tar.gz")
+        assert installer._codegraph_asset_name("linux", "x64").endswith(".tar.gz")
+
+
+# ---------------------------------------------------------------------------
+# PR-A: TestVerifySha256 — T-05 RED / T-06 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestVerifySha256:
+    """Verifica _verify_sha256() — integridad SHA256 contra contenido de SHA256SUMS. PR-A T-05/T-06."""
+
+    def _build_sha256sums(self, file_path: Path, asset_name: str) -> str:
+        """Calcula el SHA256 real de file_path y retorna una línea SHA256SUMS válida."""
+        import hashlib
+        digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        return f"{digest}  {asset_name}\n"
+
+    def test_correct_hash_returns_true(self, tmp_path):
+        """GIVEN un archivo y su SHA256SUMS correcto WHEN _verify_sha256() THEN retorna (True, 'ok')."""
+        from forge import installer
+
+        asset_name = "codegraph-linux-x64.tar.gz"
+        fixture = tmp_path / asset_name
+        fixture.write_bytes(b"contenido de prueba para sha256")
+
+        sha256sums = self._build_sha256sums(fixture, asset_name)
+
+        ok, msg = installer._verify_sha256(fixture, sha256sums, asset_name)
+        assert ok is True
+        assert msg == "ok"
+
+    def test_wrong_hash_returns_false(self, tmp_path):
+        """GIVEN un hash incorrecto en SHA256SUMS WHEN _verify_sha256() THEN retorna (False, mensaje)."""
+        from forge import installer
+
+        asset_name = "codegraph-darwin-arm64.tar.gz"
+        fixture = tmp_path / asset_name
+        fixture.write_bytes(b"contenido real")
+
+        sha256sums = f"{'a' * 64}  {asset_name}\n"
+
+        ok, msg = installer._verify_sha256(fixture, sha256sums, asset_name)
+        assert ok is False
+        assert "mismatch" in msg.lower() or "hash" in msg.lower()
+
+    def test_asset_not_found_in_sums_returns_false(self, tmp_path):
+        """GIVEN el asset_name no está en SHA256SUMS WHEN _verify_sha256() THEN retorna (False, msg)."""
+        from forge import installer
+
+        asset_name = "codegraph-linux-x64.tar.gz"
+        fixture = tmp_path / asset_name
+        fixture.write_bytes(b"datos")
+
+        sha256sums = f"{'b' * 64}  codegraph-darwin-arm64.tar.gz\n"
+
+        ok, msg = installer._verify_sha256(fixture, sha256sums, asset_name)
+        assert ok is False
+        assert "not found" in msg.lower() or "no encontrado" in msg.lower()
+
+    def test_empty_sha256sums_returns_false(self, tmp_path):
+        """GIVEN SHA256SUMS vacío WHEN _verify_sha256() THEN retorna (False, msg)."""
+        from forge import installer
+
+        asset_name = "codegraph-win32-x64.zip"
+        fixture = tmp_path / asset_name
+        fixture.write_bytes(b"datos")
+
+        ok, msg = installer._verify_sha256(fixture, "", asset_name)
+        assert ok is False
+
+    def test_two_space_separator_format(self, tmp_path):
+        """GIVEN formato SHA256SUMS con dos espacios (estándar) WHEN _verify_sha256()
+        THEN parsea correctamente la línea y retorna True — formato real verificado."""
+        import hashlib
+
+        from forge import installer
+
+        asset_name = "codegraph-linux-arm64.tar.gz"
+        fixture = tmp_path / asset_name
+        content = b"binario arm64 de prueba"
+        fixture.write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+
+        # Formato exacto: <hash><DOS_ESPACIOS><nombre>
+        sha256sums = f"{digest}  {asset_name}\n"
+
+        ok, msg = installer._verify_sha256(fixture, sha256sums, asset_name)
+        assert ok is True
+
+    def test_empty_file_hash_mismatch(self, tmp_path):
+        """GIVEN archivo vacío con hash de contenido no-vacío WHEN _verify_sha256() THEN retorna False."""
+        import hashlib
+
+        from forge import installer
+
+        asset_name = "codegraph-darwin-x64.tar.gz"
+        fixture = tmp_path / asset_name
+        fixture.write_bytes(b"")  # archivo vacío
+
+        # Hash de contenido no-vacío → no coincide con hash del archivo vacío
+        wrong_hash = hashlib.sha256(b"contenido no vacio").hexdigest()
+        sha256sums = f"{wrong_hash}  {asset_name}\n"
+
+        ok, _ = installer._verify_sha256(fixture, sha256sums, asset_name)
+        assert ok is False

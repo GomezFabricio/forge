@@ -7,6 +7,11 @@ Orchestrates:
   4. inject_orchestrator_rule() — inject forge block into ~/.claude/CLAUDE.md
   5. print_report()             — human-readable summary
 
+CodeGraph helpers (PR-A — puros, sin red ni subprocess):
+  detect_codegraph()       — detecta binario codegraph en PATH (shutil.which)
+  _codegraph_asset_name()  — mapea (os, arch) → nombre del asset de release
+  _verify_sha256()         — verifica integridad SHA256 del binario descargado
+
 Exit codes:
   EXIT_OK                  = 0   — success
   EXIT_ABORTED             = 10  — user declined engram install prompt
@@ -20,6 +25,7 @@ Usage:
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import platform
@@ -58,6 +64,31 @@ GITHUB_RELEASES_API = (
 # Naming: engram_{version}_{os}_{arch}[.tar.gz|.zip]
 # OS tokens: linux, darwin, windows
 # Arch tokens: amd64, arm64
+
+# =============================================================================
+# === Constantes CodeGraph ===
+# =============================================================================
+
+CODEGRAPH_REPO = "colbymchenry/codegraph"
+CODEGRAPH_GITHUB_RELEASES_API = (
+    f"https://api.github.com/repos/{CODEGRAPH_REPO}/releases/latest"
+)
+CODEGRAPH_BIN_DIR_UNIX = Path.home() / ".codegraph" / "bin"
+CODEGRAPH_BIN_DIR_WIN = Path.home() / ".codegraph" / "bin"
+
+# Mapa de tokens (os, arch) → nombre de asset en el release de CodeGraph.
+# IMPORTANTE: tokens DISTINTOS a engram.
+#   OS tokens:   darwin | linux | win32   (engram usa: darwin | linux | windows)
+#   Arch tokens: arm64 | x64              (engram usa: arm64 | amd64)
+#   Extensión:   .zip en win32, .tar.gz en darwin/linux
+_CODEGRAPH_ASSET_MAP: dict[tuple[str, str], str] = {
+    ("darwin", "arm64"): "codegraph-darwin-arm64.tar.gz",
+    ("darwin", "x64"):   "codegraph-darwin-x64.tar.gz",
+    ("linux",  "x64"):   "codegraph-linux-x64.tar.gz",
+    ("linux",  "arm64"): "codegraph-linux-arm64.tar.gz",
+    ("win32",  "x64"):   "codegraph-win32-x64.zip",
+    ("win32",  "arm64"): "codegraph-win32-arm64.zip",
+}
 
 PROMPT_TEXT = """\
 Engram no detectado.
@@ -222,6 +253,100 @@ def detect_engram() -> tuple[bool, dict]:
         pass
 
     return False, info
+
+
+# =============================================================================
+# === CodeGraph helpers (PR-A — puros, sin red ni subprocess) ===
+# =============================================================================
+
+
+def detect_codegraph() -> tuple[bool, dict]:
+    """Detecta si el binario codegraph está disponible en PATH.
+
+    Usa únicamente shutil.which('codegraph') como indicador.
+    Función pura: no escribe en el filesystem, no hace llamadas de red,
+    no invoca subprocess.
+
+    Returns:
+        (True, {'which': ruta})  — codegraph encontrado en PATH
+        (False, {})              — codegraph no encontrado o error de acceso
+    """
+    try:
+        found = shutil.which("codegraph")
+    except OSError:
+        return False, {}
+
+    if found:
+        return True, {"which": found}
+    return False, {}
+
+
+def _codegraph_asset_name(os_tok: str, arch_tok: str) -> str:
+    """Retorna el nombre del asset de release de CodeGraph para la plataforma dada.
+
+    Tokens OS válidos:   darwin | linux | win32
+    Tokens arch válidos: arm64 | x64
+
+    IMPORTANTE: estos tokens son distintos a los de engram
+    (engram usa 'windows'/'amd64'; codegraph usa 'win32'/'x64').
+
+    Args:
+        os_tok:   Token de sistema operativo (darwin, linux, win32).
+        arch_tok: Token de arquitectura (arm64, x64).
+
+    Returns:
+        Nombre del archivo de asset (ej: 'codegraph-linux-x64.tar.gz').
+
+    Raises:
+        ValueError: si la combinación (os_tok, arch_tok) no está soportada.
+    """
+    key = (os_tok, arch_tok)
+    asset = _CODEGRAPH_ASSET_MAP.get(key)
+    if asset is None:
+        supported = ", ".join(f"{o}/{a}" for o, a in _CODEGRAPH_ASSET_MAP)
+        raise ValueError(
+            f"Plataforma no soportada para CodeGraph: {os_tok}/{arch_tok}. "
+            f"Combinaciones soportadas: {supported}"
+        )
+    return asset
+
+
+def _verify_sha256(file_path: Path, sha256sums_content: str, asset_name: str) -> tuple[bool, str]:
+    """Verifica la integridad SHA256 de un archivo descargado.
+
+    Formato esperado de sha256sums_content: cada línea es
+        <hash_hex><DOS_ESPACIOS><nombre_archivo>
+    (formato estándar de sha256sum; dos espacios entre hash y nombre).
+
+    Args:
+        file_path:          Ruta al archivo descargado a verificar.
+        sha256sums_content: Contenido completo del archivo SHA256SUMS del release.
+        asset_name:         Nombre del asset a buscar en SHA256SUMS.
+
+    Returns:
+        (True, 'ok')                              — hash coincide
+        (False, 'not found: <asset_name>')        — asset no encontrado en SHA256SUMS
+        (False, 'hash mismatch: expected X got Y') — hash no coincide
+    """
+    # Buscar la línea del asset en SHA256SUMS
+    expected_hash: str | None = None
+    for line in sha256sums_content.splitlines():
+        # Formato: "<hash>  <nombre>" (dos espacios)
+        parts = line.split("  ", 1)
+        if len(parts) == 2 and parts[1].strip() == asset_name:
+            expected_hash = parts[0].strip()
+            break
+
+    if expected_hash is None:
+        return False, f"not found: {asset_name}"
+
+    # Calcular el hash real del archivo
+    actual_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+
+    if actual_hash != expected_hash:
+        return False, f"hash mismatch: expected {expected_hash} got {actual_hash}"
+
+    return True, "ok"
 
 
 # =============================================================================
