@@ -181,11 +181,19 @@ El contexto de un cambio puede venir de tres fuentes en orden de prioridad: doc 
 **Branch 2 — overview.md existe (sin `--from`)**
 - Llamar `bootstrap.read_overview(root)` para obtener el contenido.
 - Usar el overview como contexto PRIMARIO.
-- Consultar CodeGraph como contexto SECUNDARIO si está disponible.
+- Consultar CodeGraph como contexto SECUNDARIO si está disponible:
+  - Tool de entrada: `mcp__codegraph__codegraph_explore` (exploración semántica del cambio descrito).
+  - Para identificar entidades de dominio mencionadas: `mcp__codegraph__codegraph_search`.
+  - Para entender dependencias entre módulos relevantes: `mcp__codegraph__codegraph_impact` + `mcp__codegraph__codegraph_status`.
 - En el README, referenciar el overview como fuente arquitectónica.
 
 **Branch 3a — sin overview pero hay código (`stacks != []`)**
 - CodeGraph como contexto único.
+- Invocar en este orden:
+  1. `mcp__codegraph__codegraph_explore` — exploración semántica del cambio descrito.
+  2. `mcp__codegraph__codegraph_search` — buscar símbolos por nombre si la descripción menciona entidades concretas.
+  3. `mcp__codegraph__codegraph_impact` — blast radius del área potencialmente afectada.
+  4. `mcp__codegraph__codegraph_status` — panorama general del índice si el contexto es desconocido.
 - Comportamiento equivalente al `/fg-plan` clásico antes de C.1.
 
 **Branch 3b — sin overview, sin código, y vision NO declinada**
@@ -237,6 +245,7 @@ Imprimir:
 - Resolver el modo de ejecución del ciclo en el paso 0 — preguntar solo si no hay cache de sesión.
 - Inferir tipo y nombre del lenguaje natural del dev.
 - Resolver contexto según prioridad: `--from` > `overview.md` > CodeGraph.
+- Consultar CodeGraph usando los tool names reales: `mcp__codegraph__codegraph_explore` (entrada por defecto), `mcp__codegraph__codegraph_search`, `mcp__codegraph__codegraph_impact`, `mcp__codegraph__codegraph_status`. No usar narrativa vaga como "consultar CodeGraph" sin el nombre del tool.
 - Preguntar sobre el problema cuando algo no quede claro.
 - Escribir el `README.md` en español.
 - Usar `YYYY-MM` (año-mes) en el nombre de la carpeta, NO `YYYY-MM-DD`.

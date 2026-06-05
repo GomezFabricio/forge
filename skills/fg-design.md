@@ -28,8 +28,13 @@ Después de `/fg-plan`, cuando el dev quiere definir cómo se va a implementar e
 Con la información del `README.md`, consultar el índice de CodeGraph para responder:
 
 - ¿Qué archivos del codebase contienen lógica relacionada con el cambio?
+  → `mcp__codegraph__codegraph_explore` (entrada por defecto — exploración semántica) + `mcp__codegraph__codegraph_search` (símbolos por nombre).
 - ¿Hay clases, funciones o módulos que claramente se tocan?
-- ¿Hay archivos que el cambio probablemente NO toca pero el dev podría pensar que sí?
+  → `mcp__codegraph__codegraph_node` (detalle de un símbolo concreto) + `mcp__codegraph__codegraph_files` (ubicación en la estructura del proyecto).
+- ¿Hay archivos que el cambio probablemente NO toca aunque parezcan relacionados por nombre?
+  → contrastar con `mcp__codegraph__codegraph_callers` / `mcp__codegraph__codegraph_callees` — si nadie llama a un símbolo, probablemente no está afectado.
+- Para QA — ¿qué archivos de test se ven impactados por los cambios planeados?
+  → `codegraph affected <files> -j` vía CLI (útil para alimentar la sección de impacto de `diseño.md` y el plan de QA).
 
 La idea es **no adivinar** archivos afectados con grep textual; usar el grafo estructural que CodeGraph ya indexó.
 
@@ -164,7 +169,7 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 ### Siempre
 
 - Leer el `README.md` del cambio antes de empezar.
-- Consultar CodeGraph para identificar archivos afectados reales.
+- Consultar CodeGraph para identificar archivos afectados reales. Usar los tool names reales: `mcp__codegraph__codegraph_explore`, `mcp__codegraph__codegraph_search`, `mcp__codegraph__codegraph_node`, `mcp__codegraph__codegraph_files`, `mcp__codegraph__codegraph_callers`, `mcp__codegraph__codegraph_callees`. No usar instrucciones narrativas sin el nombre del tool.
 - Si el proyecto es legacy, ejecutar el paso 2b (análisis de impacto) antes de definir el enfoque técnico.
 - Crear los tres archivos (`diseño.md`, `tareas.md`, `decisiones.md`) desde los templates correspondientes.
 - Escribir todos los artefactos en español.

@@ -21,13 +21,16 @@ NO arregles. Solo reportá.
 
 ### 1. Mapear dependencias ocultas con CodeGraph
 
-Antes de evaluar el cambio, consultar CodeGraph para responder:
+Antes de evaluar el cambio, consultar CodeGraph usando los tools reales:
 
 - ¿Qué módulos del proyecto consumen las funciones/clases que el cambio modifica?
+  → `mcp__codegraph__codegraph_callers` (consumidores directos por símbolo) + `mcp__codegraph__codegraph_impact` (blast radius transitivo, con parámetro `depth`).
 - ¿Hay scripts externos, jobs programados, o procesos que dependen de los outputs actuales?
+  → `mcp__codegraph__codegraph_callers` sobre los símbolos de salida + `mcp__codegraph__codegraph_explore` para detectar acoplamientos semánticos no obvios.
 - ¿Hay componentes del frontend que asumen el shape actual de la respuesta del backend?
+  → `mcp__codegraph__codegraph_callees` / `mcp__codegraph__codegraph_callers` cruzando el boundary de módulos + `mcp__codegraph__codegraph_node` para inspeccionar contratos de interfaz.
 
-Cualquier consumidor identificado que el `diseño.md` NO menciona en Archivos afectados → flagear como **dependencia oculta**.
+**Regla de dependencia oculta**: cualquier consumidor identificado por `_callers` o `_impact` que el `diseño.md` NO menciona en "Archivos afectados" → flagear como **dependencia oculta**.
 
 ### 2. Detectar acoplamientos por convención (HIGH)
 
@@ -97,7 +100,7 @@ Sugerir la estrategia, no implementarla.
 
 ### Siempre
 
-- Usar CodeGraph para mapear consumidores antes de evaluar.
+- Usar CodeGraph para mapear consumidores antes de evaluar, invocando los tools reales: `mcp__codegraph__codegraph_callers`, `mcp__codegraph__codegraph_impact`, `mcp__codegraph__codegraph_explore`. No usar instrucciones narrativas sin el nombre del tool.
 - Severidad explícita.
 - Identificar el motor de BD y versión específica antes de aplicar reglas de gotchas.
 - Sugerir estrategia de migración cuando el cambio es profundo.
