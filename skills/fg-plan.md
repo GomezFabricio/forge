@@ -1,7 +1,7 @@
 ---
 name: fg-plan
 description: Entiende un cambio nuevo. El dev describe lo que quiere hacer en lenguaje natural y la skill infiere tipo, nombre kebab-case, contexto del codebase y genera el README inicial del cambio.
-when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo.
+when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo. El nivel de ceremonia ya fue determinado por el orquestador (vía orchestrator-rule.md) antes de invocar esta skill.
 ---
 
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, D, E)
@@ -25,107 +25,6 @@ El dev invoca `/fg-plan` seguido de una descripción libre. Ejemplos:
 Si el dev quiere forzar el tipo y nombre exactos, puede usar la sintaxis explícita `tipo:nombre descripción`. Ejemplo: `/fg-plan feat:login-oauth login con OAuth2`. Solo es necesario cuando se quiere precisión absoluta.
 
 ## Proceso
-
-### 0. Resolver el modo de ejecución del ciclo
-
-Al arrancar un ciclo nuevo, decidir si la sesión actual usa modo **interactivo** o **automático**:
-
-- **Interactivo**: cada fase (`/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`) pausa al cerrar y pregunta al dev si seguir o ajustar. Útil cuando se quiere supervisar paso a paso.
-- **Automático**: las fases se encadenan sin pausa hasta el final del ciclo. Útil cuando el dev confía en el flow y quiere velocidad.
-
-**Cache de sesión**: el orquestador cachea la respuesta para la sesión actual. Si ya hay un modo definido en esta sesión, **usar el cacheado sin volver a preguntar**. Si es la primera vez que se arranca un ciclo en la sesión, preguntar y cachear.
-
-**Default sugerido desde config**: leer `rules.workflow.cycle_mode` de `docs/auditoria/config.yaml`. Si existe, usar ese valor como respuesta pre-seleccionada en la pregunta (no como respuesta automática — siempre preguntar la primera vez por sesión para que el dev pueda cambiar si quiere). Si no existe el config, el default es `interactive`.
-
-Pregunta al dev (solo si no hay cache):
-
-> "¿Modo del ciclo: interactivo o automático? (cacheado para la sesión actual; default del proyecto: {cycle_mode del config})"
-
-El cache vive solo en el contexto del orquestador — no se persiste en filesystem ni engram. Sesión nueva → vuelve a preguntar.
-
-### 0.5. Portero proporcional — decidir el nivel de ceremonia
-
-Antes de inferir el tipo (paso 1), el portero evalúa qué nivel de ritual aplicar al cambio.
-Este paso vive entre el modo de ciclo (paso 0) y la inferencia del tipo (paso 1) porque
-necesita la descripción del dev y el contexto del proyecto, pero no el tipo final.
-
-#### a) Leer las señales
-
-1. **`ceremonial_threshold`** — leer `rules.workflow.ceremonial_threshold` de `docs/auditoria/config.yaml`.
-   Si no existe el campo o el archivo, asumir `auto`.
-2. **opt-in del dev** — el orquestador interpreta el intent natural del pedido y
-   lo traduce a la señal de opt-in que recibe el portero. El lenguaje natural
-   es el camino principal; las banderas son la forma explícita/manual del mismo mecanismo.
-
-   Ejemplos de interpretación desde lenguaje natural:
-   - "esto es delicado, hacelo completo" / "quiero el ciclo completo" → `opt_in = "completo"`
-   - "es un toque rápido" / "algo simple, sin mucho proceso" → `opt_in = "rapido"`
-   - "sin forge" / "no quiero el ciclo" → `opt_in = "libre"`
-   - Sin señal de nivel en el pedido → `opt_in = None`
-
-   Banderas explícitas (equivalentes, mayor precedencia que la interpretación):
-   - `--rapido` o `--lite` → `opt_in = "rapido"`
-   - `--completo` o `--full` → `opt_in = "completo"`
-   - `--libre` o `--sin-forge` → `opt_in = "libre"`
-3. **tipo inferido (lectura rápida)** — hacer una lectura preliminar y barata del tipo
-   usando las heurísticas del paso 1 (docs/chore/test/style → ligero; feat/refactor → pesado).
-   Esta lectura es provisional; el paso 1 sigue siendo la fuente de verdad del tipo final.
-4. **palabras de escala** — buscar en la descripción del dev: "migrar", "reemplazar",
-   "rediseñar", "reescribir", "módulo de", "todo el", "sistema de".
-5. **arquitectura al día** — llamar a `check_arch_freshness(cambios_dir, arch_overview)` donde:
-   - `cambios_dir = docs/auditoria/cambios/`
-   - `arch_overview = docs/arquitectura/overview.md`
-
-   > **Contrato de `check_arch_freshness`** (módulo: `forge/arch_freshness.py`):
-   > - **Recibe**: `cambios_dir: Path`, `arch_overview: Path`
-   > - **Retorna**: `dict` con claves `al_dia: bool`, `pendientes: int`, `sin_overview: bool`
-   > - `al_dia` es `True` cuando `pendientes == 0` y `overview.md` existe.
-   > - Detecta solo cambios que pasaron por forge y fueron marcados `structural: true` — limitación declarada.
-
-#### b) Decidir el nivel
-
-Llamar a `decidir_nivel(señales)` con las 5 señales del paso anterior.
-La función aplica la precedencia: threshold > opt-in > tipo > palabras_de_escala.
-Ambigüedad sin CodeGraph → Completo (regla conservadora).
-
-   > **Contrato de `decidir_nivel`** (módulo: `forge/portero_decision.py`):
-   > - **Recibe**: `senales: dict` con claves `threshold` (str), `opt_in` (str|None), `tipo_inferido` (str), `palabras_de_escala` (list[str]), `arquitectura_al_dia` (bool)
-   > - **Retorna**: `dict` con claves `nivel_propuesto` (str: `"libre"` | `"rapido"` | `"completo"`), `razon` (str), `confianza` (str: `"alta"` | `"media"` | `"baja"`)
-   > - Función pura: sin I/O, sin lectura de filesystem.
-
-#### c) UX propone-y-confirma
-
-El portero NUNCA aplica el nivel solo — siempre lo propone al dev primero.
-
-**Excepción — threshold=full**: avisar en una línea y seguir sin preguntar.
-> "ceremonial_threshold=full: modo Completo forzado por configuración del proyecto."
-
-**Para cualquier otro nivel propuesto**:
-
-> "Esto parece un cambio {chico/mediano/grande}. Propongo modo **{Rápido/Completo/Libre}**
-> ({razón breve, ej: 'tipo docs, descripción acotada, arquitectura al día'}).
-> ¿Seguimos en {nivel} o preferís {alternativa}? [Enter = aceptar / rapido / completo / libre]"
-
-**Interacción con `cycle_mode`**:
-- **Interactivo**: siempre mostrar la propuesta y esperar confirmación del dev.
-- **Automático**: auto-confirmar la propuesta de la función, salvo que exista conflicto
-  entre lo que el dev pidió y lo que la regla conservadora fuerza (ej: dev pide `--rapido`
-  pero arquitectura desactualizada → Completo). En ese caso, aplicar el nivel conservador
-  y reportarlo en el envelope sin bloquear el ciclo.
-
-**Si el dev propone Libre**: forge NO crea la carpeta de cambio ni sigue con el ciclo.
-Reportar `status: skipped` y explicar que el portero clasificó el cambio como Libre.
-
-#### d) Cachear y reportar
-
-Guardar el nivel resuelto como `ceremony_level` en el contexto de la sesión (igual que
-`cycle_mode`). Reportarlo en el envelope de `/fg-plan` bajo la clave `ceremony_level`.
-
-Si el nivel es **Rápido**: después del paso 4 (crear carpeta), generar `tareas.md` directamente
-desde `templates/tareas-lite.md` en lugar de dejar que `/fg-design` lo genere. NO crear
-`diseño.md`. Continuar con paso 5 y siguientes como de costumbre.
-
-Si el nivel es **Completo**: flujo estándar sin cambios.
 
 ### 1. Inferir el tipo del cambio
 
@@ -242,7 +141,6 @@ Imprimir:
 
 ### Siempre
 
-- Resolver el modo de ejecución del ciclo en el paso 0 — preguntar solo si no hay cache de sesión.
 - Inferir tipo y nombre del lenguaje natural del dev.
 - Resolver contexto según prioridad: `--from` > `overview.md` > CodeGraph.
 - Consultar CodeGraph usando los tool names reales: `mcp__codegraph__codegraph_explore` (entrada por defecto), `mcp__codegraph__codegraph_search`, `mcp__codegraph__codegraph_impact`, `mcp__codegraph__codegraph_status`. No usar narrativa vaga como "consultar CodeGraph" sin el nombre del tool.
@@ -252,7 +150,6 @@ Imprimir:
 
 ### Preguntar
 
-- El modo de ejecución del ciclo (interactivo/automático) — solo si no hay cache de sesión.
 - Solo cuando la inferencia de tipo o nombre sea genuinamente ambigua.
 - Solo cuando el alcance del problema tenga huecos importantes que afecten el diseño.
 
@@ -265,17 +162,16 @@ Imprimir:
 - Tocar código del proyecto.
 - Imponer estilos de arquitectura o stack.
 - Asumir contexto cuando `context.vision_skipped == false` y no hay overview ni stacks — abortar con `status: blocked` y redirigir a `/fg-setup`.
+- Evaluar el nivel de ceremonia — eso es juicio del orquestador vía `orchestrator-rule.md`, que lo determina antes de invocar `/fg-plan`.
 
 ## Envelope de retorno
 
 ```yaml
 status: success | partial | blocked | skipped
 executive_summary: 1-2 oraciones de lo que se hizo
-cycle_mode: interactivo | automatico
-ceremony_level: libre | rapido | completo   # resuelto por el portero en paso 0.5
 artifacts:
   - docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/README.md
-  # en modo Rápido, también:
+  # en modo Rápido (determinado por el orquestador), también:
   # - docs/auditoria/cambios/<YYYY-MM>-<tipo>-<nombre>/tareas.md
 inferred:
   tipo: <tipo inferido>
