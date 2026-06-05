@@ -8,6 +8,8 @@ Subcommands:
     forge install --skip-engram-check  Skip engram detection, deposit assets only.
     forge install --skip-codegraph     Skip CodeGraph installation entirely.
     forge install --install-codegraph  Auto-install CodeGraph without prompt (CI-safe).
+    forge install --skip-context7      Skip Context7 MCP registration entirely.
+    forge install --install-context7   Register Context7 MCP without prompt (CI-safe).
     forge --help                       Show help.
 
 Project-level setup is done from Claude Code with the /fg-setup skill,
@@ -75,6 +77,24 @@ def build_parser() -> argparse.ArgumentParser:
             "Instalar CodeGraph automáticamente si falta, sin prompt (non-interactive / CI). "
             "Si CodeGraph ya está detectado, registra el MCP sin reinstalar. "
             "--skip-codegraph tiene precedencia si ambos se pasan."
+        ),
+    )
+    install_parser.add_argument(
+        "--skip-context7",
+        dest="skip_context7",
+        action="store_true",
+        help=(
+            "Omitir completamente el registro de Context7 MCP. "
+            "Equivalente a responder N al prompt de Context7."
+        ),
+    )
+    install_parser.add_argument(
+        "--install-context7",
+        dest="install_context7",
+        action="store_true",
+        help=(
+            "Registrar Context7 MCP automáticamente sin prompt (non-interactive / CI). "
+            "--skip-context7 tiene precedencia si ambos se pasan."
         ),
     )
     install_parser.set_defaults(func=cmd_install)

@@ -2445,3 +2445,278 @@ class TestRunCodegraph:
         print_report(report)
         captured = capsys.readouterr()
         assert "codegraph" in captured.out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Context7 MCP — TestRegisterContext7Mcp (TDD RED → GREEN)
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterContext7Mcp:
+    """Verifica register_context7_mcp() — merge idempotente en ~/.claude.json. R-CTX-01, R-CTX-03, R-CTX-05."""
+
+    def test_creates_mcp_block_when_file_missing(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json no existe WHEN register_context7_mcp()
+        THEN crea el archivo con mcpServers.context7 y retorna 'created'."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        status = installer.register_context7_mcp()
+
+        assert status == "created"
+        assert claude_json.exists()
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        assert "mcpServers" in data
+        assert "context7" in data["mcpServers"]
+        ctx = data["mcpServers"]["context7"]
+        assert ctx["command"] == "npx"
+        assert "-y" in ctx["args"]
+        assert "@upstash/context7-mcp" in ctx["args"]
+
+    def test_merges_without_overwriting_existing_config(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json con config previa (incluye mcpServers.codegraph) WHEN register_context7_mcp()
+        THEN preserva las claves existentes y agrega mcpServers.context7."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        existing_config = {
+            "theme": "dark",
+            "mcpServers": {
+                "codegraph": {
+                    "type": "stdio",
+                    "command": "codegraph",
+                    "args": ["serve", "--mcp"],
+                }
+            },
+        }
+        claude_json.write_text(
+            json.dumps(existing_config, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        status = installer.register_context7_mcp()
+
+        assert status in ("created", "merged")
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        # Config existente preservada
+        assert data.get("theme") == "dark"
+        assert "codegraph" in data["mcpServers"], "El bloque codegraph existente debe preservarse"
+        # Context7 agregado
+        assert "context7" in data["mcpServers"]
+
+    def test_idempotent_second_call_returns_present(self, tmp_path, monkeypatch):
+        """GIVEN register_context7_mcp() ya fue llamado WHEN se llama de nuevo
+        THEN retorna 'present' y NO modifica el archivo."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_context7_mcp()
+        content_after_first = claude_json.read_text(encoding="utf-8")
+
+        status2 = installer.register_context7_mcp()
+
+        assert status2 == "present"
+        content_after_second = claude_json.read_text(encoding="utf-8")
+        assert content_after_first == content_after_second
+
+    def test_creates_backup_before_writing(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json con config existente WHEN register_context7_mcp()
+        THEN crea backup .claude.json.forge-bak con el contenido original."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        original_content = json.dumps({"theme": "light"}, indent=2)
+        claude_json.write_text(original_content, encoding="utf-8")
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_context7_mcp()
+
+        backup = tmp_path / ".claude.json.forge-bak"
+        assert backup.exists(), "Debe existir el archivo de backup .claude.json.forge-bak"
+        assert backup.read_text(encoding="utf-8") == original_content
+
+    def test_corrupt_json_treated_as_empty(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json existe pero contiene JSON inválido WHEN register_context7_mcp()
+        THEN trata el archivo como vacío y retorna 'created' o 'merged' sin lanzar excepción."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text("{ invalid json {{", encoding="utf-8")
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        # No debe lanzar excepción
+        status = installer.register_context7_mcp()
+
+        assert status in ("created", "merged")
+        # El archivo resultante debe ser JSON válido
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        assert "mcpServers" in data
+        assert "context7" in data["mcpServers"]
+
+    def test_injects_api_key_from_env(self, tmp_path, monkeypatch):
+        """GIVEN CONTEXT7_API_KEY está seteada WHEN register_context7_mcp()
+        THEN el bloque MCP incluye --api-key <valor> en args."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.setenv("CONTEXT7_API_KEY", "test-key-abc123")
+
+        installer.register_context7_mcp()
+
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        ctx = data["mcpServers"]["context7"]
+        assert "--api-key" in ctx["args"]
+        key_idx = ctx["args"].index("--api-key")
+        assert ctx["args"][key_idx + 1] == "test-key-abc123"
+
+    def test_no_api_key_when_env_absent(self, tmp_path, monkeypatch):
+        """GIVEN CONTEXT7_API_KEY no está definida WHEN register_context7_mcp()
+        THEN el bloque MCP NO incluye --api-key (usa pool anónimo)."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.delenv("CONTEXT7_API_KEY", raising=False)
+
+        installer.register_context7_mcp()
+
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        ctx = data["mcpServers"]["context7"]
+        assert "--api-key" not in ctx["args"]
+
+    def test_env_key_not_mutating_constant(self, tmp_path, monkeypatch):
+        """GIVEN CONTEXT7_API_KEY está seteada WHEN register_context7_mcp()
+        THEN _CONTEXT7_MCP_BLOCK constante NO muta (--api-key no aparece en la constante)."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.setenv("CONTEXT7_API_KEY", "mutacion-test-key")
+
+        installer.register_context7_mcp()
+
+        # La constante original no debe contener --api-key
+        assert "--api-key" not in installer._CONTEXT7_MCP_BLOCK["args"]
+
+    def test_present_status_skips_backup(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.context7 ya existe WHEN register_context7_mcp() segunda vez
+        THEN retorna 'present' y NO sobreescribe el backup."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        # Primera llamada: registra y crea backup
+        installer.register_context7_mcp()
+        backup = tmp_path / ".claude.json.forge-bak"
+        backup_content_after_first = backup.read_text(encoding="utf-8") if backup.exists() else None
+
+        # Segunda llamada: debe retornar present
+        status2 = installer.register_context7_mcp()
+
+        assert status2 == "present"
+        # El backup no debe cambiar entre la primera y la segunda llamada
+        if backup.exists() and backup_content_after_first is not None:
+            assert backup.read_text(encoding="utf-8") == backup_content_after_first
+
+
+# ---------------------------------------------------------------------------
+# Context7 MCP — TestRunContext7 (TDD RED → GREEN para flags en run())
+# ---------------------------------------------------------------------------
+
+
+class TestRunContext7:
+    """Verifica integración de Context7 en run() — flags --skip-context7/--install-context7. R-CTX-01."""
+
+    def _make_args(
+        self,
+        install_engram=False,
+        skip_engram_check=True,
+        skip_codegraph=True,
+        install_codegraph=False,
+        skip_context7=False,
+        install_context7=False,
+    ):
+        import argparse
+        return argparse.Namespace(
+            install_engram=install_engram,
+            skip_engram_check=skip_engram_check,
+            skip_codegraph=skip_codegraph,
+            install_codegraph=install_codegraph,
+            skip_context7=skip_context7,
+            install_context7=install_context7,
+        )
+
+    def test_skip_context7_omits_registration(self):
+        """GIVEN --skip-context7 WHEN run() THEN register_context7_mcp NO es llamado."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_context7_mcp") as mock_reg, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(skip_context7=True))
+
+        assert result == installer.EXIT_OK
+        mock_reg.assert_not_called()
+
+    def test_install_context7_registers_without_prompt(self):
+        """GIVEN --install-context7 y context7 no registrado WHEN run()
+        THEN register_context7_mcp es llamado sin pasar por prompt (CI-safe)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_context7_mcp", return_value="created") as mock_reg, \
+             patch.object(installer, "prompt_context7_yn") as mock_prompt, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(install_context7=True))
+
+        assert result == installer.EXIT_OK
+        mock_reg.assert_called_once()
+        mock_prompt.assert_not_called()
+
+    def test_skip_takes_precedence_over_install(self):
+        """GIVEN --skip-context7 y --install-context7 juntos WHEN run()
+        THEN skip tiene precedencia, register_context7_mcp NO es llamado."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_context7_mcp") as mock_reg, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(skip_context7=True, install_context7=True))
+
+        assert result == installer.EXIT_OK
+        mock_reg.assert_not_called()
+
+    def test_context7_failure_does_not_change_exit_code(self):
+        """GIVEN register_context7_mcp lanza excepción WHEN run()
+        THEN retorna EXIT_OK (fallo graceful R-CTX-05)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_context7_mcp", side_effect=RuntimeError("boom")), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK

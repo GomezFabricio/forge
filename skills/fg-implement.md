@@ -149,6 +149,21 @@ Cuando todas las tareas estén tachadas:
 - Arreglar pre-existing failures detectados en SAFETY NET (reportar al dev, no arreglar acá).
 - Saltar a `/fg-review` con tareas sin terminar y sin reportarlas como bloqueadas.
 
+### TRIGGER B — Consulta selectiva de Context7 ante duda explícita de API externa
+
+Si durante la implementación hay **ambigüedad real** sobre la firma, los parámetros o el comportamiento de una API de librería **EXTERNA** (no del propio codebase), consultar Context7 **antes de inventar la firma**:
+
+1. `mcp__context7__resolve-library-id` con el nombre de la librería → ID canónico.
+2. `mcp__context7__get-library-docs` con el ID y la query sobre el aspecto dudoso.
+
+**Reglas de uso**:
+- 1 par de llamadas por duda concreta, no en bucle.
+- Solo para librerías externas. No consultar para APIs del propio codebase ni cuando la firma es conocida.
+- Citar la fuente de documentación en el output al dev cuando se usa Context7.
+- Si Context7 no responde: continuar con la mejor estimación disponible y documentar la incertidumbre.
+
+**Privacidad**: solo viajan el nombre de la librería y la query. El código del dev nunca sale del entorno local.
+
 ## Envelope de retorno
 
 ```yaml

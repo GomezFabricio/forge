@@ -103,6 +103,15 @@ _CODEGRAPH_MCP_BLOCK: dict = {
     "args": ["serve", "--mcp"],
 }
 
+# Bloque MCP que se registra en ~/.claude.json bajo mcpServers.context7.
+# Alternativa HTTP remota rechazada: requiere URL + header auth y depende de conectividad;
+# stdio via npx es cero-infraestructura para un dev con Node instalado.
+_CONTEXT7_MCP_BLOCK: dict = {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@upstash/context7-mcp"],
+}
+
 # Mapa OS/arch para CodeGraph (tokens distintos a engram — win32/x64 en vez de windows/amd64)
 _CODEGRAPH_OS_MAP: dict[str, str] = {
     "linux": "linux",
@@ -129,6 +138,18 @@ Si confirmás, voy a:
   4. Registrar el MCP en ~/.claude.json para que Claude Code lo levante.
 
 ¿Lo instalo ahora? [Y/n]: """
+
+PROMPT_CONTEXT7_TEXT = """\
+Context7 MCP no registrado.
+
+Forge puede registrar Context7 en tu ~/.claude.json para que Claude Code
+acceda a documentación actualizada de librerías externas vía npx.
+
+No se descarga ningún binario — Context7 corre on-demand mediante npx.
+El cupo gratuito es de 1000 req/mes (pool anónimo compartido).
+Para cupo personal, definí CONTEXT7_API_KEY en tu entorno.
+
+¿Lo registro ahora? [Y/n]: """
 
 PROMPT_TEXT = """\
 Engram no detectado.
@@ -613,6 +634,93 @@ def prompt_codegraph_yn() -> str:
     return "n"
 
 
+def register_context7_mcp() -> str:
+    """Registra el bloque MCP de Context7 en ~/.claude.json con merge idempotente.
+
+    Lee el JSON existente (o {} si ausente/corrupto), verifica si mcpServers.context7
+    ya existe (idempotencia), crea backup .forge-bak antes de escribir y hace merge
+    preservando el resto de la configuración.
+
+    Si la variable de entorno CONTEXT7_API_KEY está definida y no vacía, inyecta
+    --api-key <valor> en los args del bloque. La constante _CONTEXT7_MCP_BLOCK
+    nunca se muta — se trabaja sobre una copia.
+
+    Returns:
+        'present'  — el bloque ya existía, no se modificó nada
+        'created'  — el archivo no existía o estaba vacío, se creó con el bloque
+        'merged'   — el archivo existía con otra config, se hizo merge
+    """
+    claude_json_path = CODEGRAPH_CLAUDE_JSON  # mismo archivo ~/.claude.json, no duplicar path
+
+    # Leer configuración existente
+    existing_content: str | None = None
+    config: dict = {}
+    if claude_json_path.exists():
+        try:
+            existing_content = claude_json_path.read_text(encoding="utf-8")
+            config = json.loads(existing_content) or {}
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError):
+            config = {}
+
+    # Idempotencia: si el bloque ya existe, no tocar nada
+    mcp_servers = config.get("mcpServers", {})
+    if isinstance(mcp_servers, dict) and "context7" in mcp_servers:
+        return "present"
+
+    # Crear backup antes de escribir
+    if existing_content is not None:
+        backup_path = claude_json_path.with_suffix(".json.forge-bak")
+        with contextlib.suppress(OSError):
+            backup_path.write_text(existing_content, encoding="utf-8")
+
+    # Construir el bloque a escribir (copiar base, no mutar la constante)
+    api_key = os.environ.get("CONTEXT7_API_KEY", "")
+    if api_key:
+        block = dict(_CONTEXT7_MCP_BLOCK)
+        block["args"] = list(_CONTEXT7_MCP_BLOCK["args"]) + ["--api-key", api_key]
+    else:
+        block = dict(_CONTEXT7_MCP_BLOCK)
+
+    # Merge: agregar mcpServers.context7 preservando el resto
+    if "mcpServers" not in config or not isinstance(config.get("mcpServers"), dict):
+        config["mcpServers"] = {}
+    config["mcpServers"]["context7"] = block
+
+    # Determinar status antes de escribir
+    was_empty = existing_content is None or existing_content.strip() == ""
+
+    claude_json_path.parent.mkdir(parents=True, exist_ok=True)
+    claude_json_path.write_text(
+        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    return "created" if was_empty else "merged"
+
+
+def prompt_context7_yn() -> str:
+    """Muestra el prompt de registro de Context7 y lee la respuesta y/N.
+
+    Default: registrar (Y). En entorno no-interactivo (stdin no es tty) retorna 'y'
+    sin mostrar prompt ni llamar a input(), para no colgar en CI.
+
+    Returns:
+        'y' — registrar (incluyendo default por enter vacío y entornos no-interactivos)
+        'n' — no registrar
+    """
+    # Entorno no-interactivo/CI: no colgar, registrar por defecto
+    if not sys.stdin.isatty():
+        return "y"
+
+    response = input(PROMPT_CONTEXT7_TEXT).strip().lower()
+    # Default Y: vacío o afirmativo
+    if response in {"", "y", "yes"}:
+        return "y"
+    return "n"
+
+
 # =============================================================================
 # === Frontmatter injection ===
 # =============================================================================
@@ -1071,6 +1179,7 @@ def print_report(report: dict) -> None:
     engram_info = report.get("engram", {})
     assets = report.get("assets", {})
     codegraph_info = report.get("codegraph", {})
+    context7_info = report.get("context7", {})
 
     print("\nforge install — resumen\n")
 
@@ -1101,6 +1210,21 @@ def print_report(report: dict) -> None:
             print(f"  codegraph: MCP registrado — {cg_msg}")
         else:
             print(f"  codegraph: {cg_msg}")
+
+    # Sección Context7
+    if context7_info:
+        ctx_status = context7_info.get("status", "")
+        ctx_msg = context7_info.get("msg", "")
+        ctx_mcp = context7_info.get("mcp", "")
+        if ctx_status == "registered":
+            suffix = f" ({ctx_mcp})" if ctx_mcp else ""
+            print(f"  context7: MCP registrado{suffix}")
+        elif ctx_status == "skipped":
+            print(f"  context7: omitido ({ctx_msg})")
+        elif ctx_status == "failed":
+            print(f"  context7: fallo en registro — {ctx_msg}")
+        else:
+            print(f"  context7: {ctx_msg}")
 
     print(f"  skills depositadas: {assets.get('skills_deposited', 0)}")
     print(f"  shared (forge-shared): {assets.get('shared_deposited', 0)}")
@@ -1210,8 +1334,29 @@ def run(args) -> int:  # args: argparse.Namespace
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad R-INST-05
         codegraph_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
 
+    # Paso Context7 — try/except amplio: fallo no aborta ni cambia exit code (R-CTX-05)
+    context7_report: dict = {}
+    try:
+        if getattr(args, "skip_context7", False):
+            context7_report = {"status": "skipped", "msg": "omitido por --skip-context7"}
+        else:
+            if getattr(args, "install_context7", False):
+                # --install-context7: sin prompt (CI-safe)
+                mcp_status_ctx = register_context7_mcp()
+                context7_report = {"status": "registered", "mcp": mcp_status_ctx}
+            else:
+                answer_ctx = prompt_context7_yn()
+                if answer_ctx == "y":
+                    mcp_status_ctx = register_context7_mcp()
+                    context7_report = {"status": "registered", "mcp": mcp_status_ctx}
+                else:
+                    context7_report = {"status": "skipped", "msg": "omitido por elección del usuario"}
+
+    except Exception as exc:  # noqa: BLE001 — defensa en profundidad R-CTX-05
+        context7_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
+
     # Deposit skills and agents
     manifest = install_assets()
     inject_orchestrator_rule()
-    print_report({"engram": info, "assets": manifest, "codegraph": codegraph_report})
+    print_report({"engram": info, "assets": manifest, "codegraph": codegraph_report, "context7": context7_report})
     return EXIT_OK
