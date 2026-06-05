@@ -775,13 +775,14 @@ def get_share_root() -> Path:
 
 
 def install_assets() -> dict:
-    """Deposit skills, agents into ~/.claude/.
+    """Deposit skills, agents, commands into ~/.claude/.
 
     Returns:
         Manifest dict with keys:
           skills_deposited: int
           shared_deposited: int
           agents_deposited: int
+          commands_deposited: int
           warnings: list[str]
     """
     share = get_share_root()
@@ -791,8 +792,10 @@ def install_assets() -> dict:
     skills_src = share / "skills"
     shared_src = skills_src / "_shared"
     agents_src = share / "agents"
+    commands_src = share / "commands"
     claude_skills = CLAUDE_HOME / "skills"
     claude_agents = CLAUDE_HOME / "agents"
+    claude_commands = CLAUDE_HOME / "commands"
     warnings: list[str] = []
 
     # 1. fg-*.md individual skills → <stem>/SKILL.md
@@ -814,10 +817,14 @@ def install_assets() -> dict:
     # 4. agents → flat copy
     n_agents = _deposit_agents(agents_src, claude_agents)
 
+    # 5. commands → flat copy
+    n_commands = _deposit_commands(commands_src, claude_commands)
+
     return {
         "skills_deposited": n_skills,
         "shared_deposited": n_shared,
         "agents_deposited": n_agents,
+        "commands_deposited": n_commands,
         "warnings": warnings,
     }
 
@@ -864,6 +871,18 @@ def _deposit_agents(agents_src: Path, claude_agents: Path) -> int:
     count = 0
     for md in sorted(agents_src.glob("*.md")):
         shutil.copy2(md, claude_agents / md.name)
+        count += 1
+    return count
+
+
+def _deposit_commands(commands_src: Path, claude_commands: Path) -> int:
+    """Copia archivos fg-*.md de commands al directorio global de commands."""
+    if not commands_src.exists():
+        return 0
+    claude_commands.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for md in sorted(commands_src.glob("fg-*.md")):
+        shutil.copy2(md, claude_commands / md.name)
         count += 1
     return count
 
@@ -1229,6 +1248,7 @@ def print_report(report: dict) -> None:
     print(f"  skills depositadas: {assets.get('skills_deposited', 0)}")
     print(f"  shared (forge-shared): {assets.get('shared_deposited', 0)}")
     print(f"  agents depositados: {assets.get('agents_deposited', 0)}")
+    print(f"  commands depositados: {assets.get('commands_deposited', 0)}")
 
     warnings = assets.get("warnings", [])
     if warnings:

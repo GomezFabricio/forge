@@ -460,6 +460,7 @@ class TestInstallAssets:
 
         assert manifest1["skills_deposited"] == manifest2["skills_deposited"]
         assert manifest1["agents_deposited"] == manifest2["agents_deposited"]
+        assert manifest1["commands_deposited"] == manifest2["commands_deposited"]
 
     def test_strict_tdd_md_is_colocated_in_fg_implement(self, tmp_path, monkeypatch):
         """GIVEN _shared/strict-tdd.md WHEN install_assets()
@@ -541,6 +542,7 @@ class TestInstallAssets:
         assert "skills_deposited" in manifest
         assert "shared_deposited" in manifest
         assert "agents_deposited" in manifest
+        assert "commands_deposited" in manifest
         assert "warnings" in manifest
         assert isinstance(manifest["warnings"], list)
 
@@ -556,6 +558,112 @@ class TestInstallAssets:
 
         manifest = installer.install_assets()
         assert manifest["shared_deposited"] == 3
+
+
+# ---------------------------------------------------------------------------
+# T07b: TestDepositCommands — TDD red→green para _deposit_commands()
+# ---------------------------------------------------------------------------
+
+
+class TestDepositCommands:
+    """Verifica _deposit_commands() — copia fg-*.md a ~/.claude/commands/."""
+
+    def _make_share_root(self, tmp_path: Path) -> Path:
+        """Crea un share/forge/ de prueba con skills, agents y commands (7 fg-*.md)."""
+        share = tmp_path / "share" / "forge"
+        skills_dir = share / "skills"
+        shared_dir = skills_dir / "_shared"
+        agents_dir = share / "agents"
+        commands_dir = share / "commands"
+        skills_dir.mkdir(parents=True)
+        shared_dir.mkdir(parents=True)
+        agents_dir.mkdir(parents=True)
+        commands_dir.mkdir(parents=True)
+
+        # fg-*.md skills individuales
+        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-tasks", "fg-setup"]:
+            (skills_dir / f"{name}.md").write_text(f"# {name}\n\nContent for {name}.\n")
+
+        # _shared co-located
+        (shared_dir / "strict-tdd.md").write_text("# Strict TDD\n\nContent.\n")
+        (shared_dir / "strict-tdd-verify.md").write_text("# Strict TDD Verify\n\nContent.\n")
+
+        # _shared cross-cutting
+        (shared_dir / "skill-resolver.md").write_text("# Skill Resolver\n\nContent.\n")
+        (shared_dir / "engram-protocol.md").write_text("# Engram Protocol\n\nContent.\n")
+        (shared_dir / "fg-phase-common.md").write_text("# Phase Common\n\nContent.\n")
+
+        # agents
+        for name in ["forge-plan", "forge-design", "forge-implement",
+                     "forge-review", "forge-tasks", "forge-setup"]:
+            (agents_dir / f"{name}.md").write_text(f"# {name}\n\nAgent content.\n")
+
+        # commands (7 fg-*.md)
+        for name in ["fg-setup", "fg-plan", "fg-explore", "fg-design",
+                     "fg-implement", "fg-review", "fg-update-arch"]:
+            (commands_dir / f"{name}.md").write_text(f"# {name}\n\nCommand content.\n")
+
+        return share
+
+    def test_commands_deposited_flat(self, tmp_path, monkeypatch):
+        """GIVEN commands/*.md en share/commands/ WHEN install_assets()
+        THEN ~/.claude/commands/fg-*.md existen y manifest['commands_deposited'] == 7."""
+        from forge import installer
+
+        share = self._make_share_root(tmp_path)
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        manifest = installer.install_assets()
+
+        commands_dir = claude_home / "commands"
+        assert (commands_dir / "fg-setup.md").exists()
+        assert (commands_dir / "fg-plan.md").exists()
+        assert (commands_dir / "fg-explore.md").exists()
+        assert (commands_dir / "fg-design.md").exists()
+        assert (commands_dir / "fg-implement.md").exists()
+        assert (commands_dir / "fg-review.md").exists()
+        assert (commands_dir / "fg-update-arch.md").exists()
+        assert manifest["commands_deposited"] == 7
+
+    def test_commands_overwrite_existing(self, tmp_path, monkeypatch):
+        """GIVEN fg-plan.md preexistente con contenido viejo en ~/.claude/commands/
+        WHEN install_assets()
+        THEN el contenido del archivo es el nuevo (R-CMD-06: overwrite sin confirmación)."""
+        from forge import installer
+
+        share = self._make_share_root(tmp_path)
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        # Pre-crear con contenido viejo
+        commands_dir = claude_home / "commands"
+        commands_dir.mkdir(parents=True, exist_ok=True)
+        (commands_dir / "fg-plan.md").write_text("contenido viejo")
+
+        installer.install_assets()
+
+        new_content = (commands_dir / "fg-plan.md").read_text()
+        assert "contenido viejo" not in new_content
+        assert "fg-plan" in new_content
+
+    def test_missing_commands_dir_returns_zero(self, tmp_path, monkeypatch):
+        """GIVEN share sin commands/ WHEN install_assets()
+        THEN commands_deposited == 0 sin error."""
+        from forge import installer
+
+        share = tmp_path / "share" / "forge"
+        skills_dir = share / "skills"
+        skills_dir.mkdir(parents=True)
+        # No commands dir
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        manifest = installer.install_assets()
+        assert manifest["commands_deposited"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1006,6 +1114,7 @@ class TestRun:
              patch.object(installer, "install_assets", return_value={"skills_deposited": 6,
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
+                                                                      "commands_deposited": 7,
                                                                       "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
@@ -1023,6 +1132,7 @@ class TestRun:
              patch.object(installer, "install_assets", return_value={"skills_deposited": 6,
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
+                                                                      "commands_deposited": 7,
                                                                       "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
@@ -1041,6 +1151,7 @@ class TestRun:
              patch.object(installer, "install_assets", return_value={"skills_deposited": 6,
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
+                                                                      "commands_deposited": 7,
                                                                       "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
@@ -1071,6 +1182,7 @@ class TestRun:
              patch.object(installer, "install_assets", return_value={"skills_deposited": 6,
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
+                                                                      "commands_deposited": 7,
                                                                       "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
@@ -1113,6 +1225,7 @@ class TestRun:
              patch.object(installer, "install_assets", return_value={"skills_deposited": 6,
                                                                       "shared_deposited": 3,
                                                                       "agents_deposited": 6,
+                                                                      "commands_deposited": 7,
                                                                       "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
@@ -1142,7 +1255,7 @@ class TestRunAdditional:
              patch.object(installer, "install_engram") as mock_install, \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"), \
              patch("builtins.print") as mock_print:
@@ -1321,6 +1434,7 @@ class TestPrintReport:
                 "skills_deposited": 6,
                 "shared_deposited": 3,
                 "agents_deposited": 6,
+                "commands_deposited": 7,
                 "warnings": [],
             },
         }
@@ -2308,7 +2422,7 @@ class TestRunCodegraph:
              patch.object(installer, "register_codegraph_mcp", return_value="created"), \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
@@ -2324,7 +2438,7 @@ class TestRunCodegraph:
              patch.object(installer, "install_codegraph") as mock_install, \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(skip_codegraph=True))
@@ -2343,7 +2457,7 @@ class TestRunCodegraph:
              patch.object(installer, "register_codegraph_mcp", return_value="present"), \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
@@ -2363,7 +2477,7 @@ class TestRunCodegraph:
              patch.object(installer, "register_codegraph_mcp", return_value="created"), \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(install_codegraph=True))
@@ -2383,7 +2497,7 @@ class TestRunCodegraph:
              patch.object(installer, "install_codegraph", side_effect=RuntimeError("boom")), \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
@@ -2400,6 +2514,7 @@ class TestRunCodegraph:
                 "skills_deposited": 6,
                 "shared_deposited": 3,
                 "agents_deposited": 6,
+                "commands_deposited": 7,
                 "warnings": [],
             },
             "codegraph": {"status": "installed", "msg": "codegraph instalado en /home/.codegraph/bin/codegraph"},
@@ -2419,6 +2534,7 @@ class TestRunCodegraph:
                 "skills_deposited": 6,
                 "shared_deposited": 3,
                 "agents_deposited": 6,
+                "commands_deposited": 7,
                 "warnings": [],
             },
             "codegraph": {"status": "already_present", "msg": "/usr/local/bin/codegraph"},
@@ -2438,6 +2554,7 @@ class TestRunCodegraph:
                 "skills_deposited": 6,
                 "shared_deposited": 3,
                 "agents_deposited": 6,
+                "commands_deposited": 7,
                 "warnings": [],
             },
             "codegraph": {"status": "skipped", "msg": "omitido por --skip-codegraph"},
@@ -2661,7 +2778,7 @@ class TestRunContext7:
              patch.object(installer, "register_context7_mcp") as mock_reg, \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(skip_context7=True))
@@ -2679,7 +2796,7 @@ class TestRunContext7:
              patch.object(installer, "prompt_context7_yn") as mock_prompt, \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(install_context7=True))
@@ -2697,7 +2814,7 @@ class TestRunContext7:
              patch.object(installer, "register_context7_mcp") as mock_reg, \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args(skip_context7=True, install_context7=True))
@@ -2714,7 +2831,7 @@ class TestRunContext7:
              patch.object(installer, "register_context7_mcp", side_effect=RuntimeError("boom")), \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
-                 "agents_deposited": 6, "warnings": []}), \
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
