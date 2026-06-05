@@ -112,7 +112,7 @@ rules:
   workflow:
     # cycle_mode: cómo corren las 4 fases del workflow forge.
     #   "interactive" = pausa entre fases para revisar. "automatic" = sin pausa.
-    # /fg-plan paso 0 lo pregunta una vez por sesión y cachea la respuesta.
+    # el orquestador lo pregunta una vez por sesión (post-explore) y cachea la respuesta.
     cycle_mode: interactive
 
   pr_size:

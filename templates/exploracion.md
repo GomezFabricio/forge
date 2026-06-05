@@ -1,7 +1,7 @@
 # Exploración: {nombre del cambio}
 
 > Mapa del cambio. Generado por `/fg-explore` a partir de los MCP tools de CodeGraph.
-> Audiencia: ingeniero trabajando en el cambio, reviewer técnico, y el portero de `/fg-plan`.
+> Audiencia: ingeniero trabajando en el cambio, reviewer técnico, y el orquestador.
 >
 > **Artefacto reutilizable**: `/fg-design` lo usa como fuente primaria antes de re-consultar CodeGraph.
 > Re-correr `/fg-explore` actualiza este mapa (con confirmación del dev).
@@ -79,10 +79,10 @@ Si CodeGraph no está disponible: "[sin datos — CodeGraph no disponible]".
 [sin datos — CodeGraph no disponible]
 
 <!-- sección 5: señales fuertes -->
-## 5. Señales fuertes (para el portero)
+## 5. Señales fuertes (para el orquestador)
 
 <!--
-Bloque estructurado consumido por el portero de /fg-plan (paso 0.5b) para decidir el nivel de ceremonia.
+Bloque estructurado consumido por el orquestador para determinar el nivel de ceremonia (vía orchestrator-rule.md).
 Los 4 campos son obligatorios — bajo degradación, usar los valores conservadores indicados.
 -->
 

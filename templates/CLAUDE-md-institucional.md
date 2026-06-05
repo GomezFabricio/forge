@@ -108,10 +108,11 @@ rules:
 
 La norma sana es "1 sesión = 1 ciclo" — si un cambio requiere múltiples batches, cada uno debería correrse en una sesión nueva para mantener el contexto del modelo fresco.
 
-### Portero proporcional — niveles de ceremonia
+### Orquestador proporcional — niveles de ceremonia
 
-Cuando el dev invoca forge, el portero proporcional decide cuánto ritual aplica antes
-de arrancar el ciclo. El portero propone el nivel y espera confirmación — nunca actúa solo.
+Cuando el dev invoca forge, el orquestador decide cuánto ritual aplica antes de arrancar
+el ciclo aplicando las reglas de `forge/templates/orchestrator-rule.md`. El orquestador
+propone el nivel y espera confirmación — nunca actúa solo.
 
 #### Los 3 niveles
 
@@ -124,9 +125,9 @@ de arrancar el ciclo. El portero propone el nivel y espera confirmación — nun
 #### La condición "arquitectura al día"
 
 Rápido solo está disponible si no hay cambios estructurales sin sincronizar.
-El portero verifica leyendo `docs/auditoria/cambios/*/README.md`: si alguno tiene
-`structural: true` sin `arch_synced: true`, la arquitectura está desactualizada
-y el portero fuerza Completo.
+El orquestador verifica mediante Grep sobre `docs/auditoria/cambios/*/README.md`: si alguno
+tiene `structural: true` sin `arch_synced: true`, la arquitectura está desactualizada
+y el orquestador fuerza Completo (ver patrón exacto en `orchestrator-rule.md`).
 
 **Limitación declarada**: este detector solo ve cambios que pasaron por forge y
 fueron marcados `structural`. Cambios manuales externos no se detectan.
@@ -139,7 +140,7 @@ Configurable en `docs/auditoria/config.yaml → rules.workflow.ceremonial_thresh
 
 | Valor | Comportamiento |
 |-------|----------------|
-| `auto` (default) | El portero propone el nivel y espera confirmación del dev. |
+| `auto` (default) | El orquestador propone el nivel y espera confirmación del dev. |
 | `lite` | Sesga hacia Rápido siempre que se pueda. Respeta la condición de arch al día. |
 | `full` | Fuerza Completo siempre, sin preguntar. Para entornos de auditoría estricta. |
 

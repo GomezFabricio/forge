@@ -224,7 +224,7 @@ estricto.
 
 1. Corre `/fg-setup adopt` y marca el proyecto como legacy (`context.is_legacy: true`
    en `config.yaml`, o `legacy: true` en el frontmatter de `overview.md`).
-2. En `/fg-plan`, el portero propone modo Completo (los refactors siempre van a
+2. En `/fg-plan`, el orquestador propone modo Completo (los refactors siempre van a
    Completo).
 3. En `/fg-design`, antes de definir el enfoque técnico, invoca automáticamente el
    sub-agente `legacy-impact-analyzer` con CodeGraph para mapear:
@@ -249,9 +249,9 @@ O agregar frontmatter `legacy: true` al inicio de `docs/arquitectura/overview.md
 
 ## 4. Niveles de ceremonia
 
-El portero proporcional es el "paso 0.5" de `/fg-plan`. Evalúa el cambio y propone el
-nivel de ritual mínimo adecuado antes de arrancar. El dev confirma o ajusta; forge
-nunca impone el nivel sin consentimiento (salvo `ceremonial_threshold: full`).
+El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritual mínimo
+adecuado aplicando las reglas de `forge/templates/orchestrator-rule.md`. El dev confirma o
+ajusta; forge nunca impone el nivel sin consentimiento (salvo `ceremonial_threshold: full`).
 
 ### Los tres niveles
 
@@ -269,10 +269,10 @@ creado.
 
 ### La condición "arquitectura al día"
 
-Rápido solo está disponible si la arquitectura está sincronizada. El portero verifica
-leyendo `docs/auditoria/cambios/*/README.md`: si existe algún cambio con
+Rápido solo está disponible si la arquitectura está sincronizada. El orquestador verifica
+mediante Grep sobre `docs/auditoria/cambios/*/README.md`: si existe algún cambio con
 `structural: true` y sin `arch_synced: true`, la arquitectura está desactualizada y el
-portero fuerza Completo.
+orquestador fuerza Completo (ver `orchestrator-rule.md` para el patrón exacto).
 
 > **Limitación declarada:** el detector solo ve cambios que pasaron por forge y fueron
 > marcados `structural`. Cambios manuales externos al repo no se detectan. "Desactualizada"
@@ -288,11 +288,10 @@ El dev puede incluir una bandera en la invocación de `/fg-plan`:
 | `--rapido` o `--lite` | Rápido (solo si arch al día) |
 
 Si el dev pide `--rapido` pero la arquitectura está desactualizada, o la descripción
-contiene palabras de escala, el portero aplica Completo de todas formas e informa al dev.
+contiene palabras de escala, el orquestador aplica Completo de todas formas e informa al dev.
 
-> **Nota (Fase 1):** para forzar Completo no uses una bandera de invocación —
-> configurá `ceremonial_threshold: full` en `config.yaml`. El override `--completo` todavía
-> no está implementado en el núcleo de decisión (`decidir_nivel`). De todos modos, un tipo
+> **Nota:** para forzar Completo no uses una bandera de invocación —
+> configurá `ceremonial_threshold: full` en `config.yaml`. De todos modos, un tipo
 > pesado (`feat`/`refactor`), las palabras de escala o una arquitectura desactualizada ya
 > llevan a Completo por sí solos.
 
@@ -300,7 +299,7 @@ contiene palabras de escala, el portero aplica Completo de todas formas e inform
 
 | Valor | Comportamiento |
 |---|---|
-| `auto` (default) | El portero propone el nivel y espera confirmación del dev. |
+| `auto` (default) | El orquestador propone el nivel y espera confirmación del dev. |
 | `lite` | Sesga hacia Rápido para tipos ligeros; `feat`/`refactor` siguen yendo a Completo. |
 | `full` | Fuerza Completo siempre, sin preguntar. Para entornos de auditoría estricta. |
 
@@ -326,7 +325,7 @@ Para resetear a defaults: borrar el archivo y correr `/fg-setup` de nuevo.
 | `context.vision_skipped` | bool | `false` | `true` si el dev declinó la conversación de visión en modo bootstrap. |
 | `context.is_legacy` | bool | `false` | Marca el proyecto como legacy; activa `legacy-impact-analyzer` en `/fg-design`. |
 | `rules.workflow.cycle_mode` | `interactive` \| `automatic` | `interactive` | Default sugerido del modo de ciclo. `/fg-plan` lo pregunta una vez por sesión; el dev puede cambiar por sesión. |
-| `rules.workflow.ceremonial_threshold` | `auto` \| `lite` \| `full` | `auto` | Sesgo del portero proporcional (ver sección 4). |
+| `rules.workflow.ceremonial_threshold` | `auto` \| `lite` \| `full` | `auto` | Sesgo del orquestador para el nivel de ceremonia (ver sección 4 y `orchestrator-rule.md`). |
 | `rules.pr_size.budget_lines` | entero | `400` | Umbral de líneas para "PR grande" en el Review Workload Forecast. |
 | `rules.pr_size.suggest_split` | bool | `false` | Si sugerir partir en chained PRs cuando supera el budget. |
 | `rules.pr_size.enforcement` | `off` \| `warn` \| `block` | `"off"` | Qué hace forge cuando el PR supera el budget (ver tabla abajo). |
@@ -458,7 +457,7 @@ depuración.
 | Comando | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, mergea `CLAUDE.md`. |
-| `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. Incluye el portero proporcional (paso 0.5). |
+| `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. El nivel de ceremonia llega ya resuelto desde el orquestador vía `orchestrator-rule.md`. |
 | `/fg-plan --from <doc> "<descripción>"` | Igual que `/fg-plan` pero usa un documento externo como contexto primario del cambio. |
 | `/fg-design` | Genera `diseño.md`, `tareas.md` y `decisiones.md`. Requiere que `/fg-plan` ya haya corrido. En proyectos legacy, invoca `legacy-impact-analyzer` antes del enfoque técnico. |
 | `/fg-implement` | Implementa el checklist de `tareas.md` tarea por tarea. Si TDD está activo, aplica el ciclo de 7 pasos. Soporta batching: corta al llegar a `max_tasks_per_batch` y guarda progreso. |
@@ -532,12 +531,12 @@ rm docs/auditoria/config.yaml
 
 `/fg-setup` es idempotente: si el archivo no existe lo crea; si existe lo preserva.
 
-### El portero propone Completo pero el cambio es chico
+### El orquestador propone Completo pero el cambio es chico
 
 Causas posibles:
 
 1. Hay cambios estructurales sin sincronizar en `docs/auditoria/cambios/`. Correr
-   `/fg-update-arch` para sincronizarlos, y después el portero va a poder proponer
+   `/fg-update-arch` para sincronizarlos, y después el orquestador va a poder proponer
    Rápido.
 2. El tipo inferido del cambio es pesado (`feat`/`refactor`): estos van a Completo por
    regla conservadora, sin importar el tamaño. Si el cambio es realmente chico, declará un

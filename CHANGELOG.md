@@ -8,7 +8,29 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
-### Portero proporcional (Fase 1)
+### Desacoplamiento de orquestación — Slice A (arq-desacoplar-orquestacion)
+
+> **NOTA DE DEPRECACIÓN**: `forge/portero_decision.py` y `forge/arch_freshness.py` fueron
+> retirados del repositorio. La decisión de nivel de ceremonia (Libre/Rápido/Completo) pasa
+> a ser juicio del orquestador (Claude) guiado por las reglas declarativas en
+> `forge/templates/orchestrator-rule.md`. No se crea código Python de reemplazo.
+> Las entradas históricas que documentan estos módulos se conservan más abajo.
+
+#### Removed
+
+- **`forge/portero_decision.py`** — retirado. La función `decidir_nivel` ya no existe como código Python. La doctrina de precedencia de señales vive en `forge/templates/orchestrator-rule.md` (tabla de precedencia + regla conservadora + detección de arquitectura al día vía Grep).
+- **`forge/arch_freshness.py`** — retirado. La detección de "arquitectura al día" pasa a un Grep declarativo del orquestador sobre `docs/auditoria/cambios/*/README.md` (frontmatter `structural`/`arch_synced`), documentado en `orchestrator-rule.md`.
+- **`tests/test_portero_decision.py`** y **`tests/test_arch_freshness.py`** — retirados junto con sus módulos.
+
+#### Changed
+
+- **`forge/templates/orchestrator-rule.md`**: reforzado con tabla de precedencia explícita de 4 señales (`ceremonial_threshold > opt-in > tipo > palabras_de_escala`), regla de detección de arquitectura al día vía Grep (3 pasos), y eliminación de referencias al portero como componente de código.
+- **`skills/fg-plan.md`**: eliminados pasos 0 (modo de ciclo) y 0.5 (portero proporcional). La skill arranca directamente en la inferencia del tipo. El nivel de ceremonia llega ya resuelto desde el orquestador.
+- **`skills/fg-explore.md`**: liberado como fase 0 independiente. El gate de avance pasa de "debe existir README.md" a "debe existir la carpeta del cambio". El Context7 gate (paso 4.5) re-anclado al nivel determinado por el orquestador (no por el portero).
+
+---
+
+### Portero proporcional (Fase 1 — histórico)
 
 Implementa el portero de ceremonia proporcional: antes de iniciar un cambio, el workflow evalúa
 señales del contexto y propone el nivel de ritual mínimo adecuado (Libre / Rápido / Completo).

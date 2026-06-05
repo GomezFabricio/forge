@@ -113,7 +113,7 @@ Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 
 ### Gradación de ceremonia
 
-`/fg-plan` incluye un **portero proporcional** que evalúa el cambio y propone el nivel de ritual mínimo adecuado. El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento.
+El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritual mínimo adecuado aplicando `forge/templates/orchestrator-rule.md`. El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento.
 
 | Nivel | Qué saltea | Piso innegociable |
 |---|---|---|
@@ -121,14 +121,14 @@ Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 | **Rápido** | Solo `/fg-design`; tareas se generan desde `templates/tareas-lite.md` | `/fg-review` siempre corre |
 | **Completo** | Nada — ritual completo sin cambios | `/fg-review` siempre corre |
 
-**Condición para modo Rápido**: la arquitectura debe estar al día (`check_arch_freshness()` retorna `al_dia: true`). Si hay cambios estructurales sin sincronizar, el portero eleva automáticamente a Completo.
+**Condición para modo Rápido**: la arquitectura debe estar al día. El orquestador lo verifica mediante Grep sobre los READMEs de cambios (ver `orchestrator-rule.md`). Si hay cambios estructurales sin sincronizar, el orquestador eleva automáticamente a Completo.
 
 ### Las 6 skills
 
 | Skill | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente, re-invocable para upgrade. |
-| `/fg-plan <descripción libre>` | Crea la carpeta `docs/auditoria/cambios/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. |
+| `/fg-plan <descripción libre>` | Crea la carpeta `docs/auditoria/cambios/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. El nivel de ceremonia ya fue determinado por el orquestador antes de invocar esta skill. |
 | `/fg-design` | Crea `diseño.md` (enfoque + arquitectura + archivos afectados), `tareas.md` (checklist) y `decisiones.md` (decisiones técnicas iniciales), todos vía CodeGraph. |
 | `/fg-implement` | Implementa el checklist tarea por tarea aplicando el ciclo Strict TDD si está activo (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR). |
 | `/fg-review` | Corre la suite completa, valida TDD Cycle Evidence, audita assertion quality, delega a sub-agentes especialistas según el cambio, y consolida el cierre. Única skill que delega. |
@@ -218,13 +218,13 @@ La norma sana es **"1 sesión = 1 ciclo"** — si un cambio requiere múltiples 
 
 Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive` o `automatic`). `/fg-plan` lo lee al arrancar y lo usa como valor pre-seleccionado en la pregunta de modo — el dev siempre puede cambiar la elección por sesión.
 
-#### `rules.workflow.ceremonial_threshold` — Sesgo del portero proporcional
+#### `rules.workflow.ceremonial_threshold` — Sesgo del orquestador
 
-Controla el nivel de ceremonia que el portero propone por defecto para el proyecto.
+Controla el nivel de ceremonia que el orquestador propone por defecto para el proyecto (señal de mayor precedencia en `orchestrator-rule.md`).
 
 | Valor | Comportamiento |
 |---|---|
-| `auto` | El portero infiere el nivel por tipo de cambio y señales contextuales. **Default**. |
+| `auto` | El orquestador infiere el nivel por tipo de cambio y señales contextuales. **Default**. |
 | `lite` | Sesga hacia Rápido para tipos ligeros (`docs`, `chore`, `test`, `style`) cuando la arquitectura está al día. Tipos no triviales (`feat`, `refactor`) siguen yendo a Completo. |
 | `full` | Fuerza Completo en todos los cambios sin preguntar. Útil en proyectos críticos o bajo auditoría estricta. |
 
@@ -359,8 +359,6 @@ forge/
 │   ├── cli.py                   ← entry point del binario `forge`
 │   ├── bootstrap.py             ← ejecutor de /fg-setup (instala forge en un proyecto)
 │   ├── installer.py             ← lógica de `forge install` (deposita skills, agents, MCP)
-│   ├── arch_freshness.py        ← detecta drift entre cambios estructurales y docs/arquitectura/
-│   ├── portero_decision.py      ← función pura del portero proporcional (nivel de ceremonia)
 │   ├── structural_detector.py   ← detector de cambios estructurales usado por /fg-review
 │   └── filters/                 ← capa de filtrado PII (hook UserPromptSubmit)
 │       ├── __init__.py
@@ -395,7 +393,7 @@ forge/
 │   ├── README-change.md
 │   ├── diseño.md
 │   ├── tareas.md
-│   ├── tareas-lite.md           ← template reducido para modo Rápido (portero proporcional)
+│   ├── tareas-lite.md           ← template reducido para modo Rápido
 │   ├── decisiones.md
 │   └── CLAUDE-md-institucional.md
 ├── docs/                        ← documentación interna del paquete

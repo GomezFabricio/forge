@@ -133,8 +133,7 @@ forge usa **Conventional Commits** con type en inglés y subject en español.
 | `agents` | Los 6 sub-agentes especialistas. |
 | `templates` | Templates de `templates/` (CLAUDE-md-institucional, etc.). |
 | `config` | YAMLs per-project. |
-| `portero` | Portero proporcional (`forge/portero_decision.py`). |
-| `arch-freshness` | Detector de drift arquitectónico (`forge/arch_freshness.py`). |
+| `orchestrator-rule` | Reglas de juicio del orquestador (`forge/templates/orchestrator-rule.md`). |
 | `deps` | Dependencias en `pyproject.toml`. |
 | `release` | Bumps de versión + tag. |
 

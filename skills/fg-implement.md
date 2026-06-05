@@ -32,7 +32,7 @@ El comando de test a usar es `rules.implement.test_command`. Si está vacío, fa
 
 - Leer `tareas.md` para el checklist de tareas a ejecutar. Si no existe, abortar y sugerir correr `/fg-design` (o `/fg-plan` en modo Rápido) primero.
 - Leer `diseño.md` del cambio activo para entender el enfoque y la arquitectura.
-  Si `diseño.md` **no existe** (escenario de modo Rápido del portero proporcional):
+  Si `diseño.md` **no existe** (escenario de modo Rápido — el orquestador determinó que no aplica `/fg-design`):
   - No abortar ni advertir — es un caso válido.
   - Usar el `README.md` del cambio como contexto de enfoque en su lugar.
   - El contrato de lectura de `tareas.md` no cambia.

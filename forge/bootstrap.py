@@ -369,12 +369,12 @@ rules:
     # cycle_mode: cómo corren las 4 fases del workflow forge (plan → design → implement → review).
     #   "interactive" = pausa entre fases para que el dev revise antes de seguir.
     #   "automatic"   = corre las 4 fases sin parar, muestra solo el resultado final.
-    # NOTA: este es el default sugerido; /fg-plan paso 0 lo pregunta una vez por sesión
-    # al primer comando del ciclo y cachea la respuesta. "1 sesión = 1 ciclo" es la norma sana.
+    # NOTA: este es el default sugerido; el orquestador lo pregunta una vez por sesión,
+    # post-explore, y cachea la respuesta. "1 sesión = 1 ciclo" es la norma sana.
     cycle_mode: interactive
 
-    # ceremonial_threshold: cuánta ceremonia aplica el portero proporcional.
-    #   "auto" = el portero propone el nivel (Libre/Rápido/Completo) y el dev confirma (default).
+    # ceremonial_threshold: cuánta ceremonia aplica el orquestador en su juicio.
+    #   "auto" = el orquestador propone el nivel (Libre/Rápido/Completo) y el dev confirma (default).
     #   "lite" = sesga a Rápido siempre que se pueda; nunca fuerza Completo salvo arquitectura desactualizada.
     #   "full" = fuerza Completo SIEMPRE, sin preguntar (entornos críticos / auditoría estricta).
     ceremonial_threshold: auto
