@@ -1,7 +1,7 @@
 ---
 name: fg-explore
-description: Produce el mapa del cambio activo consultando los MCP tools de CodeGraph. Genera exploracion.md reutilizable por /fg-design y el portero de /fg-plan.
-when_to_apply: El dev invoca /fg-explore cuando quiere un mapa estructural del cambio antes de diseñar, o cuando el portero de /fg-plan lo dispara en ambiguedad (3b — diferido).
+description: Produce el mapa del cambio activo consultando los MCP tools de CodeGraph. Genera exploracion.md reutilizable por /fg-design. Fase 0 independiente — puede correr antes de /fg-plan.
+when_to_apply: El dev invoca /fg-explore como fase 0 de un cambio nuevo, o en cualquier momento durante un cambio activo. El orquestador ya creó o nombró la carpeta del cambio (kebab-case) antes de invocar esta skill. No se requiere que /fg-plan haya corrido previamente.
 ---
 
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
@@ -10,14 +10,14 @@ when_to_apply: El dev invoca /fg-explore cuando quiere un mapa estructural del c
 
 ## Propósito
 
-Centralizar la exploración del codebase que hoy está duplicada en `/fg-plan`, `/fg-design` y `legacy-impact-analyzer`. Dado un cambio activo, consulta CodeGraph con los MCP tools reales en pasada ordenada y produce `docs/auditoria/cambios/<cambio>/exploracion.md` — un mapa reutilizable con archivos afectados reales, consumidores, acoplamientos ocultos y señales fuertes para el portero.
+Centralizar la exploración del codebase que hoy está duplicada en `/fg-plan`, `/fg-design` y `legacy-impact-analyzer`. Dado un cambio activo, consulta CodeGraph con los MCP tools reales en pasada ordenada y produce `docs/auditoria/cambios/<cambio>/exploracion.md` — un mapa reutilizable con archivos afectados reales, consumidores, acoplamientos ocultos y señales fuertes para el orquestador.
 
 El mapa no es efímero: vive en disco dentro del expediente del cambio para trazabilidad y para que `/fg-design` (3c — diferido) lo use como fuente primaria en lugar de re-explorar.
 
 ## Cuándo aplicarla
 
+- Como **fase 0 independiente**: el orquestador invoca `/fg-explore` antes de `/fg-plan` cuando quiere un mapa del cambio antes de diseñar. La carpeta del cambio ya existe (creada por el orquestador); `/fg-plan` corre después si el dev lo desea.
 - Directamente por el dev: `/fg-explore` en cualquier momento durante un cambio activo.
-- A futuro (3b — diferido): disparada por el portero de `/fg-plan` (paso 0.5b) cuando la confianza es media o baja y se necesitan señales fuertes para decidir el nivel de ceremonia.
 
 ## Proceso
 
@@ -33,20 +33,20 @@ Ejecutar las secciones A y E de `fg-phase-common.md`:
 
 Identificar la carpeta del cambio activo bajo `docs/auditoria/cambios/`.
 
-**Condición de avance**: debe existir `docs/auditoria/cambios/<cambio>/README.md`.
+**Condición de avance**: debe existir la carpeta `docs/auditoria/cambios/<cambio>/`. La descripción o alcance del cambio se recibe como input semántico del orquestador; si existe `README.md` en la carpeta, puede usarse como fuente complementaria pero **no es obligatorio**.
 
-Si no existe ningún cambio activo o no hay `README.md`:
+Si no existe ningún cambio activo o no se puede identificar la carpeta:
 
 - Preguntar al dev: "¿Cuál es el cambio activo? (ej: `2026-05-feat-login-usuarios`)"
 - Si el dev no puede especificarlo, abortar con mensaje claro:
-  > "No se encontró ningún cambio activo con README.md. Corré `/fg-plan` primero para crear el cambio."
+  > "No se encontró ninguna carpeta de cambio activo bajo `docs/auditoria/cambios/`. El orquestador debe crear la carpeta del cambio antes de invocar `/fg-explore`."
 - **MUST NOT** generar ningún artefacto parcial antes de resolver este gate.
 
-Leer el contenido de `README.md` (secciones Qué, Por qué, Alcance) — es la entrada semántica para la pasada de CodeGraph.
+Usar como entrada semántica para la pasada de CodeGraph: la descripción del cambio recibida del orquestador; si existe `README.md`, complementar con sus secciones Qué, Por qué, Alcance.
 
 ### 3. Consultar CodeGraph en pasada ordenada
 
-Invocar los MCP tools de CodeGraph **en este orden**, pasando la descripción/alcance del `README.md` como entrada semántica:
+Invocar los MCP tools de CodeGraph **en este orden**, pasando la descripción/alcance del cambio (recibida del orquestador, complementada con `README.md` si existe) como entrada semántica:
 
 **3.1 Exploración semántica del área**
 
@@ -95,7 +95,7 @@ Si no se detectan: registrar "Ninguno detectado con el nivel actual de análisis
 
 ### 4.5 Consultar Context7 para librerías externas detectadas (TRIGGER A — selectivo)
 
-**Gate de nivel**: este paso se ejecuta SOLO cuando el portero ya clasificó el cambio como `rapido` o `completo`. En cambios de nivel `libre` NO se consulta Context7 (preserva el cupo de 1000 req/mes).
+**Gate de nivel**: este paso se ejecuta SOLO cuando el orquestador ya determinó el nivel del cambio como `rapido` o `completo` (aplicando `orchestrator-rule.md`). En cambios de nivel `libre` NO se consulta Context7 (preserva el cupo de 1000 req/mes).
 
 **Condición de activación**: al construir la sección 2 (archivos afectados reales), si alguno de los archivos afectados contiene imports o dependencias de **librerías externas** (no código del propio repo), activar este paso.
 
@@ -187,7 +187,7 @@ Cuando CodeGraph no está indexado o disponible, `/fg-explore` **MUST NOT bloque
 
 ### Siempre
 
-- Ejecutar el gate del paso 2 antes de generar cualquier artefacto: sin `README.md` del cambio, no avanzar.
+- Ejecutar el gate del paso 2 antes de generar cualquier artefacto: sin carpeta del cambio activo, no avanzar.
 - Usar los tool names reales de CodeGraph: `mcp__codegraph__codegraph_explore`, `mcp__codegraph__codegraph_search`, `mcp__codegraph__codegraph_files`, `mcp__codegraph__codegraph_node`, `mcp__codegraph__codegraph_callers`, `mcp__codegraph__codegraph_callees`, `mcp__codegraph__codegraph_impact`, `mcp__codegraph__codegraph_status`. No usar narrativa vaga como "consultar CodeGraph" sin el nombre del tool.
 - Respetar la idempotencia (paso 6): si `exploracion.md` ya existe, preguntar antes de sobrescribir.
 - Incluir los 4 campos del bloque de señales fuertes en toda ejecución — con valores conservadores bajo degradación.
@@ -202,19 +202,16 @@ Cuando CodeGraph no está indexado o disponible, `/fg-explore` **MUST NOT bloque
 
 ### Nunca
 
-- Generar un artefacto parcial antes de resolver el gate del paso 2 (sin cambio activo).
+- Generar un artefacto parcial antes de resolver el gate del paso 2 (sin carpeta del cambio activo).
 - Retornar `status: blocked` solo por indisponibilidad de CodeGraph.
 - Sobrescribir `exploracion.md` existente sin confirmación explícita del dev.
 - Omitir la sección de señales fuertes ni dejar los 4 campos sin valor.
 - Usar nombres narrativos de tools en lugar de los nombres reales `mcp__codegraph__codegraph_*`.
 - Abortar silenciosamente por fallo de un tool individual — degradar y continuar.
 - Consultar Context7 en cambios de nivel `libre` ni para librerías del propio repo (solo librerías externas, solo niveles `rapido`/`completo`).
+- Exigir que `/fg-plan` haya corrido previamente — `/fg-explore` es fase 0 independiente.
 
 ## Punto de integración diferido (documentación)
-
-**3b — Gate del portero** (diferido, no implementado en este slice):
-
-El portero de `/fg-plan` (paso 0.5b) disparará `/fg-explore` automáticamente cuando la confianza en la decisión de nivel sea media o baja. Punto de integración exacto: `skills/fg-plan.md` paso 0.5, sub-paso (b) "Decidir el nivel" — después de llamar `decidir_nivel(señales)` y antes del sub-paso (c) propone-y-confirma. El portero leerá `senales_fuertes` del envelope retornado para re-evaluar el nivel con datos reales. Para confianza alta trivial, el portero NO dispara `/fg-explore` (preserva bajo costo).
 
 **3c — Consumo en fg-design** (diferido):
 
