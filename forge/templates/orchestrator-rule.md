@@ -31,9 +31,9 @@ Invocar la cadena correspondiente cuando el dev expresa intent de:
 
 ## Gradación proporcional del intent
 
-Cuando forge entra, no siempre necesita el ritual completo. El portero proporcional
+Cuando forge entra, no siempre necesita el ritual completo. El orquestador
 clasifica cada cambio en uno de tres niveles de ceremonia y propone el nivel al dev
-antes de arrancar. El intent ya existe (forge es latente) — el portero solo gradúa
+antes de arrancar. El intent ya existe (forge es latente) — el orquestador solo gradúa
 cuánto expediente aplica.
 
 ### Los 3 niveles
@@ -44,24 +44,39 @@ cuánto expediente aplica.
 | **Rápido** | Saltea solo `/fg-design`. Corre `/fg-plan` → `/fg-implement` → `/fg-review`. | Cambio chico, tipo ligero (docs/chore/fix), sin palabras de escala, arquitectura al día. |
 | **Completo** | Ritual completo sin cambios: plan → design → implement → review. | Feat, refactor, palabras de escala, ambigüedad, arquitectura desactualizada. |
 
+### Cómo el orquestador decide el nivel (precedencia)
+
+El orquestador evalúa las señales en este orden estricto. La primera señal que resuelve
+el nivel gana; las siguientes se ignoran.
+
+| Orden | Señal | Regla de decisión |
+|---|---|---|
+| 1 (gana siempre) | `ceremonial_threshold` (config) | `full` → Completo forzado, sin preguntar. `lite` → sesgar a Rápido si la arquitectura está al día. `auto` → seguir evaluando señales 2-4. |
+| 2 | opt-in del dev (lenguaje natural o bandera) | `completo`/`rapido`/`libre` explícito gana sobre la inferencia por tipo. Bandera (`--completo`, `--rapido`, etc.) gana sobre interpretación de lenguaje natural. |
+| 3 | tipo inferido | `docs`/`chore`/`fix`/`test`/`style` → sesga Rápido. `feat`/`refactor` → sesga Completo. |
+| 4 | palabras de escala | "migrar", "reemplazar", "rediseñar", "reescribir", "módulo de", "todo el", "sistema de" presentes en la descripción → fuerza Completo aunque el tipo sea ligero. |
+
+Ante señales ambiguas o contradictorias en los niveles 2-4, aplicar la regla
+conservadora (ver más abajo): la propuesta default es Completo.
+
 ### Piso innegociable
 
 `/fg-review` SIEMPRE corre. No es configurable. No se salta. En modo Rápido, Completo
 o cualquier variante futura: `/fg-review` ejecuta incondicionalmente al final del ciclo.
-Esta garantía no la controla el dev, no la controla la config, no la controla el portero.
+Esta garantía no la controla el dev, no la controla la config, no la controla el orquestador.
 
 ### Cómo el orquestador deriva el opt-in del lenguaje natural
 
 Forge es latente: el dev no tipea slash commands ni banderas — habla en lenguaje natural.
 El orquestador interpreta el intent del pedido y lo traduce a la señal `opt_in` antes de
-llamar al portero. Esta derivación es la primera lectura del pedido, antes de inferir el tipo.
+evaluar el tipo y las palabras de escala. Esta derivación es la primera lectura del pedido.
 
 | Intent natural del dev | opt_in derivado |
 |------------------------|-----------------|
 | "esto es delicado, hacelo completo" / "quiero el ciclo completo" | `"completo"` |
 | "es un toque rápido" / "algo simple, sin mucho proceso" | `"rapido"` |
 | "sin forge" / "no quiero el ciclo" / "sin ritual" | `"libre"` |
-| Sin señal de nivel en el pedido | `None` (portero infiere por tipo y palabras de escala) |
+| Sin señal de nivel en el pedido | `None` (el orquestador infiere por tipo y palabras de escala) |
 
 Las banderas `--rapido`, `--completo`, `--libre` (y sus alias) son la forma explícita del
 mismo mecanismo y tienen precedencia sobre la interpretación del lenguaje natural.
@@ -69,11 +84,22 @@ Cuando el dev incluye una bandera, se usa directamente sin interpretación adici
 
 ### Condición habilitante de Rápido: arquitectura al día
 
-Rápido solo está disponible si `docs/arquitectura/` está al día. El portero lo verifica
-leyendo el frontmatter de `docs/auditoria/cambios/*/README.md`: si existe algún cambio
-con `structural: true` y sin `arch_synced: true`, la arquitectura está desactualizada
-y el portero fuerza Completo, informando al dev cuántos cambios estructurales están
-pendientes de sincronizar.
+Rápido solo está disponible si `docs/arquitectura/` está al día. El orquestador lo
+verifica mediante Grep, sin llamar a ningún módulo Python ni comando externo:
+
+```
+1. Grep "^structural:\s*true" en docs/auditoria/cambios/*/README.md  → READMEs estructurales
+2. De esos, los que NO matcheen "^arch_synced:\s*true" → cambios pendientes de sincronizar
+3. Si docs/arquitectura/overview.md no existe O pendientes >= 1 → arquitectura NO al día → forzar Completo
+```
+
+Si existe algún cambio con `structural: true` y sin `arch_synced: true`, la arquitectura
+está desactualizada y el orquestador fuerza Completo, informando al dev cuántos cambios
+estructurales están pendientes de sincronizar.
+
+Nota: el Grep tolera cero matches (la carpeta `docs/auditoria/cambios/` puede no existir
+aún en proyectos recién inicializados). En ese caso, el chequeo de `overview.md` es el
+que gobierna.
 
 Limitación declarada: este detector solo ve cambios que pasaron por forge y fueron
 marcados `structural`. Cambios manuales externos no se detectan. Es una señal de piso,
@@ -82,15 +108,16 @@ Si el dev elige ignorar un drift externo, `/fg-review` (piso innegociable) sigue
 
 ### Regla conservadora: ante la duda sin CodeGraph → Completo
 
-Sin CodeGraph disponible, el portero no puede estimar impacto estructural con datos reales.
-Ante señales ambiguas o contradictorias, la propuesta default es siempre Completo.
-El dev puede declinar y elegir Rápido explícitamente (`--rapido`), pero el portero
+Sin CodeGraph disponible, el orquestador no puede estimar impacto estructural con datos
+reales. Ante señales ambiguas o contradictorias en las señales 2-4 de la tabla de
+precedencia, la propuesta default es siempre Completo.
+El dev puede declinar y elegir Rápido explícitamente (`--rapido`), pero el orquestador
 no asume que un cambio es chico si no puede probarlo.
 
 ### Config de proyecto: `ceremonial_threshold`
 
 `docs/auditoria/config.yaml` → `rules.workflow.ceremonial_threshold`:
-- `auto` (default): el portero propone el nivel según señales y espera confirmación del dev.
+- `auto` (default): el orquestador propone el nivel según señales y espera confirmación del dev.
 - `lite`: sesga hacia Rápido siempre que se pueda; respeta la condición de arquitectura al día.
 - `full`: fuerza Completo siempre, sin proponer ni preguntar. Para entornos de auditoría estricta.
 <!-- /forge:orchestrator -->
