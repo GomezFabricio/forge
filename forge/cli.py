@@ -1,12 +1,14 @@
 """forge CLI entry point.
 
 Subcommands:
-    forge --version                  Print installed version.
-    forge install                    Deposit skills, agents and register engram MCP
-                                     in ~/.claude/. Implemented in forge/installer.py.
-    forge install --install-engram   Auto-install engram without prompt.
+    forge --version                    Print installed version.
+    forge install                      Deposit skills, agents and register engram MCP
+                                       in ~/.claude/. Implemented in forge/installer.py.
+    forge install --install-engram     Auto-install engram without prompt.
     forge install --skip-engram-check  Skip engram detection, deposit assets only.
-    forge --help                     Show help.
+    forge install --skip-codegraph     Skip CodeGraph installation entirely.
+    forge install --install-codegraph  Auto-install CodeGraph without prompt (CI-safe).
+    forge --help                       Show help.
 
 Project-level setup is done from Claude Code with the /fg-setup skill,
 which invokes forge.bootstrap in the active project.
@@ -54,6 +56,25 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Saltar la detección de engram y depositar solo skills/agents. "
             "--install-engram tiene precedencia si ambos se pasan."
+        ),
+    )
+    install_parser.add_argument(
+        "--skip-codegraph",
+        dest="skip_codegraph",
+        action="store_true",
+        help=(
+            "Omitir completamente la instalación y registro de CodeGraph. "
+            "Equivalente a responder N al prompt de CodeGraph."
+        ),
+    )
+    install_parser.add_argument(
+        "--install-codegraph",
+        dest="install_codegraph",
+        action="store_true",
+        help=(
+            "Instalar CodeGraph automáticamente si falta, sin prompt (non-interactive / CI). "
+            "Si CodeGraph ya está detectado, registra el MCP sin reinstalar. "
+            "--skip-codegraph tiene precedencia si ambos se pasan."
         ),
     )
     install_parser.set_defaults(func=cmd_install)

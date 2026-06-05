@@ -1792,3 +1792,656 @@ class TestVerifySha256:
 
         ok, _ = installer._verify_sha256(fixture, sha256sums, asset_name)
         assert ok is False
+
+
+# ---------------------------------------------------------------------------
+# PR-B: TestInstallCodegraph — T-08 RED / T-09 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestInstallCodegraph:
+    """Verifica install_codegraph() — happy path, fallo de red, plataforma inválida. PR-B T-08/T-09."""
+
+    def _make_api_response(self, asset_name: str, download_url: str) -> MagicMock:
+        """Construye un mock de urllib.request.urlopen con release metadata."""
+        resp = MagicMock()
+        resp.read.return_value = json.dumps({
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": asset_name, "browser_download_url": download_url},
+                {"name": "SHA256SUMS", "browser_download_url": "https://example.com/SHA256SUMS"},
+            ],
+        }).encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    def _make_sha256sums_response(self, asset_name: str, tmp_path: Path) -> tuple[MagicMock, str]:
+        """Crea un fixture de archivo y retorna su SHA256SUMS content correcto."""
+        import hashlib
+        content = b"fake codegraph binary content"
+        digest = hashlib.sha256(content).hexdigest()
+        sha256sums_text = f"{digest}  {asset_name}\n"
+        sha256sums_resp = MagicMock()
+        sha256sums_resp.read.return_value = sha256sums_text.encode()
+        sha256sums_resp.__enter__ = lambda s: s
+        sha256sums_resp.__exit__ = MagicMock(return_value=False)
+        return sha256sums_resp, content
+
+    def test_happy_path_unix_returns_true(self, tmp_path, monkeypatch):
+        """GIVEN plataforma linux/x64, API responde, descarga y SHA256 OK
+        WHEN install_codegraph() THEN retorna (True, mensaje con ruta del binario)."""
+        import hashlib
+
+        from forge import installer
+
+        asset_name = "codegraph-linux-x64.tar.gz"
+        binary_content = b"fake binary"
+        sha256 = hashlib.sha256(binary_content).hexdigest()
+        sha256sums_text = f"{sha256}  {asset_name}\n"
+
+        # Redirigir bin dir a tmp_path
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
+
+        api_resp = MagicMock()
+        api_resp.read.return_value = json.dumps({
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": asset_name, "browser_download_url": "https://example.com/cg.tar.gz"},
+                {"name": "SHA256SUMS", "browser_download_url": "https://example.com/SHA256SUMS"},
+            ],
+        }).encode()
+        api_resp.__enter__ = lambda s: s
+        api_resp.__exit__ = MagicMock(return_value=False)
+
+        sha256sums_resp = MagicMock()
+        sha256sums_resp.read.return_value = sha256sums_text.encode()
+        sha256sums_resp.__enter__ = lambda s: s
+        sha256sums_resp.__exit__ = MagicMock(return_value=False)
+
+        # Mock tarfile: extraer binario falso
+        import tarfile
+        mock_member = MagicMock(spec=tarfile.TarInfo)
+        mock_member.name = "codegraph-linux-x64/codegraph"
+        mock_tf = MagicMock()
+        mock_tf.__enter__ = lambda s: s
+        mock_tf.__exit__ = MagicMock(return_value=False)
+        mock_tf.getmembers.return_value = [mock_member]
+        mock_tf.extract = MagicMock()
+
+        def fake_download(url, dest):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(binary_content)
+
+        with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
+             patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
+             patch.object(installer, "_download_binary", side_effect=fake_download), \
+             patch("tarfile.open", return_value=mock_tf), \
+             patch("os.chmod"), \
+             patch("os.unlink"), \
+             patch.object(installer, "_xattr_cleanup_darwin"):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is True
+        assert isinstance(msg, str)
+        assert len(msg) > 0
+
+    def test_network_failure_returns_false(self, tmp_path, monkeypatch):
+        """GIVEN urllib.request.urlopen lanza URLError WHEN install_codegraph()
+        THEN retorna (False, mensaje de error) sin lanzar excepción."""
+        import urllib.error
+
+        from forge import installer
+
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
+
+        with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
+             patch("urllib.request.urlopen",
+                   side_effect=urllib.error.URLError("sin red")):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is False
+        assert isinstance(msg, str)
+        assert len(msg) > 0
+
+    def test_unsupported_platform_returns_false(self, tmp_path, monkeypatch):
+        """GIVEN _detect_codegraph_platform lanza SystemExit WHEN install_codegraph()
+        THEN retorna (False, mensaje) sin propagar la excepción."""
+        from forge import installer
+
+        with patch.object(installer, "_detect_codegraph_platform",
+                          side_effect=SystemExit(installer.EXIT_PLATFORM_UNSUPPORTED)):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is False
+        assert isinstance(msg, str)
+
+    def test_sha256_mismatch_returns_false(self, tmp_path, monkeypatch):
+        """GIVEN SHA256SUMS contiene hash incorrecto WHEN install_codegraph()
+        THEN retorna (False, mensaje de verificación fallida)."""
+        from forge import installer
+
+        asset_name = "codegraph-linux-x64.tar.gz"
+        binary_content = b"fake binary"
+
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
+
+        wrong_sha256 = "a" * 64
+        sha256sums_text = f"{wrong_sha256}  {asset_name}\n"
+
+        api_resp = MagicMock()
+        api_resp.read.return_value = json.dumps({
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": asset_name, "browser_download_url": "https://example.com/cg.tar.gz"},
+                {"name": "SHA256SUMS", "browser_download_url": "https://example.com/SHA256SUMS"},
+            ],
+        }).encode()
+        api_resp.__enter__ = lambda s: s
+        api_resp.__exit__ = MagicMock(return_value=False)
+
+        sha256sums_resp = MagicMock()
+        sha256sums_resp.read.return_value = sha256sums_text.encode()
+        sha256sums_resp.__enter__ = lambda s: s
+        sha256sums_resp.__exit__ = MagicMock(return_value=False)
+
+        def fake_download(url, dest):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(binary_content)
+
+        with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
+             patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
+             patch.object(installer, "_download_binary", side_effect=fake_download), \
+             patch("os.unlink"):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is False
+        assert isinstance(msg, str)
+
+    def test_asset_not_found_in_release_returns_false(self, tmp_path, monkeypatch):
+        """GIVEN la release no contiene el asset para la plataforma WHEN install_codegraph()
+        THEN retorna (False, mensaje descriptivo)."""
+        from forge import installer
+
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
+
+        api_resp = MagicMock()
+        api_resp.read.return_value = json.dumps({
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": "codegraph-darwin-arm64.tar.gz",
+                 "browser_download_url": "https://example.com/other.tar.gz"},
+            ],
+        }).encode()
+        api_resp.__enter__ = lambda s: s
+        api_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
+             patch("urllib.request.urlopen", return_value=api_resp):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is False
+        assert isinstance(msg, str)
+
+    def test_happy_path_windows_returns_true(self, tmp_path, monkeypatch):
+        """GIVEN plataforma win32/x64, descarga zip exitosa WHEN install_codegraph()
+        THEN retorna (True, mensaje). Triangulación: comportamiento zip distinto a tar.gz."""
+        import hashlib
+
+        from forge import installer
+
+        asset_name = "codegraph-win32-x64.zip"
+        binary_content = b"fake windows binary"
+        sha256 = hashlib.sha256(binary_content).hexdigest()
+        sha256sums_text = f"{sha256}  {asset_name}\n"
+
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
+
+        api_resp = MagicMock()
+        api_resp.read.return_value = json.dumps({
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": asset_name, "browser_download_url": "https://example.com/cg.zip"},
+                {"name": "SHA256SUMS", "browser_download_url": "https://example.com/SHA256SUMS"},
+            ],
+        }).encode()
+        api_resp.__enter__ = lambda s: s
+        api_resp.__exit__ = MagicMock(return_value=False)
+
+        sha256sums_resp = MagicMock()
+        sha256sums_resp.read.return_value = sha256sums_text.encode()
+        sha256sums_resp.__enter__ = lambda s: s
+        sha256sums_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_zf = MagicMock()
+        mock_zf.__enter__ = lambda s: s
+        mock_zf.__exit__ = MagicMock(return_value=False)
+        mock_zf.namelist.return_value = ["codegraph-win32-x64/codegraph.exe"]
+        mock_src = MagicMock()
+        mock_src.__enter__ = lambda s: s
+        mock_src.__exit__ = MagicMock(return_value=False)
+        mock_src.read.return_value = binary_content
+        mock_zf.open.return_value = mock_src
+
+        def fake_download(url, dest):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(binary_content)
+
+        with patch.object(installer, "_detect_codegraph_platform", return_value=("win32", "x64")), \
+             patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
+             patch.object(installer, "_download_binary", side_effect=fake_download), \
+             patch("zipfile.ZipFile", return_value=mock_zf), \
+             patch("os.unlink"):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is True
+        assert isinstance(msg, str)
+
+
+# ---------------------------------------------------------------------------
+# PR-B: TestDetectCodegraphPlatform — helper interno
+# ---------------------------------------------------------------------------
+
+
+class TestDetectCodegraphPlatform:
+    """Verifica _detect_codegraph_platform() — mapeo a tokens de CodeGraph. PR-B."""
+
+    def test_linux_x86_64_maps_to_linux_x64(self, monkeypatch):
+        """GIVEN sys.platform='linux', machine='x86_64'
+        WHEN _detect_codegraph_platform() THEN retorna ('linux', 'x64')."""
+        from forge import installer
+        monkeypatch.setattr("sys.platform", "linux")
+        with patch("platform.machine", return_value="x86_64"):
+            os_tok, arch_tok = installer._detect_codegraph_platform()
+        assert os_tok == "linux"
+        assert arch_tok == "x64"
+
+    def test_darwin_arm64_maps_correctly(self, monkeypatch):
+        """GIVEN sys.platform='darwin', machine='arm64'
+        WHEN _detect_codegraph_platform() THEN retorna ('darwin', 'arm64')."""
+        from forge import installer
+        monkeypatch.setattr("sys.platform", "darwin")
+        with patch("platform.machine", return_value="arm64"):
+            os_tok, arch_tok = installer._detect_codegraph_platform()
+        assert os_tok == "darwin"
+        assert arch_tok == "arm64"
+
+    def test_win32_amd64_maps_to_win32_x64(self, monkeypatch):
+        """GIVEN sys.platform='win32', machine='AMD64'
+        WHEN _detect_codegraph_platform() THEN retorna ('win32', 'x64')."""
+        from forge import installer
+        monkeypatch.setattr("sys.platform", "win32")
+        with patch("platform.machine", return_value="AMD64"):
+            os_tok, arch_tok = installer._detect_codegraph_platform()
+        assert os_tok == "win32"
+        assert arch_tok == "x64"
+
+    def test_unsupported_platform_raises_system_exit(self, monkeypatch):
+        """GIVEN plataforma no soportada WHEN _detect_codegraph_platform()
+        THEN lanza SystemExit con EXIT_PLATFORM_UNSUPPORTED."""
+        from forge import installer
+        monkeypatch.setattr("sys.platform", "freebsd")
+        with patch("platform.machine", return_value="x86_64"), \
+             pytest.raises(SystemExit) as exc:
+            installer._detect_codegraph_platform()
+        assert exc.value.code == installer.EXIT_PLATFORM_UNSUPPORTED
+
+
+# ---------------------------------------------------------------------------
+# PR-B: TestRegisterCodegraphMcp — T-10 RED / T-11 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterCodegraphMcp:
+    """Verifica register_codegraph_mcp() — merge idempotente en ~/.claude.json. PR-B T-10/T-11."""
+
+    def test_creates_mcp_block_when_file_missing(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json no existe WHEN register_codegraph_mcp()
+        THEN crea el archivo con mcpServers.codegraph y retorna 'created'."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        status = installer.register_codegraph_mcp()
+
+        assert status == "created"
+        assert claude_json.exists()
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        assert "mcpServers" in data
+        assert "codegraph" in data["mcpServers"]
+        cg = data["mcpServers"]["codegraph"]
+        assert cg["type"] == "stdio"
+        assert cg["command"] == "codegraph"
+
+    def test_merges_without_overwriting_existing_config(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json con config previa del dev WHEN register_codegraph_mcp()
+        THEN preserva las claves existentes y agrega mcpServers.codegraph."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        existing_config = {
+            "theme": "dark",
+            "mcpServers": {
+                "engram": {
+                    "type": "stdio",
+                    "command": "/home/user/.engram/bin/engram",
+                    "args": ["mcp", "--tools=agent"],
+                }
+            },
+        }
+        claude_json.write_text(
+            json.dumps(existing_config, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        status = installer.register_codegraph_mcp()
+
+        assert status in ("created", "merged")
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        # Config existente preservada
+        assert data.get("theme") == "dark"
+        assert "engram" in data["mcpServers"], "El bloque engram existente debe preservarse"
+        # CodeGraph agregado
+        assert "codegraph" in data["mcpServers"]
+
+    def test_idempotent_second_call_returns_present(self, tmp_path, monkeypatch):
+        """GIVEN register_codegraph_mcp() ya fue llamado WHEN se llama de nuevo
+        THEN retorna 'present' y NO modifica el archivo."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_codegraph_mcp()
+        content_after_first = claude_json.read_text(encoding="utf-8")
+
+        status2 = installer.register_codegraph_mcp()
+
+        assert status2 == "present"
+        content_after_second = claude_json.read_text(encoding="utf-8")
+        assert content_after_first == content_after_second
+
+    def test_creates_backup_before_writing(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json con config existente WHEN register_codegraph_mcp()
+        THEN crea backup .claude.json.forge-bak con el contenido original."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        original_content = json.dumps({"theme": "light"}, indent=2)
+        claude_json.write_text(original_content, encoding="utf-8")
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_codegraph_mcp()
+
+        backup = tmp_path / ".claude.json.forge-bak"
+        assert backup.exists(), "Debe existir el archivo de backup .claude.json.forge-bak"
+        assert backup.read_text(encoding="utf-8") == original_content
+
+    def test_handles_corrupted_json_gracefully(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json existe pero contiene JSON inválido WHEN register_codegraph_mcp()
+        THEN trata el archivo como vacío y retorna 'created' o 'merged' sin lanzar excepción."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text("{ invalid json {{", encoding="utf-8")
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        # No debe lanzar excepción
+        status = installer.register_codegraph_mcp()
+
+        assert status in ("created", "merged")
+        # El archivo resultante debe ser JSON válido
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        assert "mcpServers" in data
+        assert "codegraph" in data["mcpServers"]
+
+    def test_codegraph_block_has_correct_schema(self, tmp_path, monkeypatch):
+        """GIVEN registro exitoso WHEN se lee el bloque codegraph
+        THEN tiene type=stdio, command=codegraph, args=[serve, --mcp]."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_codegraph_mcp()
+
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        cg = data["mcpServers"]["codegraph"]
+        assert cg["type"] == "stdio"
+        assert cg["command"] == "codegraph"
+        assert "serve" in cg["args"]
+        assert "--mcp" in cg["args"]
+
+
+# ---------------------------------------------------------------------------
+# PR-B: TestPromptCodegraphYn — T-12 RED / T-13 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestPromptCodegraphYn:
+    """Verifica prompt_codegraph_yn() — y/N, default instalar, CI-safe. PR-B T-12/T-13."""
+
+    def test_y_input_returns_y(self):
+        """GIVEN input 'y' WHEN prompt_codegraph_yn() THEN retorna 'y'."""
+        from forge.installer import prompt_codegraph_yn
+        with patch("builtins.input", return_value="y"), \
+             patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            assert prompt_codegraph_yn() == "y"
+
+    def test_yes_input_returns_y(self):
+        """GIVEN input 'yes' WHEN prompt_codegraph_yn() THEN retorna 'y'."""
+        from forge.installer import prompt_codegraph_yn
+        with patch("builtins.input", return_value="yes"), \
+             patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            assert prompt_codegraph_yn() == "y"
+
+    def test_empty_input_returns_y_as_default(self):
+        """GIVEN input vacío (enter) WHEN prompt_codegraph_yn() THEN retorna 'y' (default instalar)."""
+        from forge.installer import prompt_codegraph_yn
+        with patch("builtins.input", return_value=""), \
+             patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            assert prompt_codegraph_yn() == "y"
+
+    def test_n_input_returns_n(self):
+        """GIVEN input 'n' WHEN prompt_codegraph_yn() THEN retorna 'n'."""
+        from forge.installer import prompt_codegraph_yn
+        with patch("builtins.input", return_value="n"), \
+             patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            assert prompt_codegraph_yn() == "n"
+
+    def test_non_interactive_returns_y_without_hanging(self, monkeypatch):
+        """GIVEN entorno no-interactivo (stdin no es tty) WHEN prompt_codegraph_yn()
+        THEN retorna 'y' (instalar por defecto) sin llamar input()."""
+        from forge.installer import prompt_codegraph_yn
+
+        called = []
+        monkeypatch.setattr("builtins.input", lambda _: called.append(True) or "")
+
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = False
+            result = prompt_codegraph_yn()
+
+        assert result == "y"
+        assert called == [], "input() no debe llamarse en entorno no-interactivo"
+
+
+# ---------------------------------------------------------------------------
+# PR-B: TestRunCodegraph — T-14 RED / T-15 GREEN
+# ---------------------------------------------------------------------------
+
+
+class TestRunCodegraph:
+    """Verifica integración de CodeGraph en run() y print_report(). PR-B T-14/T-15."""
+
+    def _make_args(
+        self,
+        install_engram=False,
+        skip_engram_check=True,
+        skip_codegraph=False,
+        install_codegraph=False,
+    ):
+        import argparse
+        return argparse.Namespace(
+            install_engram=install_engram,
+            skip_engram_check=skip_engram_check,
+            skip_codegraph=skip_codegraph,
+            install_codegraph=install_codegraph,
+        )
+
+    def test_codegraph_failure_does_not_change_exit_ok(self):
+        """GIVEN install_codegraph() falla WHEN run() THEN retorna EXIT_OK (fallo graceful R-INST-05)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "detect_codegraph", return_value=(False, {})), \
+             patch.object(installer, "prompt_codegraph_yn", return_value="y"), \
+             patch.object(installer, "install_codegraph", return_value=(False, "error de red")), \
+             patch.object(installer, "register_codegraph_mcp", return_value="created"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+
+    def test_skip_codegraph_flag_skips_install(self):
+        """GIVEN --skip-codegraph flag WHEN run() THEN install_codegraph NO es llamado."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "detect_codegraph", return_value=(False, {})), \
+             patch.object(installer, "install_codegraph") as mock_install, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(skip_codegraph=True))
+
+        assert result == installer.EXIT_OK
+        mock_install.assert_not_called()
+
+    def test_codegraph_already_detected_skips_install(self):
+        """GIVEN detect_codegraph() retorna True WHEN run()
+        THEN install_codegraph NO es llamado (idempotencia R-INST-02)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "detect_codegraph", return_value=(True, {"which": "/usr/bin/codegraph"})), \
+             patch.object(installer, "install_codegraph") as mock_install, \
+             patch.object(installer, "register_codegraph_mcp", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+        mock_install.assert_not_called()
+
+    def test_install_codegraph_flag_installs_without_prompt(self):
+        """GIVEN --install-codegraph flag y codegraph no detectado WHEN run()
+        THEN install_codegraph es llamado sin pasar por prompt (CI-safe)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "detect_codegraph", return_value=(False, {})), \
+             patch.object(installer, "prompt_codegraph_yn") as mock_prompt, \
+             patch.object(installer, "install_codegraph", return_value=(True, "ok")) as mock_install, \
+             patch.object(installer, "register_codegraph_mcp", return_value="created"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(install_codegraph=True))
+
+        assert result == installer.EXIT_OK
+        mock_install.assert_called_once()
+        mock_prompt.assert_not_called()
+
+    def test_exception_in_codegraph_step_does_not_abort_run(self):
+        """GIVEN install_codegraph lanza excepción inesperada WHEN run()
+        THEN retorna EXIT_OK (try/except defensa en profundidad R-INST-05)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "detect_codegraph", return_value=(False, {})), \
+             patch.object(installer, "prompt_codegraph_yn", return_value="y"), \
+             patch.object(installer, "install_codegraph", side_effect=RuntimeError("boom")), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "warnings": []}), \
+             patch.object(installer, "inject_orchestrator_rule", return_value="created"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+
+    def test_print_report_includes_codegraph_section(self, capsys):
+        """GIVEN report con codegraph info WHEN print_report() THEN el output menciona codegraph."""
+        from forge.installer import print_report
+
+        report = {
+            "engram": {"which": "/usr/bin/engram"},
+            "assets": {
+                "skills_deposited": 6,
+                "shared_deposited": 3,
+                "agents_deposited": 6,
+                "warnings": [],
+            },
+            "codegraph": {"status": "installed", "msg": "codegraph instalado en /home/.codegraph/bin/codegraph"},
+        }
+        print_report(report)
+        captured = capsys.readouterr()
+        assert "codegraph" in captured.out.lower()
+
+    def test_print_report_codegraph_already_present(self, capsys):
+        """GIVEN codegraph ya instalado (status='already_present') WHEN print_report()
+        THEN menciona que ya estaba instalado."""
+        from forge.installer import print_report
+
+        report = {
+            "engram": {"which": "/usr/bin/engram"},
+            "assets": {
+                "skills_deposited": 6,
+                "shared_deposited": 3,
+                "agents_deposited": 6,
+                "warnings": [],
+            },
+            "codegraph": {"status": "already_present", "msg": "/usr/local/bin/codegraph"},
+        }
+        print_report(report)
+        captured = capsys.readouterr()
+        assert "codegraph" in captured.out.lower()
+
+    def test_print_report_codegraph_skipped(self, capsys):
+        """GIVEN codegraph omitido (status='skipped') WHEN print_report()
+        THEN el output menciona que fue omitido."""
+        from forge.installer import print_report
+
+        report = {
+            "engram": {"which": "/usr/bin/engram"},
+            "assets": {
+                "skills_deposited": 6,
+                "shared_deposited": 3,
+                "agents_deposited": 6,
+                "warnings": [],
+            },
+            "codegraph": {"status": "skipped", "msg": "omitido por --skip-codegraph"},
+        }
+        print_report(report)
+        captured = capsys.readouterr()
+        assert "codegraph" in captured.out.lower()
