@@ -73,6 +73,7 @@ Cada skill agrega campos propios **sin remover los base**:
 | `/fg-review` | `tdd_compliance`, `assertion_quality`, `coverage`, `roles_invoked`, `structural` |
 | `/fg-setup` | `stack_detected`, `test_runner`, `audit_config`, `codegraph_indexed` |
 | `/fg-update-arch` | `proposals_total`, `proposals_accepted`, `adrs_created` |
+| `/fg-explore` | `mapa_path`, `senales_fuertes` (`consumidores`, `blast_radius`, `toca_transversales`, `nivel_sugerido`) |
 
 ### Valores de `status`
 
@@ -193,7 +194,7 @@ Si un artefacto ya existe (ej: `/fg-design` se re-corre y `diseño.md` ya existe
 1. Preguntar al dev si quiere re-generar ese artefacto específico.
 2. Reportar que el artefacto fue preservado y omitir la re-generación.
 
-La regla aplica a: `README.md`, `diseño.md`, `tareas.md`, `decisiones.md`, `docs/auditoria/config.yaml`, `CLAUDE.md`, `config/modulos-transversales.yaml`.
+La regla aplica a: `README.md`, `diseño.md`, `tareas.md`, `decisiones.md`, `exploracion.md`, `docs/auditoria/config.yaml`, `CLAUDE.md`, `config/modulos-transversales.yaml`.
 
 **Preservar > sobrescribir**: en caso de duda, preservar siempre.
 
