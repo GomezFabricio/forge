@@ -681,7 +681,7 @@ def register_context7_mcp() -> str:
         block = dict(_CONTEXT7_MCP_BLOCK)
         block["args"] = list(_CONTEXT7_MCP_BLOCK["args"]) + ["--api-key", api_key]
     else:
-        block = _CONTEXT7_MCP_BLOCK
+        block = dict(_CONTEXT7_MCP_BLOCK)
 
     # Merge: agregar mcpServers.context7 preservando el resto
     if "mcpServers" not in config or not isinstance(config.get("mcpServers"), dict):
