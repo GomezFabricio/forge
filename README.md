@@ -282,6 +282,55 @@ Si CodeGraph no está disponible, forge sigue funcionando degradado (los detecto
 
 ---
 
+## Context7 MCP
+
+forge integra [Context7](https://context7.com) como herramienta opcional para obtener documentación actualizada de librerías externas durante la exploración e implementación.
+
+### Cuándo se consulta
+
+La consulta es **selectiva** para preservar el cupo de 1000 req/mes del pool gratuito:
+
+- **TRIGGER A** — en `/fg-explore`: cuando el mapa detecta una librería externa en los archivos afectados y el cambio es de nivel `rapido` o `completo` (nunca en `libre`).
+- **TRIGGER B** — en `/fg-implement`: cuando hay ambigüedad explícita sobre la API de una librería externa (firma, parámetros, comportamiento).
+
+En cambios triviales (renombrados, typos, ajustes de estilo) Context7 **nunca** se consulta.
+
+### Instalación
+
+`forge install` registra el bloque MCP de Context7 en `~/.claude.json` automáticamente (vía `npx`, sin instalar ningún binario):
+
+```bash
+# Sin API key: usa pool anónimo (1000 req/mes compartido)
+forge install
+
+# Con API key personal: definir la variable de entorno ANTES de correr forge install
+export CONTEXT7_API_KEY="tu-key-personal"
+forge install
+
+# Saltar Context7 si no lo querés
+forge install --skip-context7
+```
+
+La key **nunca** se commitea ni se escribe en ningún archivo del repo. Solo se inyecta en `~/.claude.json` del dev (fuera del control de versiones).
+
+### Privacidad
+
+Context7 es un servicio externo (backend closed-source de Upstash). Qué datos viajan a Context7:
+
+| Dato enviado | Ejemplo |
+|-------------|---------|
+| Nombre de la librería | `"react-query"` |
+| Query de documentación | `"useQuery options"` |
+
+Qué datos **nunca** salen del entorno local:
+
+- Código fuente del proyecto.
+- Rutas de archivos del repo.
+- Nombres de variables, funciones o clases del codebase.
+- Cualquier identificador del proyecto.
+
+---
+
 ## Idioma
 
 forge habla **español al dev**: mensajes, reportes, comentarios de los YAMLs, secciones del `CLAUDE.md` institucional, todos los artefactos generados.

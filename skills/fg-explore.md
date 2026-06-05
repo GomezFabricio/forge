@@ -93,6 +93,23 @@ Con los datos de consumidores obtenidos en el paso 3.4, detectar dependencias oc
 Documentar cada dependencia oculta encontrada: símbolo/módulo → razón por la que está afectado.
 Si no se detectan: registrar "Ninguno detectado con el nivel actual de análisis."
 
+### 4.5 Consultar Context7 para librerías externas detectadas (TRIGGER A — selectivo)
+
+**Gate de nivel**: este paso se ejecuta SOLO cuando el portero ya clasificó el cambio como `rapido` o `completo`. En cambios de nivel `libre` NO se consulta Context7 (preserva el cupo de 1000 req/mes).
+
+**Condición de activación**: al construir la sección 2 (archivos afectados reales), si alguno de los archivos afectados contiene imports o dependencias de **librerías externas** (no código del propio repo), activar este paso.
+
+**Procedimiento** (una vez por ejecución, deduplicado, máximo 2-3 librerías):
+
+1. Identificar librerías externas únicas presentes en los archivos afectados (deduplicar nombres exactos).
+2. Para cada librería (hasta 3), ejecutar el par de llamadas:
+   - `mcp__context7__resolve-library-id` con el nombre de la librería → obtener el ID canónico.
+   - `mcp__context7__get-library-docs` con el ID y una query centrada en lo que el cambio usa de esa librería.
+3. Anexar los resultados al mapa como subsección opcional bajo el nombre **"Docs de librerías externas (Context7)"**.
+4. Si Context7 no responde o devuelve error de cuota: marcar `[no disponible — error en Context7]` y **continuar** (la indisponibilidad de Context7 NUNCA bloquea el mapa).
+
+**Privacidad**: solo viajan el nombre de la librería y la query de documentación. El código del dev, rutas de archivos e identificadores del proyecto **nunca** salen del entorno local. El backend es closed-source Upstash.
+
 ### 5. Calcular bloque de señales fuertes
 
 Con los datos de los pasos 3.4 y 4, calcular los 4 campos del bloque de señales fuertes:
@@ -191,6 +208,7 @@ Cuando CodeGraph no está indexado o disponible, `/fg-explore` **MUST NOT bloque
 - Omitir la sección de señales fuertes ni dejar los 4 campos sin valor.
 - Usar nombres narrativos de tools en lugar de los nombres reales `mcp__codegraph__codegraph_*`.
 - Abortar silenciosamente por fallo de un tool individual — degradar y continuar.
+- Consultar Context7 en cambios de nivel `libre` ni para librerías del propio repo (solo librerías externas, solo niveles `rapido`/`completo`).
 
 ## Punto de integración diferido (documentación)
 
