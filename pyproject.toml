@@ -54,6 +54,7 @@ packages = ["forge"]
 [tool.hatch.build.targets.wheel.shared-data]
 "skills" = "share/forge/skills"
 "agents" = "share/forge/agents"
+"commands" = "share/forge/commands"
 "config" = "share/forge/config"
 "templates" = "share/forge/templates"
 
