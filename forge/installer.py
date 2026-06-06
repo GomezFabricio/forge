@@ -37,6 +37,7 @@ import sys
 import sysconfig
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 # TODO(ruamel-yaml): switch to ruamel.yaml if _shared/*.md gain YAML comments
@@ -713,6 +714,43 @@ def register_pii_hook() -> str:
     return "created" if was_empty else "merged"
 
 
+def install_global_claude_md() -> str:
+    """Instala el institucional como `~/.claude/CLAUDE.md` (doctrina global del orquestador).
+
+    forge es la fuente de la doctrina del orquestador, así que el institucional ES el
+    CLAUDE.md global. Antes de pisar un archivo distinto del usuario, lo respalda en
+    `backup/forge/<timestamp>/` (fuera del path de carga de Claude Code, para no confundir
+    al modelo con dos CLAUDE.md). Si el contenido ya es idéntico, no toca nada — idempotente,
+    sin proliferación de backups.
+
+    Returns:
+        'present'  — el global ya era idéntico al institucional, no se tocó nada
+        'created'  — no existía `~/.claude/CLAUDE.md`, se creó
+        'replaced' — existía contenido distinto: se respaldó y se reemplazó
+    """
+    new_content = (
+        get_share_root() / "templates" / "CLAUDE-md-institucional.md"
+    ).read_text(encoding="utf-8")
+    target = CLAUDE_HOME / "CLAUDE.md"
+
+    if target.exists():
+        current = target.read_text(encoding="utf-8")
+        if current == new_content:
+            return "present"
+        # Microsegundos (%f) para que dos backups en el mismo segundo no colisionen.
+        ts = datetime.now().strftime("%Y-%m-%d-%H%M%S-%f")
+        backup_dir = CLAUDE_HOME / "backup" / "forge" / ts
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        (backup_dir / "CLAUDE.md").write_text(current, encoding="utf-8")
+        status = "replaced"
+    else:
+        status = "created"
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(new_content, encoding="utf-8")
+    return status
+
+
 def prompt_context7_yn() -> str:
     """Muestra el prompt de registro de Context7 y lee la respuesta y/N.
 
@@ -1214,6 +1252,7 @@ def print_report(report: dict) -> None:
     codegraph_info = report.get("codegraph", {})
     context7_info = report.get("context7", {})
     pii_info = report.get("pii_hook", {})
+    claude_md_info = report.get("claude_md", {})
 
     print("\nforge install — resumen\n")
 
@@ -1259,6 +1298,19 @@ def print_report(report: dict) -> None:
             print(f"  context7: fallo en registro — {ctx_msg}")
         else:
             print(f"  context7: {ctx_msg}")
+
+    # Sección CLAUDE.md global
+    if claude_md_info:
+        cm_status = claude_md_info.get("status", "")
+        cm_msg = claude_md_info.get("msg", "")
+        if cm_status == "created":
+            print("  CLAUDE.md global: creado en ~/.claude/CLAUDE.md")
+        elif cm_status == "replaced":
+            print("  CLAUDE.md global: reemplazado (backup en ~/.claude/backup/forge/)")
+        elif cm_status == "present":
+            print("  CLAUDE.md global: ya actualizado (sin cambios)")
+        elif cm_status == "failed":
+            print(f"  CLAUDE.md global: fallo — {cm_msg}")
 
     # Sección Hook PII
     if pii_info:
@@ -1414,6 +1466,14 @@ def run(args) -> int:  # args: argparse.Namespace
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
         pii_hook_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
 
+    # Paso CLAUDE.md global (doctrina del orquestador) — fail-open
+    claude_md_report: dict = {}
+    try:
+        cm_status = install_global_claude_md()
+        claude_md_report = {"status": cm_status}
+    except Exception as exc:  # noqa: BLE001 — fail-open
+        claude_md_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
+
     # Deposit skills and agents
     manifest = install_assets()
     print_report({
@@ -1422,5 +1482,6 @@ def run(args) -> int:  # args: argparse.Namespace
         "codegraph": codegraph_report,
         "context7": context7_report,
         "pii_hook": pii_hook_report,
+        "claude_md": claude_md_report,
     })
     return EXIT_OK

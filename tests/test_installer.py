@@ -2973,3 +2973,129 @@ class TestRunPiiHook:
             result = installer.run(self._make_args())
 
         assert result == installer.EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# CLAUDE.md global: TestInstallGlobalClaudeMd — deposita el institucional global
+# ---------------------------------------------------------------------------
+
+
+class TestInstallGlobalClaudeMd:
+    """Verifica install_global_claude_md(): instala el institucional como ~/.claude/CLAUDE.md
+    global, con backup en backup/forge/<ts>/ solo cuando va a pisar algo distinto."""
+
+    _TEMPLATE = "# CLAUDE.md institucional de forge\n\nDoctrina global del orquestador.\n"
+
+    def _setup_share(self, tmp_path, monkeypatch, content=None):
+        from forge import installer
+
+        share = tmp_path / "share"
+        (share / "templates").mkdir(parents=True)
+        (share / "templates" / "CLAUDE-md-institucional.md").write_text(
+            self._TEMPLATE if content is None else content, encoding="utf-8"
+        )
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        return installer
+
+    def test_creates_when_global_missing(self, tmp_path, monkeypatch):
+        """GIVEN no existe ~/.claude/CLAUDE.md WHEN install_global_claude_md()
+        THEN lo crea con el institucional y retorna 'created', sin backup."""
+        installer = self._setup_share(tmp_path, monkeypatch)
+        claude_home = installer.CLAUDE_HOME
+
+        status = installer.install_global_claude_md()
+
+        assert status == "created"
+        assert (claude_home / "CLAUDE.md").read_text(encoding="utf-8") == self._TEMPLATE
+        assert not (claude_home / "backup").exists(), "No debe backupear si no había archivo previo"
+
+    def test_replaces_and_backs_up_when_different(self, tmp_path, monkeypatch):
+        """GIVEN existe un CLAUDE.md global del usuario distinto WHEN install_global_claude_md()
+        THEN backupea el viejo en backup/forge/<ts>/ y escribe el institucional, retorna 'replaced'."""
+        installer = self._setup_share(tmp_path, monkeypatch)
+        claude_home = installer.CLAUDE_HOME
+        claude_home.mkdir(parents=True, exist_ok=True)
+        old_content = "# Mi config global previa (Gentle AI)\n"
+        (claude_home / "CLAUDE.md").write_text(old_content, encoding="utf-8")
+
+        status = installer.install_global_claude_md()
+
+        assert status == "replaced"
+        assert (claude_home / "CLAUDE.md").read_text(encoding="utf-8") == self._TEMPLATE
+        backups = list((claude_home / "backup" / "forge").glob("*/CLAUDE.md"))
+        assert len(backups) == 1, "Debe haber exactamente un backup del original"
+        assert backups[0].read_text(encoding="utf-8") == old_content
+
+    def test_noop_when_identical(self, tmp_path, monkeypatch):
+        """GIVEN el CLAUDE.md global ya es byte-idéntico al institucional WHEN install_global_claude_md()
+        THEN retorna 'present' y NO crea backup ni reescribe."""
+        installer = self._setup_share(tmp_path, monkeypatch)
+        claude_home = installer.CLAUDE_HOME
+        claude_home.mkdir(parents=True, exist_ok=True)
+        (claude_home / "CLAUDE.md").write_text(self._TEMPLATE, encoding="utf-8")
+
+        status = installer.install_global_claude_md()
+
+        assert status == "present"
+        assert not (claude_home / "backup").exists(), "No debe backupear si el contenido es idéntico"
+
+    def test_reinstall_identical_does_not_proliferate_backups(self, tmp_path, monkeypatch):
+        """GIVEN una instalación previa de forge WHEN se reinstala (contenido idéntico)
+        THEN no aparece un segundo backup (idempotencia, sin .old-2)."""
+        installer = self._setup_share(tmp_path, monkeypatch)
+        claude_home = installer.CLAUDE_HOME
+        claude_home.mkdir(parents=True, exist_ok=True)
+        (claude_home / "CLAUDE.md").write_text("# original del usuario\n", encoding="utf-8")
+
+        installer.install_global_claude_md()  # 1ª: replaced, 1 backup
+        installer.install_global_claude_md()  # 2ª: identical → present, 0 backups nuevos
+
+        backups = list((claude_home / "backup" / "forge").glob("*/CLAUDE.md"))
+        assert len(backups) == 1, "Reinstalar idéntico no debe crear backups extra"
+
+
+class TestRunGlobalClaudeMd:
+    """Verifica la integración de install_global_claude_md() en run()."""
+
+    def _make_args(self, **kw):
+        import argparse
+
+        base = dict(
+            install_engram=False,
+            skip_engram_check=True,
+            skip_codegraph=True,
+            install_codegraph=False,
+            skip_context7=True,
+            skip_pii_hook=True,
+        )
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def test_run_installs_global_claude_md(self):
+        """GIVEN run() WHEN se ejecuta THEN install_global_claude_md es llamado."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "install_global_claude_md", return_value="created") as mock_cm, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 13, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+        mock_cm.assert_called_once()
+
+    def test_global_claude_md_failure_does_not_change_exit_ok(self):
+        """GIVEN install_global_claude_md() falla WHEN run() THEN retorna EXIT_OK (fail-open)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "install_global_claude_md", side_effect=OSError("boom")), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 13, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
