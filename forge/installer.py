@@ -830,12 +830,13 @@ def install_assets() -> dict:
 
 
 def _deposit_individual_skills(skills_src: Path, claude_skills: Path) -> int:
-    """Copy fg-*.md files to <claude_skills>/<stem>/SKILL.md."""
+    """Copy fg-*.md files to <claude_skills>/<stem>/SKILL.md with no-invoke frontmatter."""
     count = 0
     for md in sorted(skills_src.glob("fg-*.md")):
         dest_dir = claude_skills / md.stem
         dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(md, dest_dir / "SKILL.md")
+        injected = inject_no_invoke_frontmatter(md.read_text(encoding="utf-8"))
+        (dest_dir / "SKILL.md").write_text(injected, encoding="utf-8")
         count += 1
     return count
 

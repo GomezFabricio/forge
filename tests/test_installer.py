@@ -510,9 +510,9 @@ class TestInstallAssets:
         assert "disable-model-invocation" in content
         assert "user-invocable" in content
 
-    def test_fg_skills_do_not_receive_frontmatter(self, tmp_path, monkeypatch):
+    def test_fg_skills_receive_frontmatter(self, tmp_path, monkeypatch):
         """GIVEN fg-implement.md WHEN install_assets()
-        THEN ~/.claude/skills/fg-implement/SKILL.md NO tiene frontmatter inyectado."""
+        THEN ~/.claude/skills/fg-implement/SKILL.md TIENE frontmatter no-invoke inyectado."""
         from forge import installer
 
         share = self._make_share_root(tmp_path)
@@ -524,8 +524,9 @@ class TestInstallAssets:
 
         skill_file = claude_home / "skills" / "fg-implement" / "SKILL.md"
         content = skill_file.read_text()
-        # No debe tener el frontmatter inyectado — debe ser copia limpia
-        assert "disable-model-invocation" not in content
+        # Debe tener el frontmatter no-invoke inyectado
+        assert "disable-model-invocation" in content
+        assert "user-invocable" in content
 
     def test_manifest_has_all_required_keys(self, tmp_path, monkeypatch):
         """GIVEN install_assets() completa WHEN se inspecciona el manifest
@@ -558,6 +559,103 @@ class TestInstallAssets:
 
         manifest = installer.install_assets()
         assert manifest["shared_deposited"] == 3
+
+    def test_fg_skills_frontmatter_no_invoke_present(self, tmp_path, monkeypatch):
+        """GIVEN fg-implement.md WHEN install_assets()
+        THEN el SKILL.md depositado tiene disable-model-invocation:true y user-invocable:false
+        verificado vía yaml.safe_load del bloque frontmatter."""
+        from forge import installer
+
+        share = self._make_share_root(tmp_path)
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        installer.install_assets()
+
+        skill_file = claude_home / "skills" / "fg-implement" / "SKILL.md"
+        content = skill_file.read_text(encoding="utf-8")
+        assert content.startswith("---\n"), "El SKILL.md debe empezar con frontmatter"
+        end_idx = content.index("\n---\n", 4)
+        fm_data = yaml.safe_load(content[4:end_idx])
+        assert fm_data["disable-model-invocation"] is True
+        assert fm_data["user-invocable"] is False
+
+    def test_fg_skills_frontmatter_preserves_existing_keys(self, tmp_path, monkeypatch):
+        """GIVEN fg-implement.md con frontmatter name/description/when_to_apply
+        WHEN install_assets()
+        THEN el SKILL.md depositado preserva esas claves Y agrega las 2 no-invoke."""
+        from forge import installer
+
+        # Fixture ad-hoc con frontmatter real (no _make_share_root genérico, que crea sin frontmatter)
+        share = tmp_path / "share" / "forge"
+        skills_dir = share / "skills"
+        shared_dir = skills_dir / "_shared"
+        agents_dir = share / "agents"
+        commands_dir = share / "commands"
+        skills_dir.mkdir(parents=True)
+        shared_dir.mkdir(parents=True)
+        agents_dir.mkdir(parents=True)
+        commands_dir.mkdir(parents=True)
+
+        fg_content = (
+            "---\n"
+            "name: fg-implement\n"
+            "description: hace algo\n"
+            "when_to_apply: tras fg-design\n"
+            "---\n\n"
+            "# Body\n"
+        )
+        (skills_dir / "fg-implement.md").write_text(fg_content, encoding="utf-8")
+
+        # Archivos mínimos requeridos por _deposit_colocated y _deposit_shared_skills
+        (shared_dir / "strict-tdd.md").write_text("# Strict TDD\n", encoding="utf-8")
+        (shared_dir / "strict-tdd-verify.md").write_text("# Strict TDD Verify\n", encoding="utf-8")
+        (shared_dir / "skill-resolver.md").write_text("# Skill Resolver\n", encoding="utf-8")
+        (shared_dir / "engram-protocol.md").write_text("# Engram Protocol\n", encoding="utf-8")
+        (shared_dir / "fg-phase-common.md").write_text("# Phase Common\n", encoding="utf-8")
+
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        installer.install_assets()
+
+        skill_file = claude_home / "skills" / "fg-implement" / "SKILL.md"
+        content = skill_file.read_text(encoding="utf-8")
+        assert content.startswith("---\n"), "El SKILL.md debe empezar con frontmatter"
+        end_idx = content.index("\n---\n", 4)
+        fm_data = yaml.safe_load(content[4:end_idx])
+        # Claves originales preservadas
+        assert fm_data["name"] == "fg-implement"
+        assert fm_data["description"] == "hace algo"
+        assert fm_data["when_to_apply"] == "tras fg-design"
+        # Claves no-invoke agregadas
+        assert fm_data["disable-model-invocation"] is True
+        assert fm_data["user-invocable"] is False
+
+    def test_fg_skills_frontmatter_idempotent(self, tmp_path, monkeypatch):
+        """GIVEN fg-implement.md WHEN install_assets() corre DOS veces
+        THEN el SKILL.md depositado es byte-idéntico en ambas corridas
+        Y contiene exactamente 1 ocurrencia de 'disable-model-invocation'."""
+        from forge import installer
+
+        share = self._make_share_root(tmp_path)
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "get_share_root", lambda: share)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        installer.install_assets()
+        skill_file = claude_home / "skills" / "fg-implement" / "SKILL.md"
+        content_run1 = skill_file.read_text(encoding="utf-8")
+
+        installer.install_assets()
+        content_run2 = skill_file.read_text(encoding="utf-8")
+
+        assert content_run1 == content_run2, "Re-instalar debe producir contenido byte-idéntico"
+        assert content_run1.count("disable-model-invocation") == 1, (
+            "La clave disable-model-invocation no debe aparecer duplicada"
+        )
 
 
 # ---------------------------------------------------------------------------
