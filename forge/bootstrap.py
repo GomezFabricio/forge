@@ -2,9 +2,9 @@
 """Bootstrap de forge en un proyecto.
 
 Invocado por la skill /fg-setup (Markdown). Hace todo el trabajo de instalación
-inicial: detectar stack, generar docs/auditoria/config.yaml con defaults, mergear
-CLAUDE.md, inicializar CodeGraph, generar skill registry placeholder,
-actualizar .gitignore.
+inicial: detectar stack, generar docs/auditoria/config.yaml con defaults,
+inicializar CodeGraph, generar skill registry placeholder, actualizar .gitignore.
+NO genera CLAUDE.md (la doctrina del orquestador es global, vía forge install).
 
 Uso:
     python -m forge.bootstrap [--project-root PATH] [--json]
@@ -268,50 +268,6 @@ def copy_if_missing(src: Path, dst: Path) -> bool:
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
     return True
-
-
-def extract_section(content: str, marker: str) -> str:
-    """Extrae la sección que comienza en `marker` hasta el próximo heading nivel 2."""
-    start = content.find(marker)
-    if start == -1:
-        return ""
-    lines = content[start:].split("\n")
-    section_lines = [lines[0]]
-    for line in lines[1:]:
-        if line.startswith("## "):
-            break
-        section_lines.append(line)
-    return "\n".join(section_lines)
-
-
-def merge_or_create_claude_md(root: Path) -> str:
-    template_src = PACKAGE_ROOT / "templates" / "CLAUDE-md-institucional.md"
-    claude_md = root / "CLAUDE.md"
-    if not claude_md.exists():
-        shutil.copy2(template_src, claude_md)
-        return "created"
-    existing = claude_md.read_text(encoding="utf-8")
-    template_content = template_src.read_text(encoding="utf-8")
-    sdd_markers = [
-        "## Persona del orquestador",
-        "## Engram",
-        "## Strict TDD Mode",
-        "## Workflow de las skills",
-        "## Idioma",
-    ]
-    appended = []
-    for marker in sdd_markers:
-        if marker not in existing:
-            section = extract_section(template_content, marker)
-            if section:
-                if not existing.endswith("\n"):
-                    existing += "\n"
-                existing += "\n" + section.rstrip() + "\n"
-                appended.append(marker)
-    if appended:
-        claude_md.write_text(existing, encoding="utf-8")
-        return f"merged ({len(appended)} sections appended)"
-    return "preserved"
 
 
 def copy_config_templates(root: Path) -> dict:
@@ -672,7 +628,6 @@ def run(root: Path, mode: str | None = None) -> dict:
         "stacks": [],
         "test_runner": None,
         "dirs_ensured": [],
-        "claude_md": None,
         "audit_config": None,
         "config_templates": {},
         "codegraph": {"status": None, "warning": None},
@@ -714,7 +669,6 @@ def run(root: Path, mode: str | None = None) -> dict:
     )
 
     report["dirs_ensured"] = ensure_dirs(root)
-    report["claude_md"] = merge_or_create_claude_md(root)
     report["audit_config"] = create_audit_config(
         root, stacks, runner, runner_command, detected_from,
         pending_detection=pending_detection,
@@ -754,7 +708,6 @@ def print_report(report: dict) -> None:
         print(f"CodeGraph: no inicializado ({cg.get('warning') or 'sin razón'})")
     print()
     print("Archivos:")
-    print(f"  CLAUDE.md: {report['claude_md']}")
     print(f"  docs/auditoria/config.yaml: {report['audit_config']}")
     for name, status in report["config_templates"].items():
         print(f"  config/{name}: {status}")

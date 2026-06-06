@@ -9,8 +9,7 @@ Cubre las siguientes unidades:
 - create_audit_config       REQ-TEST-CREATE-CONFIG, REQ-YAML-TYPES, REQ-IDEMPOTENT
 - update_gitignore          REQ-TEST-GITIGNORE, REQ-IDEMPOTENT
 - generate_skill_registry_placeholder  REQ-TEST-SKILL-REGISTRY, REQ-IDEMPOTENT
-- merge_or_create_claude_md REQ-TEST-CLAUDE-MD
-- copy_config_templates     (complemento de REQ-TEST-CLAUDE-MD)
+- copy_config_templates     REQ-TEST-CONFIG-TEMPLATES
 - init_codegraph            REQ-TEST-INIT-CODEGRAPH
 - run                       REQ-TEST-RUN
 
@@ -39,11 +38,9 @@ from forge.bootstrap import (
     detect_stack,
     detect_test_runner,
     ensure_dirs,
-    extract_section,
     generate_skill_registry_placeholder,
     init_codegraph,
     is_legacy_project,
-    merge_or_create_claude_md,
     run,
     update_detection_fields,
     update_gitignore,
@@ -454,107 +451,6 @@ class TestGenerateSkillRegistryPlaceholder:
         assert registry.read_text(encoding="utf-8") == custom_content
 
 
-# ---------------------------------------------------------------------------
-# Phase 5: PACKAGE_ROOT monkeypatch tests
-# ---------------------------------------------------------------------------
-
-FAKE_TEMPLATE_CONTENT = """\
-## Persona del orquestador
-
-Sos el orquestador del workflow forge.
-
-## Engram
-
-Usás Engram para persistir contexto.
-
-## Strict TDD Mode
-
-Ciclo RED → GREEN → TRIANGULATE → REFACTOR.
-
-## Workflow de las skills
-
-Las skills se cargan desde .atl/skill-registry.md.
-
-## Idioma
-
-Español Rioplatense para respuestas al usuario.
-"""
-
-
-class TestMergeOrCreateClaudeMd:
-    """Tests para merge_or_create_claude_md(root). REQ-TEST-CLAUDE-MD."""
-
-    def _setup_package_root(self, monkeypatch, tmp_path):
-        """Configura PACKAGE_ROOT falso con template institucional."""
-        fake_pkg_root = tmp_path / "fake_pkg"
-        templates_dir = fake_pkg_root / "templates"
-        templates_dir.mkdir(parents=True)
-        (templates_dir / "CLAUDE-md-institucional.md").write_text(
-            FAKE_TEMPLATE_CONTENT, encoding="utf-8"
-        )
-        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
-        return fake_pkg_root
-
-    def test_fresh_create_no_existing_file(self, tmp_path, monkeypatch):
-        """GIVEN sin CLAUDE.md, THEN archivo creado, retorna 'created'."""
-        self._setup_package_root(monkeypatch, tmp_path)
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        result = merge_or_create_claude_md(project_root)
-        assert result == "created"
-        assert (project_root / "CLAUDE.md").exists()
-
-    def test_fresh_create_content_matches_template(self, tmp_path, monkeypatch):
-        """GIVEN sin CLAUDE.md, THEN archivo contiene contenido del template."""
-        self._setup_package_root(monkeypatch, tmp_path)
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        merge_or_create_claude_md(project_root)
-        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "Persona del orquestador" in content
-
-    def test_append_missing_section(self, tmp_path, monkeypatch):
-        """GIVEN CLAUDE.md sin sección institucional, THEN sección agregada."""
-        self._setup_package_root(monkeypatch, tmp_path)
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        (project_root / "CLAUDE.md").write_text(
-            "# My Project Config\n\nSome existing content.\n", encoding="utf-8"
-        )
-        result = merge_or_create_claude_md(project_root)
-        assert "merged" in result
-        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "Persona del orquestador" in content
-
-    def test_preserve_existing_section(self, tmp_path, monkeypatch):
-        """GIVEN CLAUDE.md ya tiene sección institucional, THEN retorna 'preserved'."""
-        self._setup_package_root(monkeypatch, tmp_path)
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        existing_with_sections = (
-            "# My Config\n\n## Persona del orquestador\nYa existe.\n"
-            "## Engram\nYa existe.\n"
-            "## Strict TDD Mode\nYa existe.\n"
-            "## Workflow de las skills\nYa existe.\n"
-            "## Idioma\nYa existe.\n"
-        )
-        (project_root / "CLAUDE.md").write_text(existing_with_sections, encoding="utf-8")
-        result = merge_or_create_claude_md(project_root)
-        assert result == "preserved"
-
-    def test_no_duplication_on_second_call(self, tmp_path, monkeypatch):
-        """GIVEN llamado dos veces, THEN secciones no se duplican."""
-        self._setup_package_root(monkeypatch, tmp_path)
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        merge_or_create_claude_md(project_root)
-        # Segunda llamada sobre el archivo recién creado
-        merge_or_create_claude_md(project_root)
-        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
-        # La sección no debe aparecer dos veces
-        assert content.count("## Persona del orquestador") == 1
-
-
 class TestCopyConfigTemplates:
     """Tests para copy_config_templates(root). Complemento de REQ-TEST-CLAUDE-MD."""
 
@@ -660,13 +556,8 @@ class TestRun:
     def _setup_for_run(self, monkeypatch, tmp_path):
         """Setup completo: PACKAGE_ROOT falso + which=None."""
         fake_pkg_root = tmp_path / "fake_pkg"
-        # Templates
-        (fake_pkg_root / "templates").mkdir(parents=True)
-        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
-            FAKE_TEMPLATE_CONTENT, encoding="utf-8"
-        )
         # Config
-        (fake_pkg_root / "config").mkdir()
+        (fake_pkg_root / "config").mkdir(parents=True)
         (fake_pkg_root / "config" / "modulos-transversales.yaml").write_text(
             "schema: forge\n", encoding="utf-8"
         )
@@ -688,7 +579,7 @@ class TestRun:
         project_root.mkdir()
         self._setup_for_run(monkeypatch, tmp_path)
         result = run(project_root)
-        expected_keys = {"dirs_ensured", "audit_config", "gitignore", "skill_registry", "claude_md", "codegraph"}
+        expected_keys = {"dirs_ensured", "audit_config", "gitignore", "skill_registry", "codegraph"}
         for key in expected_keys:
             assert key in result, f"Clave faltante en resultado de run(): {key}"
 
@@ -746,34 +637,9 @@ class TestRun:
 
 # ---------------------------------------------------------------------------
 # Phase 8: Edge cases para cobertura >= 85%
-# Cubre ramas no alcanzadas: extract_section (marker ausente), update_gitignore
-# (existing sin trailing newline), merge_or_create_claude_md (existing sin
-# trailing newline), init_codegraph (SubprocessError).
+# Cubre ramas no alcanzadas: update_gitignore (existing sin trailing newline),
+# init_codegraph (SubprocessError).
 # ---------------------------------------------------------------------------
-
-
-class TestExtractSection:
-    """Tests para extract_section(content, marker). Cubre rama line 103."""
-
-    def test_marker_not_found_returns_empty_string(self):
-        """GIVEN marker ausente en content, THEN retorna ''."""
-        result = extract_section("# Header\nsome content\n", "## Missing Section")
-        assert result == ""
-
-    def test_marker_found_returns_section_up_to_next_h2(self):
-        """GIVEN marker presente, THEN retorna sección hasta el próximo ## heading."""
-        content = "## Sección A\nContenido A.\n\n## Sección B\nContenido B.\n"
-        result = extract_section(content, "## Sección A")
-        assert "## Sección A" in result
-        assert "Contenido A." in result
-        # No debe incluir Sección B
-        assert "## Sección B" not in result
-
-    def test_marker_at_end_returns_full_tail(self):
-        """GIVEN marker al final sin heading siguiente, THEN retorna todo desde el marker."""
-        content = "## Última Sección\nContenido final.\n"
-        result = extract_section(content, "## Última Sección")
-        assert "Contenido final." in result
 
 
 class TestUpdateGitignoreNoTrailingNewline:
@@ -789,32 +655,6 @@ class TestUpdateGitignoreNoTrailingNewline:
         assert "# forge" in content
         assert ".codegraph/" in content
         assert "updated" in result
-
-
-class TestMergeOrCreateClaudeMdNoTrailingNewline:
-    """Cubre rama line 134: existing CLAUDE.md sin trailing newline antes de merge."""
-
-    FAKE_TEMPLATE = "## Persona del orquestador\nContenido.\n"
-
-    def _setup_package_root(self, monkeypatch, tmp_path):
-        fake_pkg_root = tmp_path / "fake_pkg"
-        (fake_pkg_root / "templates").mkdir(parents=True)
-        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
-            self.FAKE_TEMPLATE, encoding="utf-8"
-        )
-        monkeypatch.setattr(bootstrap, "PACKAGE_ROOT", fake_pkg_root)
-
-    def test_merge_when_existing_has_no_trailing_newline(self, tmp_path, monkeypatch):
-        """GIVEN CLAUDE.md sin trailing newline, THEN merge no produce línea doble vacía al inicio."""
-        self._setup_package_root(monkeypatch, tmp_path)
-        project_root = tmp_path / "project"
-        project_root.mkdir()
-        # Sin trailing newline
-        (project_root / "CLAUDE.md").write_bytes(b"# My Config\nSome content")
-        result = merge_or_create_claude_md(project_root)
-        assert "merged" in result
-        content = (project_root / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "Persona del orquestador" in content
 
 
 class TestInitCodegraphSubprocessError:
@@ -1189,11 +1029,7 @@ class TestBootstrapRunMode:
     def _setup_for_run(self, monkeypatch, tmp_path):
         """Setup fake PACKAGE_ROOT + disable codegraph binary."""
         fake_pkg_root = tmp_path / "fake_pkg"
-        (fake_pkg_root / "templates").mkdir(parents=True)
-        (fake_pkg_root / "templates" / "CLAUDE-md-institucional.md").write_text(
-            "## Persona del orquestador\nContenido.\n", encoding="utf-8"
-        )
-        (fake_pkg_root / "config").mkdir()
+        (fake_pkg_root / "config").mkdir(parents=True)
         (fake_pkg_root / "config" / "modulos-transversales.yaml").write_text(
             "schema: forge\n", encoding="utf-8"
         )
@@ -1280,7 +1116,6 @@ class TestPrintReportMode:
             "stacks": [],
             "test_runner": None,
             "dirs_ensured": [],
-            "claude_md": "created",
             "audit_config": "created",
             "config_templates": {},
             "codegraph": {"status": None, "warning": "no binary"},
@@ -1302,7 +1137,6 @@ class TestPrintReportMode:
             "stacks": ["Python"],
             "test_runner": {"name": "pytest", "command": "pytest", "detected_from": "pyproject.toml"},
             "dirs_ensured": [],
-            "claude_md": "created",
             "audit_config": "created",
             "config_templates": {},
             "codegraph": {"status": None, "warning": "no binary"},
