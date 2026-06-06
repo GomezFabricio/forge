@@ -4,6 +4,17 @@ description: Instala forge en un proyecto existente. Idempotente. Detecta stack,
 when_to_apply: Una vez al adoptar forge en un proyecto. Re-ejecutable para upgrade — detecta lo existente y solo agrega lo faltante.
 ---
 
+> **ORCHESTRATOR GATE**: Si cargaste esta skill vía la tool `Skill`, sos el ORQUESTADOR — STOP.
+> NO ejecutes estas instrucciones inline. Delegá al sub-agente `fg-setup` usando la primitiva
+> de delegación de tu plataforma (ej. la tool `Task` o el sub-agente nativo). Esta skill es
+> solo para EXECUTORS.
+
+## Executor Override
+
+Si SOS el sub-agente `fg-setup` (NO el orquestador), el gate de arriba NO aplica. Continuá con
+el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
+`Task`. Sos el executor — ejecutá.
+
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
 
 # /fg-setup

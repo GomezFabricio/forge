@@ -4,6 +4,17 @@ description: Define el cómo del cambio. Lee el README.md generado por /fg-plan,
 when_to_apply: El dev invoca /fg-design después de haber corrido /fg-plan. Es el segundo paso del workflow.
 ---
 
+> **ORCHESTRATOR GATE**: Si cargaste esta skill vía la tool `Skill`, sos el ORQUESTADOR — STOP.
+> NO ejecutes estas instrucciones inline. Delegá al sub-agente `fg-design` usando la primitiva
+> de delegación de tu plataforma (ej. la tool `Task` o el sub-agente nativo). Esta skill es
+> solo para EXECUTORS.
+
+## Executor Override
+
+Si SOS el sub-agente `fg-design` (NO el orquestador), el gate de arriba NO aplica. Continuá con
+el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
+`Task`. Sos el executor — ejecutá.
+
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, C, E)
 
 # /fg-design

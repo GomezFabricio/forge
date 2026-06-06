@@ -4,6 +4,17 @@ description: Produce el mapa del cambio activo consultando los MCP tools de Code
 when_to_apply: El dev invoca /fg-explore como fase 0 de un cambio nuevo, o en cualquier momento durante un cambio activo. El orquestador ya creó o nombró la carpeta del cambio (kebab-case) antes de invocar esta skill. No se requiere que /fg-plan haya corrido previamente.
 ---
 
+> **ORCHESTRATOR GATE**: Si cargaste esta skill vía la tool `Skill`, sos el ORQUESTADOR — STOP.
+> NO ejecutes estas instrucciones inline. Delegá al sub-agente `fg-explore` usando la primitiva
+> de delegación de tu plataforma (ej. la tool `Task` o el sub-agente nativo). Esta skill es
+> solo para EXECUTORS.
+
+## Executor Override
+
+Si SOS el sub-agente `fg-explore` (NO el orquestador), el gate de arriba NO aplica. Continuá con
+el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
+`Task`. Sos el executor — ejecutá.
+
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
 
 # /fg-explore

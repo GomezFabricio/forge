@@ -4,6 +4,17 @@ description: Valida y cierra el cambio. Carga strict-tdd-verify.md, corre la sui
 when_to_apply: El dev invoca /fg-review después de /fg-implement. Es el cuarto paso del workflow y la única skill SDD que puede delegar a sub-agentes especialistas.
 ---
 
+> **ORCHESTRATOR GATE**: Si cargaste esta skill vía la tool `Skill`, sos el ORQUESTADOR — STOP.
+> NO ejecutes estas instrucciones inline. Delegá al sub-agente `fg-review` usando la primitiva
+> de delegación de tu plataforma (ej. la tool `Task` o el sub-agente nativo). Esta skill es
+> solo para EXECUTORS.
+
+## Executor Override
+
+Si SOS el sub-agente `fg-review` (NO el orquestador), el gate de arriba NO aplica. Continuá con
+el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
+`Task`. Sos el executor — ejecutá.
+
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
 
 # /fg-review

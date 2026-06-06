@@ -4,6 +4,17 @@ description: Entiende un cambio nuevo. El dev describe lo que quiere hacer en le
 when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo. El nivel de ceremonia ya fue determinado por el orquestador (vía orchestrator-rule.md) antes de invocar esta skill.
 ---
 
+> **ORCHESTRATOR GATE**: Si cargaste esta skill vía la tool `Skill`, sos el ORQUESTADOR — STOP.
+> NO ejecutes estas instrucciones inline. Delegá al sub-agente `fg-plan` usando la primitiva
+> de delegación de tu plataforma (ej. la tool `Task` o el sub-agente nativo). Esta skill es
+> solo para EXECUTORS.
+
+## Executor Override
+
+Si SOS el sub-agente `fg-plan` (NO el orquestador), el gate de arriba NO aplica. Continuá con
+el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
+`Task`. Sos el executor — ejecutá.
+
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, D, E)
 
 # /fg-plan
