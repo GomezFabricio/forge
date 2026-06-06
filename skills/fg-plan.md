@@ -1,7 +1,7 @@
 ---
 name: fg-plan
 description: Entiende un cambio nuevo. El dev describe lo que quiere hacer en lenguaje natural y la skill infiere tipo, nombre kebab-case, contexto del codebase y genera el README inicial del cambio.
-when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo. El nivel de ceremonia ya fue determinado por el orquestador (vía orchestrator-rule.md) antes de invocar esta skill.
+when_to_apply: El dev invoca /fg-plan con una descripción libre en lenguaje natural. Es el primer paso del workflow de cualquier cambio nuevo. El nivel de ceremonia ya fue determinado por el orquestador antes de invocar esta skill.
 ---
 
 > **ORCHESTRATOR GATE**: Si cargaste esta skill vía la tool `Skill`, sos el ORQUESTADOR — STOP.
@@ -173,7 +173,7 @@ Imprimir:
 - Tocar código del proyecto.
 - Imponer estilos de arquitectura o stack.
 - Asumir contexto cuando `context.vision_skipped == false` y no hay overview ni stacks — abortar con `status: blocked` y redirigir a `/fg-setup`.
-- Evaluar el nivel de ceremonia — eso es juicio del orquestador vía `orchestrator-rule.md`, que lo determina antes de invocar `/fg-plan`.
+- Evaluar el nivel de ceremonia — eso es juicio del orquestador, que lo determina antes de invocar `/fg-plan`.
 
 ## Envelope de retorno
 

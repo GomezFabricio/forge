@@ -250,8 +250,8 @@ O agregar frontmatter `legacy: true` al inicio de `docs/arquitectura/overview.md
 ## 4. Niveles de ceremonia
 
 El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritual mínimo
-adecuado aplicando las reglas de `forge/templates/orchestrator-rule.md`. El dev confirma o
-ajusta; forge nunca impone el nivel sin consentimiento (salvo `ceremonial_threshold: full`).
+adecuado aplicando las reglas de gradación que forge instala en el CLAUDE.md institucional.
+El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento (salvo `ceremonial_threshold: full`).
 
 ### Los tres niveles
 
@@ -272,7 +272,7 @@ creado.
 Rápido solo está disponible si la arquitectura está sincronizada. El orquestador verifica
 mediante Grep sobre `docs/auditoria/cambios/*/README.md`: si existe algún cambio con
 `structural: true` y sin `arch_synced: true`, la arquitectura está desactualizada y el
-orquestador fuerza Completo (ver `orchestrator-rule.md` para el patrón exacto).
+orquestador fuerza Completo.
 
 > **Limitación declarada:** el detector solo ve cambios que pasaron por forge y fueron
 > marcados `structural`. Cambios manuales externos al repo no se detectan. "Desactualizada"
@@ -325,7 +325,7 @@ Para resetear a defaults: borrar el archivo y correr `/fg-setup` de nuevo.
 | `context.vision_skipped` | bool | `false` | `true` si el dev declinó la conversación de visión en modo bootstrap. |
 | `context.is_legacy` | bool | `false` | Marca el proyecto como legacy; activa `legacy-impact-analyzer` en `/fg-design`. |
 | `rules.workflow.cycle_mode` | `interactive` \| `automatic` | `interactive` | Default sugerido del modo de ciclo. `/fg-plan` lo pregunta una vez por sesión; el dev puede cambiar por sesión. |
-| `rules.workflow.ceremonial_threshold` | `auto` \| `lite` \| `full` | `auto` | Sesgo del orquestador para el nivel de ceremonia (ver sección 4 y `orchestrator-rule.md`). |
+| `rules.workflow.ceremonial_threshold` | `auto` \| `lite` \| `full` | `auto` | Sesgo del orquestador para el nivel de ceremonia (ver sección 4). |
 | `rules.pr_size.budget_lines` | entero | `400` | Umbral de líneas para "PR grande" en el Review Workload Forecast. |
 | `rules.pr_size.suggest_split` | bool | `false` | Si sugerir partir en chained PRs cuando supera el budget. |
 | `rules.pr_size.enforcement` | `off` \| `warn` \| `block` | `"off"` | Qué hace forge cuando el PR supera el budget (ver tabla abajo). |
@@ -457,7 +457,7 @@ depuración.
 | Comando | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, mergea `CLAUDE.md`. |
-| `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. El nivel de ceremonia llega ya resuelto desde el orquestador vía `orchestrator-rule.md`. |
+| `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. El nivel de ceremonia llega ya resuelto desde el orquestador. |
 | `/fg-plan --from <doc> "<descripción>"` | Igual que `/fg-plan` pero usa un documento externo como contexto primario del cambio. |
 | `/fg-design` | Genera `diseño.md`, `tareas.md` y `decisiones.md`. Requiere que `/fg-plan` ya haya corrido. En proyectos legacy, invoca `legacy-impact-analyzer` antes del enfoque técnico. |
 | `/fg-implement` | Implementa el checklist de `tareas.md` tarea por tarea. Si TDD está activo, aplica el ciclo de 7 pasos. Soporta batching: corta al llegar a `max_tasks_per_batch` y guarda progreso. |

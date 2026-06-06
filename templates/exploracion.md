@@ -82,7 +82,7 @@ Si CodeGraph no está disponible: "[sin datos — CodeGraph no disponible]".
 ## 5. Señales fuertes (para el orquestador)
 
 <!--
-Bloque estructurado consumido por el orquestador para determinar el nivel de ceremonia (vía orchestrator-rule.md).
+Bloque estructurado consumido por el orquestador para determinar el nivel de ceremonia.
 Los 4 campos son obligatorios — bajo degradación, usar los valores conservadores indicados.
 -->
 

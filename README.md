@@ -113,7 +113,7 @@ Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 
 ### Gradación de ceremonia
 
-El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritual mínimo adecuado aplicando `forge/templates/orchestrator-rule.md`. El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento.
+El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritual mínimo adecuado aplicando las reglas de gradación que forge instala en el CLAUDE.md institucional. El dev confirma o ajusta; forge nunca impone el nivel sin consentimiento.
 
 | Nivel | Qué saltea | Piso innegociable |
 |---|---|---|
@@ -121,7 +121,7 @@ El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritua
 | **Rápido** | Solo `/fg-design`; tareas se generan desde `templates/tareas-lite.md` | `/fg-review` siempre corre |
 | **Completo** | Nada — ritual completo sin cambios | `/fg-review` siempre corre |
 
-**Condición para modo Rápido**: la arquitectura debe estar al día. El orquestador lo verifica mediante Grep sobre los READMEs de cambios (ver `orchestrator-rule.md`). Si hay cambios estructurales sin sincronizar, el orquestador eleva automáticamente a Completo.
+**Condición para modo Rápido**: la arquitectura debe estar al día. El orquestador lo verifica mediante Grep sobre los READMEs de cambios. Si hay cambios estructurales sin sincronizar, el orquestador eleva automáticamente a Completo.
 
 ### Las 6 skills
 
@@ -220,7 +220,7 @@ Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive
 
 #### `rules.workflow.ceremonial_threshold` — Sesgo del orquestador
 
-Controla el nivel de ceremonia que el orquestador propone por defecto para el proyecto (señal de mayor precedencia en `orchestrator-rule.md`).
+Controla el nivel de ceremonia que el orquestador propone por defecto para el proyecto (señal de mayor precedencia en la gradación de ceremonia).
 
 | Valor | Comportamiento |
 |---|---|

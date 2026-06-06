@@ -106,7 +106,7 @@ Si no se detectan: registrar "Ninguno detectado con el nivel actual de análisis
 
 ### 4.5 Consultar Context7 para librerías externas detectadas (TRIGGER A — selectivo)
 
-**Gate de nivel**: este paso se ejecuta SOLO cuando el orquestador ya determinó el nivel del cambio como `rapido` o `completo` (aplicando `orchestrator-rule.md`). En cambios de nivel `libre` NO se consulta Context7 (preserva el cupo de 1000 req/mes).
+**Gate de nivel**: este paso se ejecuta SOLO cuando el orquestador ya determinó el nivel del cambio como `rapido` o `completo` (determinado por el orquestador). En cambios de nivel `libre` NO se consulta Context7 (preserva el cupo de 1000 req/mes).
 
 **Condición de activación**: al construir la sección 2 (archivos afectados reales), si alguno de los archivos afectados contiene imports o dependencias de **librerías externas** (no código del propio repo), activar este paso.
 
