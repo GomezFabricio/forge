@@ -61,7 +61,24 @@ La instalación es una sola vez por máquina. Deposita las skills, los sub-agent
 hook PII en `~/.claude/`, y mergea la regla de orquestación en `~/.claude/CLAUDE.md`.
 Después de eso, forge funciona en cualquier proyecto sin pasos adicionales.
 
-### Via institucional (funcional hoy)
+### Vía rápida (scripts)
+
+```bash
+# Linux / macOS
+curl -sSL https://github.com/GomezFabricio/forge/raw/main/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+iwr https://github.com/GomezFabricio/forge/raw/main/install.ps1 -useb | iex
+```
+
+Los scripts verifican Python 3.10+, aseguran `pipx`, instalan forge aislado y corren
+`forge install`. Los argumentos extra se pasan tal cual (ej. `--skip-context7`).
+
+### Vía institucional (clon + pipx)
+
+Para equipos cuya política exige auditar el script antes de ejecutarlo:
 
 ```bash
 git clone https://github.com/GomezFabricio/forge
@@ -69,9 +86,6 @@ cd forge
 pipx install --editable . --include-deps
 forge install
 ```
-
-> Los scripts `install.sh` (Linux/Mac) e `install.ps1` (Windows) están pendientes de
-> implementación. La vía funcional hoy es el clon + pipx.
 
 **Requisitos previos:**
 
@@ -93,11 +107,14 @@ forge install
 | `agents/<name>.md` | Los 6 sub-agentes especialistas. |
 | `mcp/engram.json` | Registro MCP de engram (si se instala engram). |
 | `CLAUDE.md` | Regla de orquestación mergeada (bloque `forge:orchestrator`). |
+| `settings.json` | Hook PII `UserPromptSubmit` (merge idempotente; omitible con `--skip-pii-hook`). |
 
-### Registro manual del hook PII
+### Registro del hook PII
 
-Hasta que `forge install` registre el hook automáticamente, agregarlo en
-`~/.claude/settings.json`:
+`forge install` registra el hook automáticamente en `~/.claude/settings.json` (merge
+idempotente que preserva tus hooks existentes), anclando el comando al intérprete donde
+quedó instalado forge. Si lo omitiste con `--skip-pii-hook` o querés hacerlo a mano,
+agregá este bloque a `~/.claude/settings.json`:
 
 ```json
 {

@@ -30,23 +30,25 @@ Para una guía completa de uso por escenario, configuración y troubleshooting: 
 
 ### Vía rápida (devs personales, equipos abiertos)
 
-> **Estado**: los scripts `install.sh` (Linux/Mac) e `install.ps1` (Windows) están **pendientes de implementación** — los comandos de abajo no funcionan todavía. La vía funcional hoy es la institucional (ver más abajo).
+Los scripts verifican Python 3.10+, aseguran `pipx`, instalan forge en un entorno aislado y corren `forge install`. Cualquier argumento extra se pasa tal cual a `forge install` (ej. `--skip-context7`).
 
-**Linux / Mac** *(pendiente)*:
+**Linux / Mac**:
 
 ```bash
 curl -sSL https://github.com/GomezFabricio/forge/raw/main/install.sh | bash
 ```
 
-**Windows (PowerShell)** *(pendiente)*:
+**Windows (PowerShell)**:
 
 ```powershell
 iwr https://github.com/GomezFabricio/forge/raw/main/install.ps1 -useb | iex
 ```
 
-### Vía institucional (entornos con compliance estricto) — vía funcional hoy
+> **Nota de compliance**: el `curl … | bash` ejecuta un script remoto. Si tu política exige auditarlo antes, descargalo, revisalo y corré la vía institucional de abajo.
 
-Para equipos con políticas que no permiten ejecutar scripts remotos sin auditoría previa, o mientras los scripts de instalación rápida estén pendientes:
+### Vía institucional (entornos con compliance estricto)
+
+Para equipos con políticas que no permiten ejecutar scripts remotos sin auditoría previa:
 
 ```bash
 git clone https://github.com/GomezFabricio/forge
@@ -69,8 +71,9 @@ La instalación ejecuta los siguientes pasos en cadena:
    - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
    - `agents/<name>.md` — los 6 sub-agentes especialistas (copia flat).
    - `mcp/engram.json` — registro MCP de engram (solo si engram se instala durante `forge install`).
+   - `settings.json` — registra el hook PII `UserPromptSubmit` (merge idempotente, preservando hooks existentes). Omitible con `--skip-pii-hook`.
 
-> **v0.1.0**: `forge install` está implementado end-to-end. Deposita las skills y los sub-agentes en `~/.claude/`, registra opcionalmente el MCP de engram, y mergea el bloque de orquestación en `~/.claude/CLAUDE.md`.
+> **v0.1.0**: `forge install` está implementado end-to-end. Deposita las skills y los sub-agentes en `~/.claude/`, registra opcionalmente el MCP de engram, mergea el bloque de orquestación en `~/.claude/CLAUDE.md` y registra el hook PII en `~/.claude/settings.json`.
 
 ### Después de instalar
 
@@ -481,9 +484,11 @@ CUIT del proveedor: 20-12345678-6  #fg-pass
 
 El marcador es case-sensitive. `#FG-PASS`, `#fg_pass` o `# fg-pass` **no** activan el override.
 
-### Registro manual del hook
+### Registro del hook
 
-Hasta que `forge install` registre el hook automáticamente, registralo manualmente en `~/.claude/settings.json`:
+`forge install` registra el hook automáticamente en `~/.claude/settings.json` (merge idempotente que preserva tus hooks existentes). El comando se ancla al intérprete donde quedó instalado forge (`sys.executable`), no a un `python` genérico del PATH — así funciona aunque forge viva en un venv aislado de pipx.
+
+Si lo omitiste con `--skip-pii-hook`, o querés registrarlo a mano, agregá este bloque a `~/.claude/settings.json` (reemplazando el comando por la ruta de tu intérprete con forge instalado):
 
 ```json
 {
@@ -502,6 +507,8 @@ Hasta que `forge install` registre el hook automáticamente, registralo manualme
   }
 }
 ```
+
+> En el bloque manual, `python` solo funciona si el intérprete del PATH tiene forge instalado. Con pipx (venv aislado) usá la ruta absoluta del intérprete del venv, ej. `~/.local/pipx/venvs/forge/bin/python -m forge.filters.hook_user_prompt`. El auto-registro de `forge install` ya resuelve esto solo.
 
 ### Kill-switch
 
