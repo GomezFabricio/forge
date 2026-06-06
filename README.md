@@ -103,7 +103,7 @@ La instalación ejecuta los siguientes pasos en cadena:
    - `skills/<stem>/SKILL.md` — las 7 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`), cada una en su propia carpeta.
    - `skills/forge-shared/<name>/SKILL.md` — referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`), con frontmatter que evita invocación accidental por el modelo.
    - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
-   - `agents/<name>.md` — los 6 sub-agentes especialistas (copia flat).
+   - `agents/<name>.md` — los 13 agentes (copia flat): 6 reviewers especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`) + 7 executors `fg-*` (la capa agents del modelo de 3 capas, uno por fase).
    - `mcp/engram.json` — registro MCP de engram (solo si engram se instala durante `forge install`).
    - `settings.json` — registra el hook PII `UserPromptSubmit` (merge idempotente, preservando hooks existentes). Omitible con `--skip-pii-hook`.
 
@@ -411,13 +411,20 @@ forge/
 │   ├── fg-review.md
 │   ├── fg-update-arch.md
 │   └── _shared/                 ← skill-resolver, persistence-contract, strict-tdd
-├── agents/                      ← 6 sub-agentes especialistas (van a ~/.claude/agents/)
-│   ├── code-reviewer.md
+├── agents/                      ← 13 agentes (van a ~/.claude/agents/): 6 reviewers + 7 executors fg-*
+│   ├── code-reviewer.md         ← reviewers especialistas (invocados por /fg-review)
 │   ├── security-reviewer.md
 │   ├── dba-reviewer.md
 │   ├── frontend-reviewer.md
 │   ├── qa-reviewer.md
-│   └── legacy-impact-analyzer.md
+│   ├── legacy-impact-analyzer.md
+│   ├── fg-setup.md              ← executors de fase (capa agents del modelo 3 capas)
+│   ├── fg-explore.md
+│   ├── fg-plan.md
+│   ├── fg-design.md
+│   ├── fg-implement.md
+│   ├── fg-review.md
+│   └── fg-update-arch.md
 ├── config/                      ← template de configuración per-project (se copia al proyecto)
 │   └── modulos-transversales.yaml
 ├── templates/                   ← templates de artefactos generados (se aplican al proyecto)

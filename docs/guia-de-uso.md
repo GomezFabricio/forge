@@ -107,7 +107,7 @@ forge install
 | `skills/forge-shared/<name>/SKILL.md` | Referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`). |
 | `skills/fg-implement/strict-tdd.md` | Módulo del ciclo Strict TDD. |
 | `skills/fg-review/strict-tdd-verify.md` | Módulo de validación TDD para `/fg-review`. |
-| `agents/<name>.md` | Los 6 sub-agentes especialistas. |
+| `agents/<name>.md` | Los 13 agentes: 6 reviewers especialistas + 7 executors `fg-*` (capa agents del modelo de 3 capas). |
 | `mcp/engram.json` | Registro MCP de engram (si se instala engram). |
 | `CLAUDE.md` | Regla de orquestación mergeada (bloque `forge:orchestrator`). |
 | `settings.json` | Hook PII `UserPromptSubmit` (merge idempotente; omitible con `--skip-pii-hook`). |
