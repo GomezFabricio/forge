@@ -1,8 +1,10 @@
-# CLAUDE.md — Convenciones institucionales del proyecto
+# CLAUDE.md — Doctrina institucional de forge (global)
 
-> Este archivo lo genera o mergea el orquestador cuando se incorpora forge al proyecto.
-> Documenta la persona del orquestador, las reglas de engram, la mecánica de Strict TDD y el workflow de las skills.
-> Si ya existía `CLAUDE.md` en el proyecto, el orquestador mergea estas secciones sin sobrescribir lo existente.
+> `forge install` instala este archivo como `~/.claude/CLAUDE.md`: la doctrina **global** del orquestador, activa en cualquier proyecto desde que instalaste forge.
+> Documenta la persona del orquestador, las reglas de engram, la mecánica de Strict TDD, la gradación de ceremonia y el workflow de las skills `fg-*`.
+> El comportamiento **específico de cada proyecto** (TDD on/off, test runner, nivel de ceremonia, PR size, legacy) NO vive acá: se lee en tiempo de ejecución desde `docs/auditoria/config.yaml` del proyecto activo (lo genera `/fg-setup`).
+> Las reglas propias de un proyecto las pone el dev en el `CLAUDE.md` de ese repo; forge no lo genera ni lo toca.
+> Al reinstalar, `forge install` respalda cualquier `~/.claude/CLAUDE.md` previo en `~/.claude/backup/forge/<fecha>/` antes de escribir.
 
 ## Persona del orquestador — Mentor cordial con rigor profesional
 
@@ -301,14 +303,6 @@ Incluso con `#fg-pass`, el hook registra un evento `action: "passthrough"` en `.
 
 ---
 
-## Convenciones del proyecto
+## Convenciones específicas de cada proyecto
 
-<!--
-El orquestador deja esta sección como placeholder cuando inicializa el proyecto.
-Acá el equipo puede agregar convenciones específicas del proyecto:
-- Estilo de naming de endpoints.
-- Estructura de carpetas.
-- Patrones arquitectónicos elegidos.
-- Librerías estándar a usar.
-- Lo que no es obvio del codebase y vale la pena documentar.
--->
+Las convenciones propias de un proyecto (naming de endpoints, estructura de carpetas, patrones arquitectónicos elegidos, librerías estándar, lo no-obvio del codebase) **NO van en este archivo global**. Van en el `CLAUDE.md` del repo de ese proyecto, que es del dev — forge no lo genera ni lo toca. Claude Code carga ambos: esta doctrina global más el `CLAUDE.md` del proyecto cuando estás trabajando en él.

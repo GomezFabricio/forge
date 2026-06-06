@@ -1,6 +1,6 @@
 ---
 name: fg-setup
-description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/auditoria/config.yaml con defaults, inicializa CodeGraph, genera CLAUDE.md institucional y skill-registry. NO activa Strict TDD ni genera scaffolding del proyecto.
+description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/auditoria/config.yaml con defaults, inicializa CodeGraph, genera el skill-registry. NO crea CLAUDE.md (la doctrina del orquestador es global, vía forge install). NO activa Strict TDD ni genera scaffolding del proyecto.
 when_to_apply: Una vez al adoptar forge en un proyecto. Re-ejecutable para upgrade — detecta lo existente y solo agrega lo faltante.
 ---
 
@@ -21,7 +21,7 @@ el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO l
 
 ## Propósito
 
-Adoptar forge en un proyecto existente: instalar el harness de Claude Code (skills, sub-agentes), generar la estructura mínima de `docs/`, configurar el `CLAUDE.md` institucional con la persona y las reglas, e indexar el código con CodeGraph.
+Adoptar forge en un proyecto existente: generar la estructura mínima de `docs/`, generar `docs/auditoria/config.yaml`, e indexar el código con CodeGraph. La doctrina del orquestador (persona, reglas) NO se configura acá: es global (`~/.claude/CLAUDE.md`, vía `forge install`).
 
 **Lo que NO hace** (para evitar confusión con scaffolders tradicionales):
 
@@ -149,10 +149,9 @@ rules:
 
 Avisar al dev: "TDD está OFF por default. Para activarlo, editá `docs/auditoria/config.yaml` y cambiá `rules.implement.tdd` a `true`."
 
-### 6. Generar o mergear `CLAUDE.md` institucional
+### 6. CLAUDE.md — NO tocar
 
-- Si NO existe `CLAUDE.md` en la raíz: copiar el template `templates/CLAUDE-md-institucional.md` adaptando placeholders.
-- Si existe: mergear secciones faltantes (persona, engram, mecánica TDD, workflow). NO sobrescribir secciones que el dev ya escribió. Reportar qué se mergeó.
+`/fg-setup` **NO crea ni mergea** ningún `CLAUDE.md`. La doctrina del orquestador (persona, engram, mecánica TDD, ceremonia, workflow) es **global**: la instala `forge install` en `~/.claude/CLAUDE.md`. Si el proyecto tiene su propio `CLAUDE.md`, es del dev (reglas específicas del proyecto) — no lo toques.
 
 ### 7. Inicializar CodeGraph
 
@@ -246,8 +245,7 @@ Stack detectado: {stack o "ninguno (bootstrap — re-detecta cuando agregues man
 Test runner: {comando ({nombre}, detectado de {manifiesto}) | "no detectado"}
 CodeGraph: {N nodos, N aristas indexados | "no inicializado"}
 
-Archivos generados/mergeados:
-- CLAUDE.md ({creado | mergeado})
+Archivos generados:
 - docs/auditoria/config.yaml ({creado | preservado existente})
 - config/modulos-transversales.yaml ({creado | preservado existente})
 - .atl/skill-registry.md (generado)
@@ -262,7 +260,7 @@ Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.ya
 ### Siempre
 
 - Idempotente: re-ejecutar no rompe nada, solo agrega lo faltante.
-- Mergear archivos pre-existentes (CLAUDE.md, gitignore, modulos-transversales.yaml) sin sobrescribir.
+- Mergear archivos pre-existentes (gitignore, modulos-transversales.yaml) sin sobrescribir.
 - Reportar al dev qué se hizo y qué se preservó.
 - Generar `docs/auditoria/config.yaml` con la detección del paso 3 y defaults conservadores. NO sobrescribir si ya existe.
 - NO activar Strict TDD desde `/fg-setup` — eso lo decide el dev editando el config a mano.
@@ -271,7 +269,6 @@ Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.ya
 
 - Si hay múltiples manifiestos (polyglot), preguntar cuál es el principal para CodeGraph.
 - Si CodeGraph no está disponible, preguntar si seguir sin él (degradado) o instalarlo primero.
-- Si `CLAUDE.md` ya existe y hay conflictos no triviales en el merge, mostrar el conflicto y dejar que el dev decida.
 
 ### Nunca
 
