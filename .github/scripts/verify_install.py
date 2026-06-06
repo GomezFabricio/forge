@@ -45,10 +45,17 @@ if not settings.is_file():
 elif "forge.filters.hook_user_prompt" not in settings.read_text(encoding="utf-8"):
     errors.append("settings.json no contiene el hook PII (forge.filters.hook_user_prompt)")
 
+# Doctrina global del orquestador instalada como ~/.claude/CLAUDE.md.
+claude_md = claude / "CLAUDE.md"
+if not claude_md.is_file():
+    errors.append(f"falta CLAUDE.md global: {claude_md}")
+elif "institucional de forge" not in claude_md.read_text(encoding="utf-8"):
+    errors.append("~/.claude/CLAUDE.md no contiene la doctrina institucional de forge")
+
 if errors:
     print("SMOKE FAIL — el depósito de forge install está incompleto:")
     for err in errors:
         print(f"  - {err}")
     sys.exit(1)
 
-print("SMOKE OK: 7 skills, forge-shared, agents y hook PII depositados correctamente.")
+print("SMOKE OK: skills, forge-shared, agents, hook PII y CLAUDE.md global instalados.")
