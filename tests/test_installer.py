@@ -2082,6 +2082,7 @@ class TestInstallCodegraph:
         with patch.object(installer, "_detect_codegraph_platform", return_value=("win32", "x64")), \
              patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
              patch.object(installer, "_download_binary", side_effect=fake_download), \
+             patch.object(installer, "_edit_path_windows", return_value="appended"), \
              patch("zipfile.ZipFile", return_value=mock_zf), \
              patch("os.unlink"):
             ok, msg = installer.install_codegraph()
