@@ -44,6 +44,25 @@ def _isolate_claude_home(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _block_network(monkeypatch):
+    """CC-NO-REAL-HTTP: ningún test debe tocar la red en un runner limpio (CI).
+
+    Bloquea `urllib.request.urlopen` y `urlretrieve` reales. Los tests que ejercitan
+    descargas los mockean ellos mismos (su `patch` override gana durante el test). Los
+    pasos de red dentro de `run()` (install_codegraph) están envueltos en try/except
+    fail-open, así que esto los vuelve no-op SIN I/O real en vez de bajar binarios en CI.
+    """
+    def _blocked(*_args, **_kwargs):
+        raise AssertionError(
+            "CC-NO-REAL-HTTP: un test intentó acceder a la red sin mockear "
+            "urllib.request. Mockealo explícitamente en el test."
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", _blocked)
+    monkeypatch.setattr("urllib.request.urlretrieve", _blocked)
+
+
 # ---------------------------------------------------------------------------
 # T01: TestInstallerConstants
 # ---------------------------------------------------------------------------
