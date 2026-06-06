@@ -165,12 +165,13 @@ agregá este bloque a `~/.claude/settings.json`:
 **Archivos que genera `/fg-setup` en el proyecto:**
 
 ```
-CLAUDE.md
 docs/auditoria/config.yaml
 config/modulos-transversales.yaml
 .atl/skill-registry.md
 .gitignore  (actualizado)
 ```
+
+(`/fg-setup` no crea `CLAUDE.md`: la doctrina del orquestador es global, vía `forge install`.)
 
 **Después del setup, para cada feature:**
 
