@@ -57,8 +57,9 @@ Cada cambio genera una carpeta de auditoría en `docs/auditoria/cambios/<YYYY-MM
 
 ## 2. Instalación
 
-La instalación es una sola vez por máquina. Deposita las skills, los sub-agentes y el
-hook PII en `~/.claude/`, y mergea la regla de orquestación en `~/.claude/CLAUDE.md`.
+La instalación es una sola vez por máquina. Deposita las skills, los sub-agentes, los
+commands y el hook PII en `~/.claude/`, e instala la **doctrina global del orquestador**
+en `~/.claude/CLAUDE.md` (respaldando el previo en `~/.claude/backup/forge/<fecha>/`).
 Después de eso, forge funciona en cualquier proyecto sin pasos adicionales.
 
 ### Vía rápida (scripts)
@@ -108,9 +109,12 @@ forge install
 | `skills/fg-implement/strict-tdd.md` | Módulo del ciclo Strict TDD. |
 | `skills/fg-review/strict-tdd-verify.md` | Módulo de validación TDD para `/fg-review`. |
 | `agents/<name>.md` | Los 13 agentes: 6 reviewers especialistas + 7 executors `fg-*` (capa agents del modelo de 3 capas). |
-| `mcp/engram.json` | Registro MCP de engram (si se instala engram). |
-| `CLAUDE.md` | Regla de orquestación mergeada (bloque `forge:orchestrator`). |
+| `commands/fg-*.md` | Los 7 entrypoints de slash command (capa commands del modelo de 3 capas). |
+| `mcp/engram.json` | Registro MCP de engram (solo si se instala engram). |
 | `settings.json` | Hook PII `UserPromptSubmit` (merge idempotente; omitible con `--skip-pii-hook`). |
+| `CLAUDE.md` | **Doctrina global del orquestador** (el institucional). Reemplaza el previo con backup en `backup/forge/<fecha>/`; idempotente si ya es el de forge. |
+
+> Los MCP de CodeGraph y Context7 se registran en `~/.claude.json` (no en `~/.claude/`).
 
 ### Registro del hook PII
 
@@ -221,7 +225,6 @@ conversación de visión. Si el doc apuntado no existe o está vacío, forge blo
 **`/fg-setup adopt` genera en el proyecto:**
 
 ```
-CLAUDE.md                         (creado o mergeado)
 docs/auditoria/config.yaml        (creado con stack detectado)
 config/modulos-transversales.yaml (creado)
 .atl/skill-registry.md            (creado)
@@ -477,7 +480,7 @@ depuración.
 
 | Comando | Propósito |
 |---|---|
-| `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, mergea `CLAUDE.md`. |
+| `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, genera el skill-registry. No crea `CLAUDE.md` (la doctrina del orquestador es global). |
 | `/fg-explore [área]` | Fase 0 opcional. Mapea el cambio vía CodeGraph y genera `exploracion.md` (archivos afectados reales, consumidores, blast radius, acoplamientos no obvios). Reutilizable por `/fg-design`. Puede correr antes de `/fg-plan`. |
 | `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. El nivel de ceremonia llega ya resuelto desde el orquestador. |
 | `/fg-plan --from <doc> "<descripción>"` | Igual que `/fg-plan` pero usa un documento externo como contexto primario del cambio. |
@@ -591,7 +594,7 @@ Con `#fg-pass`, el filtro no redacta el prompt pero sí registra el evento en
 
 ```
 mi-proyecto/
-├── CLAUDE.md                         ← convenciones institucionales (mergeado)
+├── CLAUDE.md                         ← OPCIONAL, del dev (reglas del proyecto). forge no lo crea.
 ├── config/
 │   └── modulos-transversales.yaml    ← qué considera estructural el detector
 ├── docs/

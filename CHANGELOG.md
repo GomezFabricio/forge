@@ -8,6 +8,36 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Doctrina del orquestador global — el CLAUDE.md institucional pasa a `~/.claude/`
+
+> **CAMBIO DE ARQUITECTURA**: la doctrina del orquestador (persona, gradación de ceremonia,
+> modelo de delegación, model assignments, reglas de engram) deja de ser per-proyecto y pasa a ser
+> **global**. forge ya no asume un orquestador externo: lo aporta él. Cierra el agujero que dejó el
+> slice E (al retirar `inject_orchestrator_rule` sin reemplazo, una instalación limpia quedaba sin
+> cerebro de orquestador global hasta correr `/fg-setup` en un proyecto).
+
+#### Added
+
+- **`install_global_claude_md()`** (`forge/installer.py`): `forge install` instala el institucional
+  como `~/.claude/CLAUDE.md`. Idempotente: si el global ya es byte-idéntico no hace nada; si difiere,
+  respalda el previo en `~/.claude/backup/forge/<timestamp>/` antes de pisarlo (fuera del path de
+  carga de Claude Code, para no confundir al modelo con dos CLAUDE.md). Wireado en `run()` fail-open.
+  Tests: `TestInstallGlobalClaudeMd`, `TestRunGlobalClaudeMd`.
+
+#### Changed
+
+- **`templates/CLAUDE-md-institucional.md`**: reescrito de voz "proyecto" a voz "global". Aclara que
+  el comportamiento per-proyecto (TDD, test runner, ceremonia, PR size, legacy) se lee de
+  `docs/auditoria/config.yaml`, y que las reglas propias de un proyecto van en el `CLAUDE.md` de ese
+  repo (del dev, forge no lo toca).
+- **`forge/bootstrap.py` / `/fg-setup`**: dejan de generar/mergear el `CLAUDE.md` del proyecto.
+  Retirados `merge_or_create_claude_md` y `extract_section` (y sus tests). `/fg-setup` sigue generando
+  `config.yaml`, inicializando CodeGraph y el skill-registry.
+- **Docs y skills**: README, guía y los `fg-setup` (skill/command/agent) reflejan que la doctrina es
+  global y que `/fg-setup` ya no escribe `CLAUDE.md`.
+
+---
+
 ### Instalación sin fricción — auto-registro del hook PII + scripts de instalación
 
 Cierra las dos brechas que faltaban para una instalación "de un comando": el hook de

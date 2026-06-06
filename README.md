@@ -16,7 +16,7 @@
 
 Los tres ejes que el producto endurece sobre la operación habitual de Claude Code:
 
-1. **Privacidad** — la regla operativa "engram persiste señales del proceso, no datos del dominio" está incorporada al `CLAUDE.md` institucional que `/fg-setup` mergea. La disciplina del agente es la barrera principal contra que identificadores y secretos del dominio terminen en memoria persistente.
+1. **Privacidad** — la regla operativa "engram persiste señales del proceso, no datos del dominio" está incorporada al `CLAUDE.md` institucional que `forge install` instala globalmente en `~/.claude/`. La disciplina del agente es la barrera principal contra que identificadores y secretos del dominio terminen en memoria persistente.
 2. **Auditoría** — cada cambio queda registrado en `docs/auditoria/cambios/<cambio>/` con un `README.md` (portada humano), `diseño.md` (técnico estable), `tareas.md` (checklist) y `decisiones.md` (decisiones técnicas). El historial de git es la cadena de auditoría.
 3. **Permisos estrictos** — el agente no ejecuta acciones destructivas sin autorización explícita. Configuración `bypassPermissions: false` por defecto.
 
@@ -104,10 +104,12 @@ La instalación ejecuta los siguientes pasos en cadena:
    - `skills/forge-shared/<name>/SKILL.md` — referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`), con frontmatter que evita invocación accidental por el modelo.
    - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
    - `agents/<name>.md` — los 13 agentes (copia flat): 6 reviewers especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`) + 7 executors `fg-*` (la capa agents del modelo de 3 capas, uno por fase).
+   - `commands/fg-*.md` — los 7 entrypoints de slash command (capa commands del modelo de 3 capas).
    - `mcp/engram.json` — registro MCP de engram (solo si engram se instala durante `forge install`).
    - `settings.json` — registra el hook PII `UserPromptSubmit` (merge idempotente, preservando hooks existentes). Omitible con `--skip-pii-hook`.
+   - `CLAUDE.md` — la **doctrina global del orquestador** (el institucional). Reemplaza el `~/.claude/CLAUDE.md` actual respaldando el previo en `~/.claude/backup/forge/<fecha>/` si difiere; si ya es el de forge, no hace nada (idempotente).
 
-> **v0.1.0**: `forge install` está implementado end-to-end. Deposita las skills y los sub-agentes en `~/.claude/`, registra opcionalmente el MCP de engram, mergea el bloque de orquestación en `~/.claude/CLAUDE.md` y registra el hook PII en `~/.claude/settings.json`.
+> **v0.1.0**: `forge install` está implementado end-to-end. Deposita skills, sub-agentes y commands en `~/.claude/`, instala la doctrina global del orquestador en `~/.claude/CLAUDE.md` (con backup del previo), y registra opcionalmente los MCP de engram/CodeGraph/Context7 y el hook PII en `~/.claude/settings.json`.
 
 ### Después de instalar
 
@@ -445,11 +447,11 @@ forge/
 
 ## Estructura del proyecto del dev después de `/fg-setup`
 
-Después de correr `/fg-setup` en un proyecto, forge crea o mergea **solo** lo siguiente. Las skills, agents y templates **no se copian** al proyecto — viven globalmente en `~/.claude/` y se descubren desde ahí.
+Después de correr `/fg-setup` en un proyecto, forge crea **solo** lo siguiente. La doctrina del orquestador NO va acá: es global (`~/.claude/CLAUDE.md`, vía `forge install`). Las skills, agents y templates **no se copian** al proyecto — viven globalmente en `~/.claude/` y se descubren desde ahí.
 
 ```
 mi-proyecto/
-├── CLAUDE.md                    ← convenciones institucionales (mergeado por /fg-setup)
+├── CLAUDE.md                    ← OPCIONAL, del dev (reglas específicas del proyecto). forge no lo crea.
 ├── config/
 │   └── modulos-transversales.yaml   ← qué considera estructural el detector
 ├── docs/
