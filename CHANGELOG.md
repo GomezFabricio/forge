@@ -8,6 +8,36 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Retiro del mecanismo de inyección de orquestador — Slice E (arq-orchestrator-rule-completo)
+
+> **NOTA DE RETIRO**: `forge/templates/orchestrator-rule.md` eliminado del repositorio: era
+> un archivo huérfano (vivía en `forge/templates/` pero el installer lo buscaba en `templates/`
+> raíz, por lo que nunca llegó a desplegarse en producción). La doctrina de orquestación se
+> consolida en `templates/CLAUDE-md-institucional.md`, que incluye el modelo de 3 capas,
+> la tabla de model assignments y el sub-agent context protocol.
+
+#### Removed
+
+- **`forge/templates/orchestrator-rule.md`** — retirado. Era huérfano: el installer lo buscaba
+  en una ruta distinta y el bloque `<!-- forge:orchestrator -->` nunca se inyectó en
+  instalaciones reales. El contenido de gradación ya estaba duplicado en
+  `templates/CLAUDE-md-institucional.md`.
+- **`inject_orchestrator_rule()`** — retirado de `forge/installer.py`. El paso era silencioso
+  (el template no existía en la ruta esperada). `forge install` completa sin ese paso, sin
+  cambio observable para los usuarios.
+- **`TestInjectOrchestratorRule`** y los 15 patches de `inject_orchestrator_rule` en
+  `tests/test_installer.py` — retirados junto con la función.
+
+#### Changed
+
+- **`templates/CLAUDE-md-institucional.md`**: sección "Modelo de delegación" reescrita para
+  describir las 3 capas del modelo de orquestación (commands → agents → skills), con tabla
+  de model assignments (`fg-plan`/`fg-design`/`fg-review` = opus; resto = sonnet) y sub-agent
+  context protocol (skill path, engram topic keys, strict-tdd forwarding). Referencias rotas
+  a `orchestrator-rule.md` eliminadas; patrón Grep de verificación de arquitectura inlineado.
+
+---
+
 ### Desacoplamiento de orquestación — Slice A (arq-desacoplar-orquestacion)
 
 > **NOTA DE DEPRECACIÓN**: `forge/portero_decision.py` y `forge/arch_freshness.py` fueron
