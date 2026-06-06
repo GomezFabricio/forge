@@ -8,6 +8,46 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Instalación sin fricción — auto-registro del hook PII + scripts de instalación
+
+Cierra las dos brechas que faltaban para una instalación "de un comando": el hook de
+redacción PII ahora se registra solo durante `forge install`, y existen scripts de
+instalación para las tres plataformas.
+
+#### Added
+
+- **Auto-registro del hook PII** (`forge/installer.py`): `register_pii_hook()` mergea de
+  forma idempotente el hook `UserPromptSubmit` en `~/.claude/settings.json`, preservando
+  los hooks existentes y creando backup `.forge-bak` antes de escribir. El comando se ancla
+  a `sys.executable` (el intérprete del venv de pipx donde quedó forge), no a un `python`
+  genérico del PATH que no tendría forge importable. Wireado en `run()` con política
+  fail-open: un fallo del registro no aborta la instalación ni cambia el exit code.
+- **Flag `--skip-pii-hook`** (`forge/cli.py`): omite el auto-registro del hook PII.
+- **Scripts de instalación** (`install.sh`, `install.ps1`): vía rápida de un comando
+  (`curl … | bash`, `iwr … | iex`). Verifican Python 3.10+, aseguran `pipx` (con fallback
+  `--break-system-packages` para entornos PEP 668), instalan forge aislado con
+  `pipx install --force` y corren `forge install`. Los argumentos extra se reenvían tal cual.
+- **`.gitattributes`**: fuerza fin de línea LF en `*.sh` para que `install.sh` no se corrompa
+  al clonar en Windows (CRLF rompe el shebang bajo bash).
+- **Tests** (`tests/test_installer.py`, `tests/test_cli.py`): `TestRegisterPiiHook`,
+  `TestRunPiiHook` y tests del flag `--skip-pii-hook`, en ciclo Strict TDD RED→GREEN.
+
+#### Fixed
+
+- **Aislamiento de tests (CC-NO-REAL-HOME)**: fixture autouse `_isolate_claude_home` en
+  `tests/test_installer.py` que redirige `CLAUDE_HOME` y `CODEGRAPH_CLAUDE_JSON` a `tmp`.
+  Los tests de `run()` (`TestRun`, `TestRunAdditional`, `TestRunCodegraph`, `TestRunContext7`)
+  invocaban los registrars reales contra el `~/.claude` del usuario, violando la constraint
+  declarada del módulo de tests.
+
+#### Changed
+
+- **`README.md`** y **`docs/guia-de-uso.md`**: los scripts de instalación dejan de figurar
+  como pendientes; documentados la matriz de compatibilidad (Windows/macOS/Linux), los
+  prerequisitos, el paso a paso y el auto-registro del hook PII.
+
+---
+
 ### Retiro del mecanismo de inyección de orquestador — Slice E (arq-orchestrator-rule-completo)
 
 > **NOTA DE RETIRO**: `forge/templates/orchestrator-rule.md` eliminado del repositorio: era
@@ -140,7 +180,6 @@ invocable por intent natural en lugar de comando explícito.
 
 ### Pendiente para próximas iteraciones
 
-- Scripts `install.sh` (Linux/Mac) e `install.ps1` (Windows) en la raíz del repo para instalación de un solo comando.
 - Integración real con CodeGraph en `forge/structural_detector.py` (hoy hay un placeholder con TODO).
 - Fix de `PACKAGE_ROOT` en `bootstrap.py` para instalaciones wheel non-editable (ver TODO marcado).
 

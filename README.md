@@ -28,7 +28,33 @@ Para una guía completa de uso por escenario, configuración y troubleshooting: 
 
 ## Instalación
 
-### Vía rápida (devs personales, equipos abiertos)
+forge corre sobre **Claude Code** en Windows, macOS y Linux. La instalación es **una sola vez por máquina**: deposita skills, sub-agentes y el hook PII en `~/.claude/` y queda latente en todos tus proyectos.
+
+### Compatibilidad
+
+| Sistema operativo | Arquitectura | Estado |
+|---|---|---|
+| Windows 10 / 11 | x64, arm64 | Soportado — plataforma de desarrollo principal |
+| macOS 12+ | Apple Silicon (arm64), Intel (x64) | Soportado por diseño |
+| Linux (glibc) | x64, arm64 | Soportado por diseño |
+
+> **Sobre la validación, sin maquillaje**: el código tiene rutas explícitas para las tres plataformas (descarga de engram y CodeGraph por OS + arquitectura, scripts `.sh` y `.ps1`). La suite (482 tests) corre con subprocess y red mockeados y se ejercita principalmente en Windows; **todavía no hay CI multi-OS**. En macOS/Linux puede haber detalles del entorno por pulir.
+
+### Prerequisitos
+
+| Requisito | Por qué | Cómo verificar |
+|---|---|---|
+| **Python 3.10+** | El paquete y los hooks corren en Python. | `python --version` o `python3 --version` |
+| **Claude Code** | Es el runtime donde viven las skills y sub-agentes. | `claude --version` |
+| **git** | Para instalar desde el repositorio. | `git --version` |
+| **pipx** | Aísla forge del Python del sistema. El instalador lo instala si falta. | `pipx --version` |
+| **CodeGraph** *(opcional, recomendado)* | Análisis estructural 100% local del código. El instalador ofrece instalarlo. | — |
+
+### Paso a paso
+
+Elegí **una** de las dos vías. Las dos terminan con forge instalado en `~/.claude/` y listo para usar.
+
+#### Opción A — vía rápida (un comando)
 
 Los scripts verifican Python 3.10+, aseguran `pipx`, instalan forge en un entorno aislado y corren `forge install`. Cualquier argumento extra se pasa tal cual a `forge install` (ej. `--skip-context7`).
 
@@ -44,9 +70,9 @@ curl -sSL https://github.com/GomezFabricio/forge/raw/main/install.sh | bash
 iwr https://github.com/GomezFabricio/forge/raw/main/install.ps1 -useb | iex
 ```
 
-> **Nota de compliance**: el `curl … | bash` ejecuta un script remoto. Si tu política exige auditarlo antes, descargalo, revisalo y corré la vía institucional de abajo.
+> **Nota de compliance**: el `curl … | bash` ejecuta un script remoto. Si tu política exige auditarlo antes, descargalo, revisalo y corré la Opción B.
 
-### Vía institucional (entornos con compliance estricto)
+#### Opción B — vía institucional (clon + pipx, auditable)
 
 Para equipos con políticas que no permiten ejecutar scripts remotos sin auditoría previa:
 
@@ -59,12 +85,20 @@ forge install
 
 Esto instala el paquete en modo editable con pipx y ejecuta `forge install` directamente, que deposita las skills, agents y MCP en `~/.claude/`.
 
+#### Verificar la instalación
+
+```bash
+forge --version          # imprime la versión instalada
+```
+
+Después abrí Claude Code en cualquier proyecto y describí lo que querés hacer en lenguaje natural — forge se activa solo según el contexto (ver [Cómo se activa forge](#cómo-se-activa-forge)).
+
 ### Qué hace el instalador
 
 La instalación ejecuta los siguientes pasos en cadena:
 
 1. Verifica que haya **Python 3.10+** disponible. Si no encuentra `pipx`, lo instala (`python -m pip install --user pipx` + `pipx ensurepath`).
-2. Instala el paquete con **pipx**: `pipx install forge`. Esto aísla forge del Python global del sistema y permite upgrade/uninstall limpios.
+2. Instala el paquete con **pipx** desde el repositorio (`pipx install --force git+https://github.com/GomezFabricio/forge.git`; la vía institucional usa `--editable .` sobre el clon local). forge **no está publicado en PyPI** todavía. pipx lo aísla del Python global del sistema y permite upgrade/uninstall limpios.
 3. Ejecuta **`forge install`**, que deposita en `~/.claude/`:
    - `skills/<stem>/SKILL.md` — las 7 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`), cada una en su propia carpeta.
    - `skills/forge-shared/<name>/SKILL.md` — referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`), con frontmatter que evita invocación accidental por el modelo.
@@ -341,15 +375,6 @@ Qué datos **nunca** salen del entorno local:
 forge habla **español al dev**: mensajes, reportes, comentarios de los YAMLs, secciones del `CLAUDE.md` institucional, todos los artefactos generados.
 
 Los **identificadores técnicos** (nombres de comandos, slash commands, hooks, tipos, conventional types como `feat`/`fix`/`refactor`) quedan en **inglés** porque son estándar transversal del ecosistema.
-
----
-
-## Requisitos
-
-- **Python 3.10+** (para el paquete y los hooks).
-- **Claude Code** (el runtime agentic donde corren las skills).
-- **CodeGraph** opcional pero muy recomendado (analiza el código local sin enviar nada a la nube).
-- **pipx** para instalación aislada (el instalador lo instala si no está).
 
 ---
 

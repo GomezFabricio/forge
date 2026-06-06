@@ -93,8 +93,11 @@ forge install
 |---|---|
 | Python 3.10+ | El instalador verifica la versión. |
 | Claude Code | El runtime donde corren las skills. |
+| git | Para instalar desde el repositorio. |
 | pipx | El instalador lo instala si no está. |
 | CodeGraph | Opcional pero muy recomendado. Analiza código 100% local, sin enviar nada a la nube. |
+
+**Compatibilidad:** Windows 10/11, macOS 12+ y Linux (glibc), en x64 y arm64. Ver la matriz completa y las notas de validación en el [README](../README.md#compatibilidad).
 
 ### Qué instala `forge install`
 
