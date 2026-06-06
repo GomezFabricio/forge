@@ -1,0 +1,7 @@
+# Los scripts de shell DEBEN mantener fin de línea LF: con CRLF, bash falla al
+# parsear el shebang y el script (común al clonar en Windows con autocrlf).
+*.sh text eol=lf
+install.sh text eol=lf
+
+# PowerShell tolera ambos; lo normalizamos a CRLF en Windows.
+*.ps1 text eol=crlf
