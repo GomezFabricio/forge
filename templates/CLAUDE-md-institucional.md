@@ -111,7 +111,7 @@ La norma sana es "1 sesión = 1 ciclo" — si un cambio requiere múltiples batc
 ### Orquestador proporcional — niveles de ceremonia
 
 Cuando el dev invoca forge, el orquestador decide cuánto ritual aplica antes de arrancar
-el ciclo aplicando las reglas de `forge/templates/orchestrator-rule.md`. El orquestador
+el ciclo aplicando las reglas de gradación de este documento. El orquestador
 propone el nivel y espera confirmación — nunca actúa solo.
 
 #### Los 3 niveles
@@ -127,7 +127,15 @@ propone el nivel y espera confirmación — nunca actúa solo.
 Rápido solo está disponible si no hay cambios estructurales sin sincronizar.
 El orquestador verifica mediante Grep sobre `docs/auditoria/cambios/*/README.md`: si alguno
 tiene `structural: true` sin `arch_synced: true`, la arquitectura está desactualizada
-y el orquestador fuerza Completo (ver patrón exacto en `orchestrator-rule.md`).
+y el orquestador fuerza Completo.
+
+Patrón Grep de verificación:
+
+```
+Grep docs/auditoria/cambios/*/README.md buscando structural: true
+→ filtrar los que NO tienen arch_synced: true en el mismo archivo
+→ si hay al menos uno: arquitectura desactualizada → forzar Completo
+```
 
 **Limitación declarada**: este detector solo ve cambios que pasaron por forge y
 fueron marcados `structural`. Cambios manuales externos no se detectan.
@@ -195,12 +203,32 @@ El dev describe en lenguaje natural lo que quiere hacer. La skill infiere tipo (
 
 ### Modelo de delegación
 
-- El orquestador (vos, ahora) compone 6 skills como primitivas internas (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`, `/fg-update-arch`) — el dev no las invoca por slash command, las dispara el orquestador al detectar intent.
-- `/fg-review` delega a los roles especialistas de review (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`).
-- `/fg-design` delega a `legacy-impact-analyzer` cuando el proyecto está marcado como legacy — análisis de impacto pre-implementación, no de review (ver paso 2b de `/fg-design`).
-- `/fg-setup`, `/fg-plan`, `/fg-implement` y `/fg-update-arch` son ejecutores estrictos (NO delegan).
-- Los roles son hojas (NO delegan a nadie).
-- **Principio rector**: una skill puede delegar a un sub-agente especialista cuando necesita información que ese agente produce y la skill no puede computar por sí misma. Hoy aplica a `/fg-review` (miradas de review) y `/fg-design` (impacto legacy pre-implementación).
+El workflow de forge opera en 3 capas:
+
+1. **Entrypoint** (`commands/fg-*.md`): define el slash command `/fg-x`. El dev lo tipea directamente, o el orquestador lo detecta por intent y delega sin que el dev lo escriba explícitamente.
+2. **Executor** (`agents/fg-*.md`): cada agent `fg-*` es el ejecutor de su fase. Tiene `model` y `tools` declarados. **NO delega** — recibe contexto del orquestador y produce el artefacto de su fase.
+3. **Lógica** (`skills/fg-*/SKILL.md`): las instrucciones detalladas del paso. El executor las lee al arrancar. Contiene el ORCHESTRATOR GATE que detiene al orquestador si cargó la skill por error.
+
+**Dos rutas de entrada válidas:**
+- El dev tipea `/fg-x` → el command lo recibe → delega al agent `fg-x`.
+- El orquestador detecta intent sin command explícito → delega directamente al agent `fg-x`.
+
+#### Tabla de model assignments
+
+| Agent | Modelo |
+|-------|--------|
+| `fg-plan`, `fg-design`, `fg-review` | opus |
+| `fg-setup`, `fg-explore`, `fg-implement`, `fg-update-arch` | sonnet |
+
+#### Sub-agent context protocol
+
+Al delegar a un agent, el orquestador pasa:
+
+- **(a) Skill path**: el path exacto del `SKILL.md` a leer antes de arrancar (ej. `skills/fg-implement/SKILL.md`).
+- **(b) Engram topic keys**: los topic keys de los artefactos previos del cambio (README, diseño, tareas, progreso anterior) para que el agent los recupere vía `mem_search` + `mem_get_observation`.
+- **(c) Strict TDD forwarding**: si `rules.implement.tdd: true`, el orquestador incluye explícitamente el `test_command` y la obligación de seguir el ciclo de 7 pasos. El agent NO debe inferir esto por su cuenta — lo recibe del orquestador.
+
+**Principio rector**: una skill puede delegar a un sub-agente especialista cuando necesita información que ese agente produce y la skill no puede computar por sí misma. Hoy aplica a `/fg-review` (miradas de review) y `/fg-design` (impacto legacy pre-implementación).
 
 ## Visión del sistema (modo bootstrap)
 
