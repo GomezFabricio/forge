@@ -26,6 +26,24 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+
+@pytest.fixture(autouse=True)
+def _isolate_claude_home(tmp_path, monkeypatch):
+    """CC-NO-REAL-HOME: ningún test debe tocar ~/.claude ni ~/.claude.json reales.
+
+    Redirige los paths de home del installer a tmp para todos los tests. Los tests
+    que fijan su propio CLAUDE_HOME/CODEGRAPH_CLAUDE_JSON lo sobrescriben sin conflicto
+    (el monkeypatch posterior gana). Esto cubre además las funciones de run() que
+    invocan los registrars reales (codegraph, context7, hook PII) sin mockearlos.
+    """
+    from forge import installer
+
+    monkeypatch.setattr(installer, "CLAUDE_HOME", tmp_path / ".claude", raising=False)
+    monkeypatch.setattr(
+        installer, "CODEGRAPH_CLAUDE_JSON", tmp_path / ".claude.json", raising=False
+    )
+
+
 # ---------------------------------------------------------------------------
 # T01: TestInstallerConstants
 # ---------------------------------------------------------------------------
@@ -2721,6 +2739,215 @@ class TestRunContext7:
              patch.object(installer, "register_context7_mcp", side_effect=RuntimeError("boom")), \
              patch.object(installer, "install_assets", return_value={
                  "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# Hook PII: TestRegisterPiiHook — auto-registro del hook UserPromptSubmit
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterPiiHook:
+    """Verifica register_pii_hook() — merge idempotente del hook UserPromptSubmit
+    de redacción PII en ~/.claude/settings.json."""
+
+    def test_creates_hook_when_settings_missing(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude/settings.json no existe WHEN register_pii_hook()
+        THEN crea el archivo con el hook UserPromptSubmit y retorna 'created'."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        status = installer.register_pii_hook()
+
+        assert status == "created"
+        settings = claude_home / "settings.json"
+        assert settings.exists()
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        groups = data["hooks"]["UserPromptSubmit"]
+        commands = [h["command"] for g in groups for h in g["hooks"]]
+        assert any("forge.filters.hook_user_prompt" in c for c in commands)
+
+    def test_merges_preserving_existing_settings(self, tmp_path, monkeypatch):
+        """GIVEN settings.json con config previa del dev WHEN register_pii_hook()
+        THEN preserva las claves existentes y agrega el hook."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        existing = {
+            "theme": "dark",
+            "hooks": {
+                "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "echo done"}]}]
+            },
+        }
+        settings.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        status = installer.register_pii_hook()
+
+        assert status in ("created", "merged")
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        assert data["theme"] == "dark"
+        assert "Stop" in data["hooks"], "Los hooks existentes deben preservarse"
+        assert "UserPromptSubmit" in data["hooks"]
+
+    def test_idempotent_second_call_returns_present(self, tmp_path, monkeypatch):
+        """GIVEN register_pii_hook() ya fue llamado WHEN se llama de nuevo
+        THEN retorna 'present' y NO modifica el archivo."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        installer.register_pii_hook()
+        settings = claude_home / "settings.json"
+        content_after_first = settings.read_text(encoding="utf-8")
+
+        status2 = installer.register_pii_hook()
+
+        assert status2 == "present"
+        assert settings.read_text(encoding="utf-8") == content_after_first
+
+    def test_appends_to_existing_userpromptsubmit_group(self, tmp_path, monkeypatch):
+        """GIVEN settings.json ya tiene un UserPromptSubmit de otra herramienta
+        WHEN register_pii_hook() THEN agrega el hook PII sin pisar el existente."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        existing = {
+            "hooks": {
+                "UserPromptSubmit": [
+                    {"matcher": "", "hooks": [{"type": "command", "command": "other-tool"}]}
+                ]
+            }
+        }
+        settings.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        status = installer.register_pii_hook()
+
+        assert status == "merged"
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        commands = [h["command"] for g in data["hooks"]["UserPromptSubmit"] for h in g["hooks"]]
+        assert "other-tool" in commands, "El hook existente debe preservarse"
+        assert any("forge.filters.hook_user_prompt" in c for c in commands)
+
+    def test_creates_backup_before_writing(self, tmp_path, monkeypatch):
+        """GIVEN settings.json con config existente WHEN register_pii_hook()
+        THEN crea backup settings.json.forge-bak con el contenido original."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        original = json.dumps({"theme": "light"}, indent=2)
+        settings.write_text(original, encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        installer.register_pii_hook()
+
+        backup = claude_home / "settings.json.forge-bak"
+        assert backup.exists(), "Debe existir el backup settings.json.forge-bak"
+        assert backup.read_text(encoding="utf-8") == original
+
+    def test_handles_corrupted_json_gracefully(self, tmp_path, monkeypatch):
+        """GIVEN settings.json con JSON inválido WHEN register_pii_hook()
+        THEN lo trata como vacío y registra el hook sin lanzar excepción."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        settings.write_text("{ broken json {{", encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        status = installer.register_pii_hook()
+
+        assert status in ("created", "merged")
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        commands = [h["command"] for g in data["hooks"]["UserPromptSubmit"] for h in g["hooks"]]
+        assert any("forge.filters.hook_user_prompt" in c for c in commands)
+
+    def test_hook_command_uses_module_invocation(self, tmp_path, monkeypatch):
+        """GIVEN registro exitoso WHEN se lee el comando del hook
+        THEN invoca el módulo forge.filters.hook_user_prompt vía -m."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        installer.register_pii_hook()
+
+        data = json.loads((claude_home / "settings.json").read_text(encoding="utf-8"))
+        cmd = data["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        assert "forge.filters.hook_user_prompt" in cmd
+        assert "-m" in cmd
+
+
+class TestRunPiiHook:
+    """Verifica la integración del hook PII en run()."""
+
+    def _make_args(self, **kw):
+        import argparse
+
+        base = dict(
+            install_engram=False,
+            skip_engram_check=True,
+            skip_codegraph=True,
+            install_codegraph=False,
+            skip_context7=True,
+            skip_pii_hook=False,
+        )
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def test_run_registers_pii_hook_by_default(self):
+        """GIVEN sin flags de skip WHEN run() THEN register_pii_hook es llamado."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_pii_hook", return_value="created") as mock_pii, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+        mock_pii.assert_called_once()
+
+    def test_skip_pii_hook_flag_skips_registration(self):
+        """GIVEN --skip-pii-hook flag WHEN run() THEN register_pii_hook NO es llamado."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_pii_hook") as mock_pii, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(skip_pii_hook=True))
+
+        assert result == installer.EXIT_OK
+        mock_pii.assert_not_called()
+
+    def test_pii_hook_failure_does_not_change_exit_ok(self):
+        """GIVEN register_pii_hook() falla WHEN run() THEN retorna EXIT_OK (fallo graceful)."""
+        from forge import installer
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_pii_hook", side_effect=OSError("boom")), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
                  "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())

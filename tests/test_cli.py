@@ -60,6 +60,21 @@ class TestBuildParser:
         args = parser.parse_args(["install"])
         assert args.skip_engram_check is False
 
+    def test_skip_pii_hook_flag_present(self):
+        """GIVEN el parser WHEN se parsea 'install --skip-pii-hook'
+        THEN args.skip_pii_hook es True."""
+        from forge.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["install", "--skip-pii-hook"])
+        assert args.skip_pii_hook is True
+
+    def test_skip_pii_hook_default_false(self):
+        """GIVEN el parser WHEN 'install' sin flags THEN skip_pii_hook es False."""
+        from forge.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["install"])
+        assert args.skip_pii_hook is False
+
     def test_both_flags_parseable(self):
         """GIVEN el parser WHEN 'install --install-engram --skip-engram-check'
         THEN ambos flags son True (el dispatch decide la precedencia)."""

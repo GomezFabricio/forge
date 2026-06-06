@@ -111,6 +111,10 @@ _CONTEXT7_MCP_BLOCK: dict = {
     "args": ["-y", "@upstash/context7-mcp"],
 }
 
+# Módulo del hook PII (UserPromptSubmit). Es la firma estable para idempotencia:
+# el path del intérprete puede variar entre instalaciones, el módulo no.
+PII_HOOK_MODULE = "forge.filters.hook_user_prompt"
+
 # Mapa OS/arch para CodeGraph (tokens distintos a engram — win32/x64 en vez de windows/amd64)
 _CODEGRAPH_OS_MAP: dict[str, str] = {
     "linux": "linux",
@@ -624,6 +628,91 @@ def register_context7_mcp() -> str:
     return "created" if was_empty else "merged"
 
 
+def _pii_hook_command() -> str:
+    """Comando del hook PII, pinneado al intérprete actual.
+
+    Usa sys.executable (el Python del venv de pipx donde forge quedó instalado),
+    NO un 'python' genérico del PATH que podría no tener forge importable. Cita la
+    ruta si tiene espacios (ej. instalaciones en 'C:\\Program Files\\...').
+    """
+    py = sys.executable or "python"
+    if " " in py:
+        py = f'"{py}"'
+    return f"{py} -m {PII_HOOK_MODULE}"
+
+
+def _pii_hook_already_registered(user_prompt_submit: list) -> bool:
+    """True si algún hook de UserPromptSubmit ya invoca el módulo PII de forge."""
+    for group in user_prompt_submit:
+        if not isinstance(group, dict):
+            continue
+        for hook in group.get("hooks", []) or []:
+            if isinstance(hook, dict) and PII_HOOK_MODULE in str(hook.get("command", "")):
+                return True
+    return False
+
+
+def register_pii_hook() -> str:
+    """Registra el hook PII UserPromptSubmit en ~/.claude/settings.json (merge idempotente).
+
+    Lee el settings.json existente (o {} si ausente/corrupto), verifica si el hook PII
+    de forge ya está registrado (idempotencia por módulo), crea backup .forge-bak antes
+    de escribir y hace merge preservando el resto de la config y los demás hooks.
+
+    Returns:
+        'present' — el hook ya estaba registrado, no se modificó nada
+        'created' — settings.json no existía o estaba vacío, se creó con el hook
+        'merged'  — settings.json existía con otra config, se hizo merge
+    """
+    settings_path = CLAUDE_HOME / "settings.json"
+
+    existing_content: str | None = None
+    config: dict = {}
+    if settings_path.exists():
+        try:
+            existing_content = settings_path.read_text(encoding="utf-8")
+            config = json.loads(existing_content) or {}
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError):
+            config = {}
+
+    # Idempotencia: si el hook PII ya existe, no tocar nada
+    hooks = config.get("hooks")
+    if isinstance(hooks, dict):
+        ups = hooks.get("UserPromptSubmit")
+        if isinstance(ups, list) and _pii_hook_already_registered(ups):
+            return "present"
+
+    # Backup antes de escribir
+    if existing_content is not None:
+        backup_path = settings_path.with_suffix(".json.forge-bak")
+        with contextlib.suppress(OSError):
+            backup_path.write_text(existing_content, encoding="utf-8")
+
+    was_empty = existing_content is None or existing_content.strip() == ""
+
+    # Merge preservando estructura existente y otros hooks
+    if not isinstance(config.get("hooks"), dict):
+        config["hooks"] = {}
+    if not isinstance(config["hooks"].get("UserPromptSubmit"), list):
+        config["hooks"]["UserPromptSubmit"] = []
+    config["hooks"]["UserPromptSubmit"].append(
+        {
+            "matcher": "",
+            "hooks": [{"type": "command", "command": _pii_hook_command()}],
+        }
+    )
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    return "created" if was_empty else "merged"
+
+
 def prompt_context7_yn() -> str:
     """Muestra el prompt de registro de Context7 y lee la respuesta y/N.
 
@@ -1124,6 +1213,7 @@ def print_report(report: dict) -> None:
     assets = report.get("assets", {})
     codegraph_info = report.get("codegraph", {})
     context7_info = report.get("context7", {})
+    pii_info = report.get("pii_hook", {})
 
     print("\nforge install — resumen\n")
 
@@ -1169,6 +1259,20 @@ def print_report(report: dict) -> None:
             print(f"  context7: fallo en registro — {ctx_msg}")
         else:
             print(f"  context7: {ctx_msg}")
+
+    # Sección Hook PII
+    if pii_info:
+        ph_status = pii_info.get("status", "")
+        ph_hook = pii_info.get("hook", "")
+        ph_msg = pii_info.get("msg", "")
+        if ph_status == "registered":
+            print(f"  hook PII: registrado en ~/.claude/settings.json ({ph_hook})")
+        elif ph_status == "skipped":
+            print(f"  hook PII: omitido ({ph_msg})")
+        elif ph_status == "failed":
+            print(f"  hook PII: fallo en registro — {ph_msg}")
+        else:
+            print(f"  hook PII: {ph_msg}")
 
     print(f"  skills depositadas: {assets.get('skills_deposited', 0)}")
     print(f"  shared (forge-shared): {assets.get('shared_deposited', 0)}")
@@ -1299,7 +1403,24 @@ def run(args) -> int:  # args: argparse.Namespace
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad R-CTX-05
         context7_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
 
+    # Paso Hook PII — try/except amplio: fallo no aborta ni cambia exit code (fail-open)
+    pii_hook_report: dict = {}
+    try:
+        if getattr(args, "skip_pii_hook", False):
+            pii_hook_report = {"status": "skipped", "msg": "omitido por --skip-pii-hook"}
+        else:
+            hook_status = register_pii_hook()
+            pii_hook_report = {"status": "registered", "hook": hook_status}
+    except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
+        pii_hook_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
+
     # Deposit skills and agents
     manifest = install_assets()
-    print_report({"engram": info, "assets": manifest, "codegraph": codegraph_report, "context7": context7_report})
+    print_report({
+        "engram": info,
+        "assets": manifest,
+        "codegraph": codegraph_report,
+        "context7": context7_report,
+        "pii_hook": pii_hook_report,
+    })
     return EXIT_OK

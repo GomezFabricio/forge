@@ -10,6 +10,7 @@ Subcommands:
     forge install --install-codegraph  Auto-install CodeGraph without prompt (CI-safe).
     forge install --skip-context7      Skip Context7 MCP registration entirely.
     forge install --install-context7   Register Context7 MCP without prompt (CI-safe).
+    forge install --skip-pii-hook      Skip auto-registering the PII UserPromptSubmit hook.
     forge --help                       Show help.
 
 Project-level setup is done from Claude Code with the /fg-setup skill,
@@ -95,6 +96,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Registrar Context7 MCP automáticamente sin prompt (non-interactive / CI). "
             "--skip-context7 tiene precedencia si ambos se pasan."
+        ),
+    )
+    install_parser.add_argument(
+        "--skip-pii-hook",
+        dest="skip_pii_hook",
+        action="store_true",
+        help=(
+            "Omitir el auto-registro del hook PII (UserPromptSubmit) en "
+            "~/.claude/settings.json. El filtro de redacción no se activará hasta "
+            "registrarlo manualmente."
         ),
     )
     install_parser.set_defaults(func=cmd_install)
