@@ -46,6 +46,7 @@ y decide si forge debe entrar o no.
 
 ```
 Setup del proyecto (una vez):   /fg-setup
+Exploración (fase 0 opcional):  /fg-explore
 Por cada cambio:                 /fg-plan → /fg-design → /fg-implement → /fg-review
 Mantenimiento de arquitectura:  /fg-update-arch  (sugerida por /fg-review)
 ```
@@ -85,7 +86,7 @@ forge install
 
 | Destino en `~/.claude/` | Contenido |
 |---|---|
-| `skills/<stem>/SKILL.md` | Las 6 skills del workflow (`fg-setup`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`). |
+| `skills/<stem>/SKILL.md` | Las 7 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`). |
 | `skills/forge-shared/<name>/SKILL.md` | Referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`). |
 | `skills/fg-implement/strict-tdd.md` | Módulo del ciclo Strict TDD. |
 | `skills/fg-review/strict-tdd-verify.md` | Módulo de validación TDD para `/fg-review`. |
@@ -457,6 +458,7 @@ depuración.
 | Comando | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, mergea `CLAUDE.md`. |
+| `/fg-explore [área]` | Fase 0 opcional. Mapea el cambio vía CodeGraph y genera `exploracion.md` (archivos afectados reales, consumidores, blast radius, acoplamientos no obvios). Reutilizable por `/fg-design`. Puede correr antes de `/fg-plan`. |
 | `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. El nivel de ceremonia llega ya resuelto desde el orquestador. |
 | `/fg-plan --from <doc> "<descripción>"` | Igual que `/fg-plan` pero usa un documento externo como contexto primario del cambio. |
 | `/fg-design` | Genera `diseño.md`, `tareas.md` y `decisiones.md`. Requiere que `/fg-plan` ya haya corrido. En proyectos legacy, invoca `legacy-impact-analyzer` antes del enfoque técnico. |

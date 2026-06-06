@@ -112,6 +112,6 @@ Esto previene degradación silenciosa donde el orquestador se olvida de las skil
 
 ## Puntos de integración con skills de forge
 
-- **Orquestador de forge**: sigue este protocolo para TODAS las delegaciones a las 6 skills (`/fg-setup`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`, `/fg-update-arch`).
+- **Orquestador de forge**: sigue este protocolo para TODAS las delegaciones a las 7 skills (`/fg-setup`, `/fg-explore`, `/fg-plan`, `/fg-design`, `/fg-implement`, `/fg-review`, `/fg-update-arch`).
 - **`/fg-review`**: única skill con permiso de delegar a roles especialistas. Cuando delega a `code-reviewer`, `security-reviewer`, etc., también sigue este protocolo.
 - **Cualquier skill futura que delegue**: DEBE referenciar este protocolo.

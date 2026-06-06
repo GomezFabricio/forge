@@ -64,7 +64,7 @@ La instalación ejecuta los siguientes pasos en cadena:
 1. Verifica que haya **Python 3.10+** disponible. Si no encuentra `pipx`, lo instala (`python -m pip install --user pipx` + `pipx ensurepath`).
 2. Instala el paquete con **pipx**: `pipx install forge`. Esto aísla forge del Python global del sistema y permite upgrade/uninstall limpios.
 3. Ejecuta **`forge install`**, que deposita en `~/.claude/`:
-   - `skills/<stem>/SKILL.md` — las 6 skills del workflow (`fg-setup`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`), cada una en su propia carpeta.
+   - `skills/<stem>/SKILL.md` — las 7 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`), cada una en su propia carpeta.
    - `skills/forge-shared/<name>/SKILL.md` — referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`), con frontmatter que evita invocación accidental por el modelo.
    - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
    - `agents/<name>.md` — los 6 sub-agentes especialistas (copia flat).
@@ -103,10 +103,11 @@ No tenés que memorizar slash commands. Si querés invocar una skill manualmente
 
 ## Workflow
 
-Un cambio en forge sigue 4 fases por defecto, más una skill de mantenimiento de arquitectura:
+Un cambio en forge sigue 4 fases por defecto, con una fase 0 opcional de exploración y una skill de mantenimiento de arquitectura:
 
 ```
 Setup del proyecto (una vez):  /fg-setup
+Exploración (fase 0 opcional): /fg-explore
 Por cada cambio:               /fg-plan → /fg-design → /fg-implement → /fg-review
 Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
 ```
@@ -123,11 +124,12 @@ El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritua
 
 **Condición para modo Rápido**: la arquitectura debe estar al día. El orquestador lo verifica mediante Grep sobre los READMEs de cambios. Si hay cambios estructurales sin sincronizar, el orquestador eleva automáticamente a Completo.
 
-### Las 6 skills
+### Las 7 skills
 
 | Skill | Propósito |
 |---|---|
 | `/fg-setup` | Adopta forge en el proyecto. Idempotente, re-invocable para upgrade. |
+| `/fg-explore [área]` | Fase 0 opcional. Produce el mapa del cambio vía CodeGraph (`exploracion.md`): archivos afectados reales, consumidores, acoplamientos no obvios. Reutilizable por `/fg-design`. Puede correr antes de `/fg-plan`. |
 | `/fg-plan <descripción libre>` | Crea la carpeta `docs/auditoria/cambios/<YYYY-MM-tipo-nombre>/` con el `README.md` inicial. Infiere `tipo` (feat/fix/refactor/...) y `nombre` desde el lenguaje natural. El nivel de ceremonia ya fue determinado por el orquestador antes de invocar esta skill. |
 | `/fg-design` | Crea `diseño.md` (enfoque + arquitectura + archivos afectados), `tareas.md` (checklist) y `decisiones.md` (decisiones técnicas iniciales), todos vía CodeGraph. |
 | `/fg-implement` | Implementa el checklist tarea por tarea aplicando el ciclo Strict TDD si está activo (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR). |
@@ -372,8 +374,9 @@ forge/
 │           ├── ar_cuit.py       ← CUIT/CUIL con dígito verificador AFIP
 │           ├── ar_dni.py        ← DNI argentino
 │           └── secrets.py       ← secretos técnicos (JWT, AWS keys, GitHub PAT, etc.)
-├── skills/                      ← 6 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
+├── skills/                      ← 7 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
 │   ├── fg-setup.md
+│   ├── fg-explore.md
 │   ├── fg-plan.md
 │   ├── fg-design.md
 │   ├── fg-implement.md

@@ -182,9 +182,9 @@ POST_INSTALL_MESSAGE = """\
 forge instalado. A partir de ahora, charlá normal con Claude en cualquier
 proyecto — el workflow se activa solo según el contexto.
 
-Las skills (/fg-setup, /fg-plan, /fg-design, /fg-implement, /fg-review,
-/fg-update-arch) existen como comandos por si las querés invocar manualmente,
-pero no necesitás conocerlas."""
+Las skills (/fg-setup, /fg-explore, /fg-plan, /fg-design, /fg-implement,
+/fg-review, /fg-update-arch) existen como comandos por si las querés invocar
+manualmente, pero no necesitás conocerlas."""
 
 # =============================================================================
 # === Detection ===
