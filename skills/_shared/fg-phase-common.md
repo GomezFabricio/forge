@@ -61,6 +61,8 @@ risks: None | <descripción de riesgos detectados>
 skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```
 
+> **Fuente canónica del enum `skill_resolution`**: los cuatro valores válidos (`paths-injected`, `fallback-registry`, `fallback-path`, `none`) están definidos aquí. Cualquier skill que liste el campo en su envelope DEBE usar exactamente estos valores.
+
 ### Campos específicos por skill (extensión del schema base)
 
 Cada skill agrega campos propios **sin remover los base**:

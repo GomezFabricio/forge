@@ -98,12 +98,12 @@ Este protocolo es safe-de-compactación porque:
 
 Los sub-agentes DEBEN reportar el estado de resolución de skills en su envelope de retorno:
 
-- `injected` — recibieron `## Project Standards (auto-resolved)` del orquestador (camino ideal).
+- `paths-injected` — recibieron `## Project Standards (auto-resolved)` del orquestador (camino ideal).
 - `fallback-registry` — no recibieron standards, self-loaded desde el skill registry.
 - `fallback-path` — no recibieron standards, cargaron via path de `SKILL: Load`.
 - `none` — no se cargaron skills en absoluto.
 
-**Regla de auto-corrección del orquestador**: si un sub-agente reporta cualquier cosa que no sea `injected`, el orquestador DEBE:
+**Regla de auto-corrección del orquestador**: si un sub-agente reporta cualquier cosa que no sea `paths-injected`, el orquestador DEBE:
 1. Re-leer el skill registry inmediatamente (pudo perderse por compactación).
 2. Asegurar que TODAS las delegaciones subsiguientes incluyan `## Project Standards (auto-resolved)`.
 3. Loguear un warning al dev: "Skill cache miss detectado — registry recargado para futuras delegaciones."

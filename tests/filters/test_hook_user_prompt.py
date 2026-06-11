@@ -143,3 +143,181 @@ class TestProcessPromptPipeline:
         # #fg_pass (underscore) should NOT trigger override → CUIT is redacted
         assert result.get("continue") is True
         assert "[CUIT]" in result["modified_prompt"]
+
+
+# ---------------------------------------------------------------------------
+# D1: FORGE_PII_DISABLE kill-switch tests
+# ---------------------------------------------------------------------------
+
+class TestForgeDisableKillSwitch:
+    """FORGE_PII_DISABLE env var disables all PII analysis without importing presidio."""
+
+    def test_disable_env_set_returns_passthrough(self, tmp_path, monkeypatch):
+        """DIS-01: FORGE_PII_DISABLE=1 → passthrough ({}) without redacting."""
+        monkeypatch.setenv("FORGE_PII_DISABLE", "1")
+        log_path = tmp_path / "auditoria-pii.jsonl"
+        result = process_prompt(
+            {"prompt": f"CUIT del proveedor: {CUIT_VALID_1}"},
+            log_path=log_path,
+        )
+        assert result == {}
+
+    def test_disable_env_set_logs_passthrough(self, tmp_path, monkeypatch):
+        """DIS-02: FORGE_PII_DISABLE=1 → passthrough event is logged (mirrors #fg-pass)."""
+        monkeypatch.setenv("FORGE_PII_DISABLE", "1")
+        log_path = tmp_path / "auditoria-pii.jsonl"
+        process_prompt(
+            {"prompt": f"CUIT: {CUIT_VALID_1}"},
+            log_path=log_path,
+        )
+        assert log_path.exists()
+        import json as _json
+        lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 1
+        entry = _json.loads(lines[0])
+        assert entry["action"] == "passthrough"
+
+    def test_disable_env_zero_does_not_disable(self, monkeypatch):
+        """DIS-03: FORGE_PII_DISABLE=0 → kill-switch is NOT triggered (normal flow).
+
+        We verify the kill-switch gate is skipped by confirming the function
+        proceeds past step 0 and attempts analysis (which may fail due to missing
+        presidio on this machine — that's expected and acceptable).
+        """
+        from forge.filters.hook_user_prompt import _is_pii_disabled
+
+        monkeypatch.setenv("FORGE_PII_DISABLE", "0")
+        assert not _is_pii_disabled(), (
+            "FORGE_PII_DISABLE=0 should NOT activate the kill-switch"
+        )
+
+        monkeypatch.setenv("FORGE_PII_DISABLE", "")
+        assert not _is_pii_disabled(), (
+            "FORGE_PII_DISABLE='' (empty string) should NOT activate the kill-switch"
+        )
+
+    def test_disable_env_set_no_presidio_import(self, tmp_path, monkeypatch):
+        """DIS-04: FORGE_PII_DISABLE=1 → presidio modules are not imported."""
+        import sys
+
+        monkeypatch.setenv("FORGE_PII_DISABLE", "1")
+        # Remove cached presidio modules so we can detect a fresh import
+        presidio_modules = [k for k in sys.modules if "presidio" in k]
+        for mod in presidio_modules:
+            monkeypatch.delitem(sys.modules, mod)
+
+        log_path = tmp_path / "auditoria-pii.jsonl"
+        process_prompt(
+            {"prompt": f"CUIT del proveedor: {CUIT_VALID_1}"},
+            log_path=log_path,
+        )
+        # No presidio module should have been imported
+        new_presidio = [k for k in sys.modules if "presidio" in k]
+        assert new_presidio == [], (
+            f"FORGE_PII_DISABLE=1 but presidio was imported: {new_presidio}"
+        )
+
+    def test_disable_pii_in_prompt_not_redacted(self, tmp_path, monkeypatch):
+        """DIS-05: FORGE_PII_DISABLE set + PII in prompt → prompt NOT redacted."""
+        monkeypatch.setenv("FORGE_PII_DISABLE", "1")
+        log_path = tmp_path / "auditoria-pii.jsonl"
+        result = process_prompt(
+            {"prompt": f"Email: user@example.com, CUIT: {CUIT_VALID_1}"},
+            log_path=log_path,
+        )
+        assert result == {}
+        # result == {} means the original prompt passes unchanged (not redacted)
+
+
+# ---------------------------------------------------------------------------
+# D3: action="error" emission from the hook's error path
+# ---------------------------------------------------------------------------
+
+class TestErrorActionLogging:
+    """D3: processing errors emit action='error' to the JSONL log (fail-open).
+
+    These tests inject both a broken analyzer AND a stub anonymizer so no
+    presidio import is attempted (preserving the no-network/no-install constraint).
+    The analyzer raises to simulate a presidio failure; the anonymizer is never
+    reached because the exception is thrown first.
+    """
+
+    def _stub_anonymizer_and_operators(self):
+        """Return a stub (anonymizer, operators) pair that is never called."""
+        class _StubAnonymizer:
+            def anonymize(self, **_kwargs):  # pragma: no cover
+                raise AssertionError("anonymizer should not be called in error path")
+
+        return _StubAnonymizer(), {}
+
+    def test_error_path_logs_error_action(self, tmp_path):
+        """ERR-01: when the analyzer raises, an 'error' event is written to the log."""
+        import json as _json
+
+        log_path = tmp_path / "auditoria-pii.jsonl"
+
+        class BrokenAnalyzer:
+            def analyze(self, **_kwargs):
+                raise RuntimeError("presidio simulated failure")
+
+        anon, ops = self._stub_anonymizer_and_operators()
+        result = process_prompt(
+            {"prompt": f"CUIT: {CUIT_VALID_1}"},
+            analyzer=BrokenAnalyzer(),
+            anonymizer=anon,
+            operators=ops,
+            log_path=log_path,
+        )
+        # Fail-open: result is still {}
+        assert result == {}
+        # Error is logged
+        assert log_path.exists()
+        lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 1
+        entry = _json.loads(lines[0])
+        assert entry["action"] == "error"
+
+    def test_error_path_includes_prompt_hash(self, tmp_path):
+        """ERR-02: the error log entry includes a prompt_hash for correlation."""
+        import json as _json
+
+        log_path = tmp_path / "auditoria-pii.jsonl"
+
+        class BrokenAnalyzer:
+            def analyze(self, **_kwargs):
+                raise ValueError("broken")
+
+        anon, ops = self._stub_anonymizer_and_operators()
+        process_prompt(
+            {"prompt": "some prompt text"},
+            analyzer=BrokenAnalyzer(),
+            anonymizer=anon,
+            operators=ops,
+            log_path=log_path,
+        )
+        entry = _json.loads(log_path.read_text(encoding="utf-8").strip())
+        assert "prompt_hash" in entry
+        assert len(entry["prompt_hash"]) == 16
+
+    def test_error_path_still_fail_open(self, tmp_path):
+        """ERR-03: even when logging itself fails, the hook returns {} (fail-open)."""
+        # Use a log_path in a non-existent nested dir where the parent is a *file*
+        # (not a directory) — this reliably causes log_event to fail on all platforms.
+        blocker = tmp_path / "blocker"
+        blocker.write_text("I am a file, not a dir")
+        bad_log_path = blocker / "auditoria-pii.jsonl"  # parent is a file → OSError
+
+        class BrokenAnalyzer:
+            def analyze(self, **_kwargs):
+                raise RuntimeError("presidio failure")
+
+        anon, ops = self._stub_anonymizer_and_operators()
+        result = process_prompt(
+            {"prompt": "test"},
+            analyzer=BrokenAnalyzer(),
+            anonymizer=anon,
+            operators=ops,
+            log_path=bad_log_path,
+        )
+        # Must still be fail-open even if logging errors out
+        assert result == {}

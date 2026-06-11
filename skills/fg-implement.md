@@ -209,5 +209,5 @@ risks: None | <riesgos detectados>
 flags_for_review:
   - <ej: "toca auth, sugerir security-reviewer">
   - <ej: "tiene migraciones, sugerir dba-reviewer">
-skill_resolution: paths-injected | fallback-registry | none
+skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```

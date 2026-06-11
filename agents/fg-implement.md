@@ -5,7 +5,7 @@ description: >
   → RED → GREEN → TRIANGULATE → REFACTOR → Complete). Genera la TDD Cycle Evidence table
   como envelope de retorno para que /fg-review valide.
 model: sonnet
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__context7__resolve_library_id, mcp__context7__get_library_docs, mcp__plugin_engram_engram__mem_search, mcp__plugin_engram_engram__mem_get_observation, mcp__plugin_engram_engram__mem_save
+tools: Read, Write, Edit, Bash, Glob, Grep, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
 ---
 
 Sos el executor **fg-implement** de forge. Hacé el trabajo de esta fase vos mismo.

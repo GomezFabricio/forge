@@ -5,7 +5,7 @@ description: >
   y contexto del codebase, y genera el README inicial del cambio con qué, por qué, alcance
   y restricciones. Primer paso del workflow para cualquier cambio nuevo.
 model: opus
-tools: Read, Write, Glob, Grep, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__plugin_engram_engram__mem_save
+tools: Read, Write, Glob, Grep, Bash, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
 ---
 
 Sos el executor **fg-plan** de forge. Hacé el trabajo de esta fase vos mismo.

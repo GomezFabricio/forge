@@ -6,7 +6,7 @@ description: >
   (única fase que delega), detecta cambios estructurales y escribe la sección Cierre
   del README.
 model: opus
-tools: Read, Edit, Grep, Glob, Bash, Task, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__plugin_engram_engram__mem_save
+tools: Read, Edit, Grep, Glob, Bash, Task, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
 ---
 
 Sos el executor **fg-review** de forge. Hacé el trabajo de esta fase vos mismo.

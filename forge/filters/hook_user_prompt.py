@@ -18,10 +18,17 @@ error en stderr. El filtro no bloquea el dev loop.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 _FG_PASS_MARKER = "#fg-pass"
+
+
+def _is_pii_disabled() -> bool:
+    """Return True if FORGE_PII_DISABLE is set to a truthy value (non-empty, not "0")."""
+    val = os.environ.get("FORGE_PII_DISABLE", "")
+    return bool(val) and val != "0"
 
 
 def process_prompt(
@@ -42,6 +49,13 @@ def process_prompt(
     :return: ``{}`` for no-op (pass-through) or
              ``{"continue": True, "modified_prompt": <redacted>}`` for redactions.
     """
+    # Step 0: FORGE_PII_DISABLE kill-switch — checked BEFORE #fg-pass and any presidio import
+    if _is_pii_disabled():
+        prompt = input_data.get("prompt", "")
+        _log_passthrough(prompt, log_path)
+        sys.stderr.write("[fg-pii] passthrough activo (FORGE_PII_DISABLE)\n")
+        return {}
+
     prompt = input_data.get("prompt", "")
 
     # Step 1: check #fg-pass override BEFORE any analysis (R20.5)
@@ -90,6 +104,7 @@ def process_prompt(
     except Exception as exc:  # noqa: BLE001
         # Fail-open: log error to stderr, do not block the prompt
         sys.stderr.write(f"[fg-pii] error: {type(exc).__name__}\n")
+        _log_error(prompt, log_path)
         return {}
 
 
@@ -123,6 +138,21 @@ def _log_passthrough(prompt: str, log_path: Path | None) -> None:
         prompt_hash=hash_prompt(prompt),
         log_path=log_path,
     )
+
+
+def _log_error(prompt: str, log_path: Path | None) -> None:
+    """Append an error event to the JSONL log (fail-open: swallow any logging errors)."""
+    try:
+        from forge.filters.redaction_log import hash_prompt, log_event
+
+        log_event(
+            action="error",
+            types={},
+            prompt_hash=hash_prompt(prompt),
+            log_path=log_path,
+        )
+    except Exception:  # noqa: BLE001
+        pass  # Fail-open: never let logging block the hook
 
 
 def main() -> int:

@@ -5,7 +5,7 @@ description: >
   para identificar archivos afectados realmente, y produce diseño.md, tareas.md y
   decisiones.md con enfoque técnico, arquitectura, archivos y checklist de tareas.
 model: opus
-tools: Read, Write, Edit, Glob, Grep, Task, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__plugin_engram_engram__mem_save
+tools: Read, Write, Edit, Glob, Grep, Bash, Task, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
 ---
 
 Sos el executor **fg-design** de forge. Hacé el trabajo de esta fase vos mismo.

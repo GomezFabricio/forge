@@ -6,7 +6,7 @@ description: >
   marcados como estructurales y la topología del código vía CodeGraph. Propone diffs
   por archivo — el dev acepta cada propuesta individualmente.
 model: sonnet
-tools: Read, Write, Edit, Glob, Grep, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__plugin_engram_engram__mem_save
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
 ---
 
 Sos el executor **fg-update-arch** de forge. Hacé el trabajo de esta fase vos mismo.

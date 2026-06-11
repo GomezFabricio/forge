@@ -189,4 +189,5 @@ inferred:
   nombre: <nombre kebab-case inferido>
 next_recommended: /fg-design   # modo Completo; en modo Rápido → /fg-implement
 risks: None | <riesgos detectados durante la conversación>
+skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```

@@ -226,5 +226,5 @@ review_workload_forecast:
   suggested_split: <descripción o "none">
 next_recommended: /fg-implement
 risks: None | <riesgos técnicos detectados>
-skill_resolution: paths-injected | fallback-registry | none
+skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```
