@@ -108,6 +108,16 @@ def build_parser() -> argparse.ArgumentParser:
             "registrarlo manualmente."
         ),
     )
+    install_parser.add_argument(
+        "--skip-guard-hook",
+        dest="skip_guard_hook",
+        action="store_true",
+        help=(
+            "Omitir el auto-registro del hook de guardrails (PreToolUse) en "
+            "~/.claude/settings.json. Las reglas de docs/auditoria/guardrails.yaml "
+            "no se evaluarán hasta registrarlo manualmente."
+        ),
+    )
     install_parser.set_defaults(func=cmd_install)
 
     return parser

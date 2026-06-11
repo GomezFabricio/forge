@@ -3210,3 +3210,145 @@ class TestRunGlobalClaudeMd:
             result = installer.run(self._make_args())
 
         assert result == installer.EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# Hook Guardrails: TestRegisterGuardHook
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterGuardHook:
+    """Verifica register_guard_hook() — merge idempotente del hook PreToolUse
+    de guardrails en ~/.claude/settings.json."""
+
+    def test_creates_hook_when_settings_missing(self, tmp_path, monkeypatch):
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        status = installer.register_guard_hook()
+        assert status == "created"
+        settings = claude_home / "settings.json"
+        assert settings.exists()
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        groups = data["hooks"]["PreToolUse"]
+        commands = [h["command"] for g in groups for h in g["hooks"]]
+        assert any("forge.guards.hook_pre_tool" in c for c in commands)
+        # Check matcher is "Bash"
+        matchers = [g["matcher"] for g in groups]
+        assert "Bash" in matchers
+
+    def test_hook_uses_bash_matcher(self, tmp_path, monkeypatch):
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        installer.register_guard_hook()
+        data = json.loads((claude_home / "settings.json").read_text(encoding="utf-8"))
+        groups = data["hooks"]["PreToolUse"]
+        forge_group = next(g for g in groups if any("forge.guards" in h["command"] for h in g["hooks"]))
+        assert forge_group["matcher"] == "Bash"
+
+    def test_idempotent_second_call_returns_present(self, tmp_path, monkeypatch):
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        installer.register_guard_hook()
+        content_after_first = (claude_home / "settings.json").read_text(encoding="utf-8")
+        status2 = installer.register_guard_hook()
+        assert status2 == "present"
+        assert (claude_home / "settings.json").read_text(encoding="utf-8") == content_after_first
+
+    def test_merges_with_existing_settings(self, tmp_path, monkeypatch):
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        status = installer.register_guard_hook()
+        assert status == "merged"
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        assert data["theme"] == "dark"
+        assert "PreToolUse" in data["hooks"]
+
+    def test_does_not_affect_userpromptsubmit(self, tmp_path, monkeypatch):
+        """Guard hook registration does not touch UserPromptSubmit hooks."""
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        existing = {"hooks": {"UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": "other-tool"}]}]}}
+        settings.write_text(json.dumps(existing), encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        installer.register_guard_hook()
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        # UserPromptSubmit must be preserved
+        ups_commands = [h["command"] for g in data["hooks"]["UserPromptSubmit"] for h in g["hooks"]]
+        assert "other-tool" in ups_commands
+
+    def test_hook_command_uses_module_invocation(self, tmp_path, monkeypatch):
+        """The registered command invokes forge.guards.hook_pre_tool via -m."""
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        installer.register_guard_hook()
+        data = json.loads((claude_home / "settings.json").read_text(encoding="utf-8"))
+        cmd = data["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        assert "forge.guards.hook_pre_tool" in cmd
+        assert "-m" in cmd
+
+
+class TestRunGuardHook:
+    """Verifica el threading de --skip-guard-hook en run()."""
+
+    def _make_args(self, **kw):
+        import argparse
+        base = dict(
+            skip_engram_check=True,
+            install_engram=False,
+            skip_codegraph=True,
+            install_codegraph=False,
+            skip_context7=True,
+            install_context7=False,
+            skip_pii_hook=True,
+            skip_guard_hook=False,
+        )
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def test_run_registers_guard_hook_by_default(self):
+        from forge import installer
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_guard_hook", return_value="created") as mock_guard, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+        assert result == installer.EXIT_OK
+        mock_guard.assert_called_once()
+
+    def test_skip_guard_hook_flag_skips_registration(self):
+        from forge import installer
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_guard_hook") as mock_guard, \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args(skip_guard_hook=True))
+        assert result == installer.EXIT_OK
+        mock_guard.assert_not_called()
+
+    def test_guard_hook_failure_does_not_change_exit_ok(self):
+        from forge import installer
+        with patch.object(installer, "detect_engram", return_value=(True, {"which": "/p"})), \
+             patch.object(installer, "register_guard_hook", side_effect=OSError("boom")), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 7, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+        assert result == installer.EXIT_OK

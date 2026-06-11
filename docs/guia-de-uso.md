@@ -15,9 +15,10 @@ principal.
 3. [Guía por escenario](#3-guía-por-escenario)
 4. [Niveles de ceremonia](#4-niveles-de-ceremonia)
 5. [Referencia de config.yaml](#5-referencia-de-configyaml)
-6. [Capa PII y #fg-pass](#6-capa-pii-y-fg-pass)
-7. [Comandos manuales (`/fg-*`)](#7-comandos-manuales-fg-)
-8. [Troubleshooting](#8-troubleshooting)
+6. [Hook de guardrails (`docs/auditoria/guardrails.yaml`)](#6-hook-de-guardrails-docsauditoriaguardrailsyaml)
+7. [Capa PII y #fg-pass](#7-capa-pii-y-fg-pass)
+8. [Comandos manuales (`/fg-*`)](#8-comandos-manuales-fg-)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -418,7 +419,80 @@ rules:
 
 ---
 
-## 6. Capa PII y `#fg-pass`
+## 6. Hook de guardrails (`docs/auditoria/guardrails.yaml`)
+
+El hook de guardrails intercepta comandos Bash **antes de que Claude Code los ejecute**
+y evalúa reglas definidas en el proyecto. Es la capa determinista del principio
+"authorize-first en operaciones destructivas" (regla 8 de la doctrina forge).
+
+### Cómo funciona
+
+Al correr `forge install`, se registra el hook `PreToolUse` en `~/.claude/settings.json`.
+Cuando Claude Code está a punto de ejecutar un Bash command, el hook:
+
+1. Busca `docs/auditoria/guardrails.yaml` en el directorio del proyecto activo.
+2. Si el archivo existe, evalúa las reglas en orden. La primera que hace match gana.
+3. Según la acción de la regla:
+   - `block` → el comando **no se ejecuta** (Claude Code recibe `deny`).
+   - `confirm` → Claude Code **le pide confirmación al usuario** antes de ejecutar.
+4. Si el archivo no existe, el hook es transparente (no bloquea nada).
+
+### Configurar guardrails en un proyecto
+
+`/fg-setup` deposita una plantilla en `docs/auditoria/guardrails.yaml` con reglas
+sensatas por defecto (ver tabla abajo). Podés ajustarlas a tu proyecto.
+
+```yaml
+# docs/auditoria/guardrails.yaml
+version: 1
+rules:
+  - pattern: 'rm\s+.*-[a-zA-Z]*r[a-zA-Z]*f'
+    action: block
+    reason: "rm -rf es irrecuperable"
+    alternative: "mover el directorio a /tmp antes de borrar"
+  - pattern: 'git\s+push\s+(--force|-f)(\s|$)'
+    action: confirm
+    reason: "reescribe historia remota"
+    alternative: "git push --force-with-lease"
+```
+
+Las reglas predeterminadas cubren: `git push --force`, `git reset --hard`,
+`git clean -f`, `git checkout -- .` / `git restore .`, `rm -rf`,
+`docker compose down -v` (destrucción de volúmenes), y `DROP TABLE/DATABASE`.
+
+### Acciones disponibles
+
+| Acción | Efecto |
+|---|---|
+| `block` | El comando no se ejecuta. Usar para operaciones verdaderamente irrecuperables. |
+| `confirm` | Claude Code pide confirmación al usuario antes de ejecutar. |
+
+### Kill-switch
+
+Para desactivar todos los guardrails temporalmente:
+
+```bash
+export FORGE_GUARD_DISABLE=1
+```
+
+Equivalente al `FORGE_PII_DISABLE` del filtro PII: afecta solo la sesión actual.
+
+### Log de auditoría
+
+Las decisiones (block/confirm) y errores del hook se registran en
+`.forge/auditoria-guard.jsonl`. El log **no contiene el comando completo**
+— solo un hash SHA-256 de 16 caracteres para correlación, la acción, y el
+patrón que hizo match.
+
+### Fail-open (igual que el hook PII)
+
+Si el hook falla por cualquier motivo interno (bug, YAML malformado, error de I/O),
+devuelve `{}` y sale con código 0 — el comando se ejecuta con la política normal de
+permisos de Claude Code. El fallo se registra en `.forge/auditoria-guard.jsonl`.
+
+---
+
+## 7. Capa PII y `#fg-pass`
 
 forge incluye un hook `UserPromptSubmit` que detecta y redacta datos personales e
 identificadores sensibles antes de que el prompt llegue a la API de Anthropic. El
@@ -489,7 +563,7 @@ El detector de cadenas de conexión redacta el segmento completo `protocolo://us
 
 ---
 
-## 7. Comandos manuales (`/fg-*`)
+## 8. Comandos manuales (`/fg-*`)
 
 El dev no necesita estos comandos en el flujo normal — el orquestador los llama
 internamente. Son útiles para automatización, scripts, re-ejecuciones puntuales o
@@ -534,7 +608,7 @@ cada tarea:
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### forge no se activó con mi mensaje
 

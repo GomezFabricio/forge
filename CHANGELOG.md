@@ -8,6 +8,29 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### P2 — Hook PreToolUse de guardrails
+
+Capa de enforcement determinista que intercepta comandos Bash antes de ejecución
+y bloquea/pide confirmación para operaciones declaradas en `docs/auditoria/guardrails.yaml`.
+Endurece la regla operativa 8 ("authorize-first en operaciones destructivas"), que antes
+era solo instrucción de prompt.
+
+#### Added
+
+- **`forge/guards/hook_pre_tool.py`** — nuevo hook `PreToolUse` que evalúa reglas de
+  `docs/auditoria/guardrails.yaml`. Acciones `block` (deny) y `confirm` (ask). Fail-open:
+  cualquier error interno → `{}` y exit 0. Kill-switch `FORGE_GUARD_DISABLE`.
+- **`templates/guardrails.yaml`** — plantilla comentada en español con reglas sensatas por
+  defecto: `git push --force`, `git reset --hard`, `git clean -f`, `git checkout -- .`,
+  `rm -rf`, `docker compose down -v`, `DROP TABLE/DATABASE`.
+- **`forge/bootstrap.py` `create_guardrails_template()`** — deposita la plantilla en
+  `docs/auditoria/guardrails.yaml` (no-overwrite, idempotente). Wired into `run()`.
+- **`forge install --skip-guard-hook`** — omite el auto-registro del hook de guardrails.
+- **Log `.forge/auditoria-guard.jsonl`** — decisiones y errores del hook, append-only JSONL.
+  No contiene el comando completo, solo SHA-256[:16] para correlación.
+
+---
+
 ### Fase 3 — Correcciones de arquitectura (D16, D18, D2, D8, D11)
 
 Cierra las discrepancias de arquitectura detectadas en el documento de exploración

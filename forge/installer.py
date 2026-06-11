@@ -121,6 +121,9 @@ _ENGRAM_MCP_ARGS: list = ["mcp", "--tools=agent"]
 # el path del intérprete puede variar entre instalaciones, el módulo no.
 PII_HOOK_MODULE = "forge.filters.hook_user_prompt"
 
+# Módulo del hook de guardrails (PreToolUse). Firma estable para idempotencia.
+GUARD_HOOK_MODULE = "forge.guards.hook_pre_tool"
+
 # Mapa OS/arch para CodeGraph (tokens distintos a engram — win32/x64 en vez de windows/amd64)
 _CODEGRAPH_OS_MAP: dict[str, str] = {
     "linux": "linux",
@@ -713,6 +716,84 @@ def register_pii_hook() -> str:
         {
             "matcher": "",
             "hooks": [{"type": "command", "command": _pii_hook_command()}],
+        }
+    )
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    return "created" if was_empty else "merged"
+
+
+def _guard_hook_command() -> str:
+    """Comando del hook de guardrails, pinneado al intérprete actual."""
+    py = sys.executable or "python"
+    if " " in py:
+        py = f'"{py}"'
+    return f"{py} -m {GUARD_HOOK_MODULE}"
+
+
+def _guard_hook_already_registered(pre_tool_use: list) -> bool:
+    """True si algún hook de PreToolUse ya invoca el módulo guard de forge."""
+    for group in pre_tool_use:
+        if not isinstance(group, dict):
+            continue
+        for hook in group.get("hooks", []) or []:
+            if isinstance(hook, dict) and GUARD_HOOK_MODULE in str(hook.get("command", "")):
+                return True
+    return False
+
+
+def register_guard_hook() -> str:
+    """Registra el hook PreToolUse de guardrails en ~/.claude/settings.json (merge idempotente).
+
+    Estructura diferente a UserPromptSubmit: PreToolUse usa matcher "Bash" a nivel de grupo.
+
+    Returns:
+        'present' — el hook ya estaba registrado, no se modificó nada
+        'created' — settings.json no existía o estaba vacío, se creó con el hook
+        'merged'  — settings.json existía con otra config, se hizo merge
+    """
+    settings_path = CLAUDE_HOME / "settings.json"
+
+    existing_content: str | None = None
+    config: dict = {}
+    if settings_path.exists():
+        try:
+            existing_content = settings_path.read_text(encoding="utf-8")
+            config = json.loads(existing_content) or {}
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError):
+            config = {}
+
+    # Idempotencia: si el hook guard ya existe, no tocar nada
+    hooks = config.get("hooks")
+    if isinstance(hooks, dict):
+        ptu = hooks.get("PreToolUse")
+        if isinstance(ptu, list) and _guard_hook_already_registered(ptu):
+            return "present"
+
+    # Backup antes de escribir
+    if existing_content is not None:
+        backup_path = settings_path.with_suffix(".json.forge-bak")
+        with contextlib.suppress(OSError):
+            backup_path.write_text(existing_content, encoding="utf-8")
+
+    was_empty = existing_content is None or existing_content.strip() == ""
+
+    # Merge preservando estructura existente y otros hooks
+    if not isinstance(config.get("hooks"), dict):
+        config["hooks"] = {}
+    if not isinstance(config["hooks"].get("PreToolUse"), list):
+        config["hooks"]["PreToolUse"] = []
+    config["hooks"]["PreToolUse"].append(
+        {
+            "matcher": "Bash",
+            "hooks": [{"type": "command", "command": _guard_hook_command()}],
         }
     )
 
@@ -1384,6 +1465,21 @@ def print_report(report: dict) -> None:
         else:
             print(f"  hook PII: {ph_msg}")
 
+    # Sección Hook Guardrails
+    guard_hook_info = report.get("guard_hook", {})
+    if guard_hook_info:
+        gh_status = guard_hook_info.get("status", "")
+        gh_hook = guard_hook_info.get("hook", "")
+        gh_msg = guard_hook_info.get("msg", "")
+        if gh_status == "registered":
+            print(f"  hook guardrails: registrado en ~/.claude/settings.json ({gh_hook})")
+        elif gh_status == "skipped":
+            print(f"  hook guardrails: omitido ({gh_msg})")
+        elif gh_status == "failed":
+            print(f"  hook guardrails: fallo en registro — {gh_msg}")
+        else:
+            print(f"  hook guardrails: {gh_msg}")
+
     print(f"  skills depositadas: {assets.get('skills_deposited', 0)}")
     print(f"  shared (forge-shared): {assets.get('shared_deposited', 0)}")
     print(f"  agents depositados: {assets.get('agents_deposited', 0)}")
@@ -1524,6 +1620,17 @@ def run(args) -> int:  # args: argparse.Namespace
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
         pii_hook_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
 
+    # Paso Hook guardrails — try/except amplio: fallo no aborta ni cambia exit code (fail-open)
+    guard_hook_report: dict = {}
+    try:
+        if getattr(args, "skip_guard_hook", False):
+            guard_hook_report = {"status": "skipped", "msg": "omitido por --skip-guard-hook"}
+        else:
+            hook_status = register_guard_hook()
+            guard_hook_report = {"status": "registered", "hook": hook_status}
+    except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
+        guard_hook_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
+
     # Paso CLAUDE.md global (doctrina del orquestador) — fail-open
     claude_md_report: dict = {}
     try:
@@ -1540,6 +1647,7 @@ def run(args) -> int:  # args: argparse.Namespace
         "codegraph": codegraph_report,
         "context7": context7_report,
         "pii_hook": pii_hook_report,
+        "guard_hook": guard_hook_report,
         "claude_md": claude_md_report,
     })
     return EXIT_OK

@@ -60,6 +60,10 @@ if not settings.is_file():
 elif "forge.filters.hook_user_prompt" not in settings.read_text(encoding="utf-8"):
     errors.append("settings.json no contiene el hook PII (forge.filters.hook_user_prompt)")
 
+# Hook de guardrails registrado en settings.json.
+if settings.is_file() and "forge.guards.hook_pre_tool" not in settings.read_text(encoding="utf-8"):
+    errors.append("settings.json no contiene el hook de guardrails (forge.guards.hook_pre_tool)")
+
 # Doctrina global del orquestador instalada como ~/.claude/CLAUDE.md.
 claude_md = claude / "CLAUDE.md"
 if not claude_md.is_file():
@@ -73,4 +77,4 @@ if errors:
         print(f"  - {err}")
     sys.exit(1)
 
-print("SMOKE OK: skills, commands, forge-shared, agents, hook PII y CLAUDE.md global instalados.")
+print("SMOKE OK: skills, commands, forge-shared, agents, hook PII, hook guardrails y CLAUDE.md global instalados.")

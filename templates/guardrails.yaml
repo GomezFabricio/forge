@@ -1,0 +1,91 @@
+# templates/guardrails.yaml
+#
+# Plantilla de guardrails para el hook PreToolUse de forge.
+# Copiá este archivo a docs/auditoria/guardrails.yaml en tu proyecto.
+#
+# El hook evalúa las reglas en orden: la PRIMERA que hace match gana.
+# Por eso, las reglas más específicas deben ir antes de las generales.
+#
+# Acciones disponibles:
+#   block   -> el comando NO se ejecuta (permissionDecision: deny).
+#             Usá para operaciones verdaderamente irrecuperables.
+#   confirm -> Claude Code le pide confirmación al usuario antes de ejecutar.
+#             Usá para operaciones peligrosas pero ocasionalmente necesarias.
+#
+# Kill-switch: si necesitás desactivar todos los guardrails temporalmente,
+# seteá la variable de entorno FORGE_GUARD_DISABLE=1.
+#
+# Importante: la alternativa de cada regla NO debe ser un comando que active
+# la misma regla. Si el ejemplo que sugerís también matchea el patrón,
+# el guardrail bloquearía su propio remedio.
+
+version: 1
+
+rules:
+  # ---------------------------------------------------------------------------
+  # Git — operaciones que destruyen historia o descartan trabajo local
+  # ---------------------------------------------------------------------------
+
+  # git push --force / git push -f
+  # Reescribe historia pública. Alternativa: --force-with-lease verifica que no
+  # haya commits de otros que no viste aún.
+  - pattern: 'git\s+push\s+(--force|-f)(\s|$)'
+    action: confirm
+    reason: "git push --force reescribe historia remota y puede descartar commits de otros"
+    alternative: "git push --force-with-lease (verifica que no haya commits remotos nuevos antes de forzar)"
+
+  # git reset --hard
+  # Descarta commits Y cambios del working tree sin posibilidad de recuperación directa.
+  - pattern: 'git\s+reset\s+--hard'
+    action: confirm
+    reason: "git reset --hard descarta commits locales y cambios del working tree de forma irrecuperable"
+    alternative: "git stash antes de resetear, o git reset --soft para preservar los cambios en staging"
+
+  # git clean -f / git clean -fd / git clean -fdx
+  # Borra archivos untracked. A diferencia de reset, estos archivos no están en git y no se pueden recuperar.
+  - pattern: 'git\s+clean\s+.*-[a-zA-Z]*f'
+    action: confirm
+    reason: "git clean -f borra archivos untracked de forma irrecuperable (no están en git)"
+    alternative: "git clean -n primero para ver qué se borraría, luego decidir archivo por archivo"
+
+  # git checkout -- . / git restore .
+  # Descarta todos los cambios locales del working tree.
+  - pattern: 'git\s+(checkout\s+--\s+\.|restore\s+\.)'
+    action: confirm
+    reason: "descarta todos los cambios locales del working tree de forma irrecuperable"
+    alternative: "git stash para guardar los cambios temporalmente antes de descartarlos"
+
+  # ---------------------------------------------------------------------------
+  # Filesystem — borrado irrecuperable
+  # ---------------------------------------------------------------------------
+
+  # rm -rf
+  # Borrado recursivo sin papelera. Irrecuperable.
+  # El ancla (?:^|[;&|]\s*) exige que rm esté en posición de comando: NO matchea
+  # `git rm -rf --cached` (operación inofensiva sobre el índice de git).
+  - pattern: '(?:^|[;&|]\s*)(?:sudo\s+)?rm\s+.*-[a-zA-Z]*(?:r[a-zA-Z]*f|f[a-zA-Z]*r)'
+    action: block
+    reason: "rm -rf es irrecuperable — no hay papelera ni undo"
+    alternative: "revisá la lista de archivos primero con ls o find, luego borrá los específicos, o mové el directorio a /tmp"
+
+  # ---------------------------------------------------------------------------
+  # Docker — destrucción de volúmenes de datos
+  # ---------------------------------------------------------------------------
+
+  # docker compose down -v / docker-compose down -v
+  # El flag -v borra los volúmenes nombrados — destruye datos persistentes del contenedor.
+  - pattern: 'docker[\s-]compose\s+down\s+.*-[a-zA-Z]*v'
+    action: block
+    reason: "docker compose down -v borra los volúmenes de datos del contenedor (bases de datos, uploads, etc.)"
+    alternative: "omitir el flag -v al detener el stack; revisá los volúmenes con docker volume ls antes de borrarlos"
+
+  # ---------------------------------------------------------------------------
+  # SQL — destrucción de esquemas y bases de datos
+  # ---------------------------------------------------------------------------
+
+  # DROP TABLE / DROP DATABASE (case-insensitive)
+  - pattern: 'DROP\s+(TABLE|DATABASE)'
+    action: block
+    reason: "DROP TABLE/DATABASE destruye datos de producción de forma irrecuperable"
+    alternative: "hacer un backup primero; en desarrollo, usar un nombre de base de datos separado para pruebas"
+    ignorecase: true
