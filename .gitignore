@@ -67,3 +67,6 @@ desktop.ini
 # engram cross-machine memory (Decisión M1.b)
 .engram/
 !.engram/chunks/
+
+# forge agent-tools runtime state
+.atl/

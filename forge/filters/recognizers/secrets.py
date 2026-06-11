@@ -85,8 +85,7 @@ def build_aws_secret_key_recognizer() -> PatternRecognizer:
                 name="aws_secret_key",
                 regex=r"[A-Za-z0-9/+=]{40}",
                 # Base 0.4: below threshold (0.5) so it won't fire alone.
-                # With context boost (+0.35), final score = 0.75 >= 0.5 (fires).
-                # build_analyzer() uses a higher context_similarity_factor to reach 0.85.
+                # With context boost (+0.5, via build_analyzer()), final score = 0.90 >= 0.85 (fires).
                 score=0.4,
             )
         ],

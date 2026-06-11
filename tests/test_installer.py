@@ -416,7 +416,7 @@ class TestInstallAssets:
         agents_dir.mkdir(parents=True)
 
         # fg-*.md skills individuales
-        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-tasks", "fg-setup"]:
+        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-explore", "fg-setup"]:
             (skills_dir / f"{name}.md").write_text(f"# {name}\n\nContent for {name}.\n")
 
         # _shared co-located
@@ -429,8 +429,8 @@ class TestInstallAssets:
         (shared_dir / "fg-phase-common.md").write_text("# Phase Common\n\nContent.\n")
 
         # agents
-        for name in ["forge-plan", "forge-design", "forge-implement",
-                     "forge-review", "forge-tasks", "forge-setup"]:
+        for name in ["fg-plan", "fg-design", "fg-implement",
+                     "fg-review", "fg-explore", "fg-setup"]:
             (agents_dir / f"{name}.md").write_text(f"# {name}\n\nAgent content.\n")
 
         return share
@@ -478,8 +478,8 @@ class TestInstallAssets:
         manifest = installer.install_assets()
 
         agents_dir = claude_home / "agents"
-        assert (agents_dir / "forge-plan.md").exists()
-        assert (agents_dir / "forge-implement.md").exists()
+        assert (agents_dir / "fg-plan.md").exists()
+        assert (agents_dir / "fg-implement.md").exists()
         assert manifest["agents_deposited"] == 6
 
     def test_idempotent_second_run_no_error(self, tmp_path, monkeypatch):
@@ -716,7 +716,7 @@ class TestDepositCommands:
         commands_dir.mkdir(parents=True)
 
         # fg-*.md skills individuales
-        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-tasks", "fg-setup"]:
+        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-explore", "fg-setup"]:
             (skills_dir / f"{name}.md").write_text(f"# {name}\n\nContent for {name}.\n")
 
         # _shared co-located
@@ -729,8 +729,8 @@ class TestDepositCommands:
         (shared_dir / "fg-phase-common.md").write_text("# Phase Common\n\nContent.\n")
 
         # agents
-        for name in ["forge-plan", "forge-design", "forge-implement",
-                     "forge-review", "forge-tasks", "forge-setup"]:
+        for name in ["fg-plan", "fg-design", "fg-implement",
+                     "fg-review", "fg-explore", "fg-setup"]:
             (agents_dir / f"{name}.md").write_text(f"# {name}\n\nAgent content.\n")
 
         # commands (7 fg-*.md)

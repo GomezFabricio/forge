@@ -125,11 +125,12 @@ def _top_level_segment(path: str) -> str | None:
     return None
 
 
-def _run_codegraph_files(root: Path, timeout: int = 10) -> str:
+def _run_codegraph_files(root: Path, timeout: int = 10) -> subprocess.CompletedProcess:
     """Ejecuta `codegraph files --format grouped --json` vía subprocess.
 
-    Retorna el stdout como string. Lanza las excepciones hacia arriba — el
-    manejo de fallback es responsabilidad del llamador.
+    Retorna el CompletedProcess completo (callers acceden a .returncode y .stdout).
+    Lanza las excepciones hacia arriba — el manejo de fallback es responsabilidad
+    del llamador.
 
     El flag `--format grouped` produce el mismo output flat que `--format flat`
     (shape verificado: array plano con {path, language, nodeCount, size}).

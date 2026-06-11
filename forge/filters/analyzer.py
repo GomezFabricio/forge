@@ -46,8 +46,7 @@ def build_analyzer() -> AnalyzerEngine:
     # Build a fresh registry with only the recognizers we want
     registry = RecognizerRegistry()
 
-    # Load only the specific built-in recognizers listed in R16.4
-    # (load_predefined_recognizers() loads ALL — we need selective registration)
+    # Load all predefined built-in recognizers, then remove those not in our allowed list (R16.4)
     registry.load_predefined_recognizers(languages=["en"])
 
     # Remove all built-in recognizers NOT in our allowed list

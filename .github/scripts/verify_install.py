@@ -38,6 +38,21 @@ for agent in ["code-reviewer", "security-reviewer", "legacy-impact-analyzer"]:
     if not path.is_file():
         errors.append(f"falta agent: {path}")
 
+# Los 7 comandos del workflow, depositados flat en ~/.claude/commands/.
+expected_commands = [
+    "fg-setup",
+    "fg-explore",
+    "fg-plan",
+    "fg-design",
+    "fg-implement",
+    "fg-review",
+    "fg-update-arch",
+]
+for cmd in expected_commands:
+    path = claude / "commands" / f"{cmd}.md"
+    if not path.is_file():
+        errors.append(f"falta command: {path}")
+
 # Hook PII registrado en settings.json.
 settings = claude / "settings.json"
 if not settings.is_file():
@@ -58,4 +73,4 @@ if errors:
         print(f"  - {err}")
     sys.exit(1)
 
-print("SMOKE OK: skills, forge-shared, agents, hook PII y CLAUDE.md global instalados.")
+print("SMOKE OK: skills, commands, forge-shared, agents, hook PII y CLAUDE.md global instalados.")

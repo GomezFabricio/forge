@@ -210,7 +210,6 @@ invocable por intent natural en lugar de comando explícito.
 
 ### Pendiente para próximas iteraciones
 
-- Integración real con CodeGraph en `forge/structural_detector.py` (hoy hay un placeholder con TODO).
 - Fix de `PACKAGE_ROOT` en `bootstrap.py` para instalaciones wheel non-editable (ver TODO marcado).
 
 ## [0.1.0] — 2026-05-27
