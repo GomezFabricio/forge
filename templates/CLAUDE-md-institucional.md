@@ -67,12 +67,12 @@ Para activar TDD: editar `docs/auditoria/config.yaml` y cambiar `rules.implement
 
 ### Modo del ciclo SDD (interactivo / automático)
 
-Distinto del TDD, el **modo de ejecución del ciclo** (interactivo vs automático) lo decide el dev al arrancar el primer ciclo de la sesión. La respuesta se cachea para la sesión actual y NO se persiste en filesystem. Sesión nueva → `/fg-plan` vuelve a preguntar.
+Distinto del TDD, el **modo de ejecución del ciclo** (interactivo vs automático) lo pregunta el **orquestador** al comenzar el primer ciclo SDD de la sesión, antes de invocar cualquier fase. La respuesta se cachea en el contexto del orquestador y NO se persiste en filesystem. Sesión nueva → el orquestador vuelve a preguntar.
 
 - **Interactivo**: cada fase pausa al cerrar y espera confirmación del dev para seguir.
 - **Automático**: las fases se encadenan sin pausa hasta el final del ciclo.
 
-El default sugerido del proyecto está en `rules.workflow.cycle_mode` de `docs/auditoria/config.yaml`. `/fg-plan` lo usa como valor pre-seleccionado en la pregunta, pero siempre pregunta — el dev puede cambiar el modo por sesión.
+El default sugerido del proyecto está en `rules.workflow.cycle_mode` de `docs/auditoria/config.yaml`. El orquestador lo usa como valor pre-seleccionado al formular la pregunta, pero siempre pregunta — el dev puede cambiar el modo por sesión.
 
 ### Review Workload Forecast y modos de enforcement
 

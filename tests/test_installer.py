@@ -83,13 +83,17 @@ class TestInstallerConstants:
         assert installer.EXIT_PLATFORM_UNSUPPORTED == 40
 
     def test_path_constants_defined(self):
-        """GIVEN el módulo installer WHEN se leen CLAUDE_HOME, MCP_JSON_PATH,
-        ENGRAM_BIN_DIR_UNIX, ENGRAM_BIN_DIR_WIN THEN son instancias de Path no vacías."""
+        """GIVEN el módulo installer WHEN se leen CLAUDE_HOME, ENGRAM_BIN_DIR_UNIX,
+        ENGRAM_BIN_DIR_WIN THEN son instancias de Path no vacías.
+        MCP_JSON_PATH fue eliminado en D18 — el registro de engram usa ~/.claude.json."""
         from forge import installer
         assert isinstance(installer.CLAUDE_HOME, Path)
-        assert isinstance(installer.MCP_JSON_PATH, Path)
         assert isinstance(installer.ENGRAM_BIN_DIR_UNIX, Path)
         assert isinstance(installer.ENGRAM_BIN_DIR_WIN, Path)
+        # MCP_JSON_PATH eliminado: el mecanismo dead ya no existe
+        assert not hasattr(installer, "MCP_JSON_PATH"), (
+            "MCP_JSON_PATH debe haber sido eliminado (D18: migración a mcpServers en ~/.claude.json)"
+        )
 
     def test_github_releases_api_defined(self):
         """GIVEN el módulo installer WHEN se lee GITHUB_RELEASES_API
@@ -180,47 +184,85 @@ class TestInstallerConstants:
 class TestDetectEngram:
     """Verifica detect_engram() — 3 indicadores en orden. T03."""
 
-    def test_indicator1_mcp_json_valid_returns_true(self, tmp_path, monkeypatch):
-        """GIVEN ~/.claude/mcp/engram.json existe con 'command' apuntando a un ejecutable
+    def test_indicator1_claude_json_with_abs_path_returns_true(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json tiene mcpServers.engram.command apuntando a un ejecutable existente
         WHEN detect_engram() se llama THEN retorna (True, info) con info['mcp_json'] no nulo."""
         from forge import installer
 
-        mcp_dir = tmp_path / ".claude" / "mcp"
-        mcp_dir.mkdir(parents=True)
         binary = tmp_path / "engram_bin"
         binary.write_text("fake binary")
-        mcp_file = mcp_dir / "engram.json"
-        mcp_file.write_text(json.dumps({"command": str(binary), "args": []}))
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": str(binary), "args": ["mcp", "--tools=agent"]}
+            }
+        }))
 
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
 
         found, info = installer.detect_engram()
         assert found is True
         assert info["mcp_json"] == str(binary)
 
+    def test_indicator1_claude_json_with_generic_command_returns_true(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json tiene mcpServers.engram.command == 'engram' (nombre genérico)
+        WHEN detect_engram() THEN retorna (True, info) — no requiere path absoluto existente."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": "engram", "args": ["mcp", "--tools=agent"]}
+            }
+        }))
+
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        found, info = installer.detect_engram()
+        assert found is True
+        assert info["mcp_json"] == "engram"
+
     def test_indicator1_missing_falls_to_indicator2(self, tmp_path, monkeypatch):
-        """GIVEN ~/.claude/mcp/engram.json no existe AND shutil.which('engram') retorna un path
+        """GIVEN ~/.claude.json no existe AND shutil.which('engram') retorna un path
         WHEN detect_engram() THEN retorna (True, info) con info['which'] no nulo."""
         from forge import installer
 
         nonexistent = tmp_path / "no_such.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", nonexistent)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", nonexistent)
         monkeypatch.setattr("shutil.which", lambda _: "/usr/local/bin/engram")
 
         found, info = installer.detect_engram()
         assert found is True
         assert info["which"] == "/usr/local/bin/engram"
 
+    def test_indicator1_no_engram_in_mcp_servers_falls_to_indicator2(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json existe pero no tiene mcpServers.engram
+        AND shutil.which retorna path WHEN detect_engram() THEN usa indicador 2."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "codegraph": {"type": "stdio", "command": "codegraph", "args": ["serve", "--mcp"]}
+            }
+        }))
+
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/local/bin/engram")
+
+        found, info = installer.detect_engram()
+        assert found is True
+        assert info["which"] is not None
+        assert info["mcp_json"] is None
+
     def test_indicator1_corrupt_json_falls_to_indicator2(self, tmp_path, monkeypatch):
-        """GIVEN engram.json existe pero está corrupto AND which retorna path
+        """GIVEN ~/.claude.json existe pero está corrupto AND which retorna path
         WHEN detect_engram() THEN ignora el JSON corrupto y usa indicador 2."""
         from forge import installer
 
-        mcp_dir = tmp_path / ".claude" / "mcp"
-        mcp_dir.mkdir(parents=True)
-        mcp_file = mcp_dir / "engram.json"
-        mcp_file.write_text("{ invalid json }")
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text("{ invalid json }")
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
         monkeypatch.setattr("shutil.which", lambda _: "/usr/local/bin/engram")
 
         found, info = installer.detect_engram()
@@ -233,7 +275,7 @@ class TestDetectEngram:
         from forge import installer
 
         nonexistent = tmp_path / "no_such.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", nonexistent)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", nonexistent)
         monkeypatch.setattr("shutil.which", lambda _: None)
 
         mock_result = MagicMock()
@@ -251,7 +293,7 @@ class TestDetectEngram:
         from forge import installer
 
         nonexistent = tmp_path / "no_such.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", nonexistent)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", nonexistent)
         monkeypatch.setattr("shutil.which", lambda _: None)
 
         mock_result = MagicMock()
@@ -270,7 +312,7 @@ class TestDetectEngram:
         from forge import installer
 
         nonexistent = tmp_path / "no_such.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", nonexistent)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", nonexistent)
         monkeypatch.setattr("shutil.which", lambda _: None)
 
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["engram"], 5)):
@@ -284,7 +326,7 @@ class TestDetectEngram:
         from forge import installer
 
         nonexistent = tmp_path / "no_such.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", nonexistent)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", nonexistent)
         monkeypatch.setattr("shutil.which", lambda _: None)
 
         with patch("subprocess.run", side_effect=FileNotFoundError):
@@ -293,16 +335,19 @@ class TestDetectEngram:
         assert found is False
 
     def test_short_circuit_indicator1_does_not_run_subprocess(self, tmp_path, monkeypatch):
-        """GIVEN indicador 1 positivo WHEN detect_engram() THEN subprocess.run NO es llamado."""
+        """GIVEN indicador 1 positivo (mcpServers.engram en ~/.claude.json)
+        WHEN detect_engram() THEN subprocess.run NO es llamado."""
         from forge import installer
 
-        mcp_dir = tmp_path / ".claude" / "mcp"
-        mcp_dir.mkdir(parents=True)
         binary = tmp_path / "engram_bin"
         binary.write_text("fake")
-        mcp_file = mcp_dir / "engram.json"
-        mcp_file.write_text(json.dumps({"command": str(binary)}))
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": str(binary), "args": ["mcp", "--tools=agent"]}
+            }
+        }))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
 
         with patch("subprocess.run") as mock_run:
             found, _ = installer.detect_engram()
@@ -315,7 +360,7 @@ class TestDetectEngram:
         from forge import installer
 
         nonexistent = tmp_path / "no_such.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", nonexistent)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", nonexistent)
         monkeypatch.setattr("shutil.which", lambda _: None)
 
         files_before = set(tmp_path.rglob("*"))
@@ -1073,76 +1118,142 @@ class TestXattrCleanup:
 # ---------------------------------------------------------------------------
 
 
-class TestRegisterMcp:
-    """Verifica register_mcp() — schema FLAT, directorio, overwrite. T10."""
+class TestRegisterEngramMcp:
+    """Verifica register_engram_mcp() — schema mcpServers, merge, backup, idempotencia. T10.
 
-    def test_creates_mcp_json_with_flat_schema(self, tmp_path, monkeypatch):
-        """GIVEN directorio mcp no existe WHEN register_mcp()
-        THEN crea el JSON con schema flat (command + args top-level)."""
+    D18: el mecanismo de registro de engram migró de ~/.claude/mcp/engram.json (schema flat,
+    no leído por Claude Code) a ~/.claude.json mcpServers.engram (mismo mecanismo que
+    CodeGraph y Context7).
+    """
+
+    def test_creates_claude_json_with_mcp_servers_engram(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json no existe WHEN register_engram_mcp()
+        THEN crea el JSON con mcpServers.engram y el command correcto."""
         from forge import installer
-        mcp_file = tmp_path / ".claude" / "mcp" / "engram.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
 
-        binary_path = tmp_path / ".local" / "bin" / "engram"
-        installer.register_mcp(binary_path)
+        binary_path = tmp_path / ".engram" / "bin" / "engram"
+        status = installer.register_engram_mcp(binary_path)
 
-        assert mcp_file.exists()
-        data = json.loads(mcp_file.read_text())
-        assert "command" in data
-        assert "args" in data
-        assert "mcpServers" not in data
-        assert data["command"] == str(binary_path)
-
-    def test_creates_parent_directory_if_missing(self, tmp_path, monkeypatch):
-        """GIVEN directorio padre no existe WHEN register_mcp()
-        THEN crea el directorio y el archivo."""
-        from forge import installer
-        mcp_file = tmp_path / "deep" / "nested" / "engram.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
-
-        binary_path = tmp_path / "engram"
-        installer.register_mcp(binary_path)
-
-        assert mcp_file.exists()
-
-    def test_overwrites_existing_file(self, tmp_path, monkeypatch):
-        """GIVEN engram.json ya existe con contenido diferente WHEN register_mcp()
-        THEN sobreescribe con el nuevo comando y retorna 'overwritten'."""
-        from forge import installer
-        mcp_file = tmp_path / "engram.json"
-        mcp_file.write_text(json.dumps({"command": "/old/path/engram", "args": []}))
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
-
-        new_binary = tmp_path / "new" / "engram"
-        status = installer.register_mcp(new_binary)
-
-        assert status == "overwritten"
-        data = json.loads(mcp_file.read_text())
-        assert data["command"] == str(new_binary)
-
-    def test_returns_created_for_new_file(self, tmp_path, monkeypatch):
-        """GIVEN el archivo no existía WHEN register_mcp() THEN retorna 'created'."""
-        from forge import installer
-        mcp_file = tmp_path / "engram.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
-
-        binary_path = tmp_path / "engram"
-        status = installer.register_mcp(binary_path)
+        assert claude_json.exists()
+        data = json.loads(claude_json.read_text())
+        assert "mcpServers" in data
+        assert "engram" in data["mcpServers"]
+        assert data["mcpServers"]["engram"]["command"] == str(binary_path)
+        assert data["mcpServers"]["engram"]["args"] == ["mcp", "--tools=agent"]
         assert status == "created"
 
-    def test_output_is_valid_json(self, tmp_path, monkeypatch):
-        """GIVEN register_mcp() exitoso WHEN se lee el archivo
-        THEN es JSON válido con 'args' como lista."""
+    def test_returns_merged_when_existing_config(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json existe con otra config WHEN register_engram_mcp()
+        THEN hace merge, preserva la config existente y retorna 'merged'."""
         from forge import installer
-        mcp_file = tmp_path / "engram.json"
-        monkeypatch.setattr(installer, "MCP_JSON_PATH", mcp_file)
+        claude_json = tmp_path / ".claude.json"
+        existing = {"apiKey": "xyz", "mcpServers": {"codegraph": {"command": "codegraph"}}}
+        claude_json.write_text(json.dumps(existing))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
 
         binary_path = tmp_path / "engram"
-        installer.register_mcp(binary_path)
+        status = installer.register_engram_mcp(binary_path)
 
-        data = json.loads(mcp_file.read_text())
-        assert isinstance(data["args"], list)
-        assert "mcp" in data["args"]
+        assert status == "merged"
+        data = json.loads(claude_json.read_text())
+        # Config existente preservada
+        assert data["apiKey"] == "xyz"
+        assert "codegraph" in data["mcpServers"]
+        # Nueva entrada engram agregada
+        assert "engram" in data["mcpServers"]
+
+    def test_idempotent_when_already_present(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.engram ya existe WHEN register_engram_mcp() llamado 2 veces
+        THEN segunda llamada retorna 'present' y no modifica el archivo."""
+        from forge import installer
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        binary_path = tmp_path / "engram"
+        installer.register_engram_mcp(binary_path)
+        content_after_first = claude_json.read_text()
+
+        status2 = installer.register_engram_mcp(binary_path)
+        assert status2 == "present"
+        assert claude_json.read_text() == content_after_first
+
+    def test_creates_backup_before_writing(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json existe con contenido WHEN register_engram_mcp()
+        THEN crea backup .forge-bak antes de escribir."""
+        from forge import installer
+        claude_json = tmp_path / ".claude.json"
+        original = {"existingKey": "value"}
+        claude_json.write_text(json.dumps(original))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_engram_mcp(tmp_path / "engram")
+
+        backup = tmp_path / ".claude.json.forge-bak"
+        assert backup.exists()
+        assert json.loads(backup.read_text()) == original
+
+    def test_uses_absolute_path_when_binary_known(self, tmp_path, monkeypatch):
+        """GIVEN binary_path es un Path absoluto WHEN register_engram_mcp()
+        THEN mcpServers.engram.command contiene la ruta absoluta como string."""
+        from forge import installer
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        binary = tmp_path / ".engram" / "bin" / "engram"
+        installer.register_engram_mcp(binary)
+
+        data = json.loads(claude_json.read_text())
+        assert data["mcpServers"]["engram"]["command"] == str(binary)
+
+    def test_uses_generic_command_when_no_binary_path(self, tmp_path, monkeypatch):
+        """GIVEN binary_path es None WHEN register_engram_mcp()
+        THEN mcpServers.engram.command == 'engram' (fallback a PATH)."""
+        from forge import installer
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_engram_mcp(None)
+
+        data = json.loads(claude_json.read_text())
+        assert data["mcpServers"]["engram"]["command"] == "engram"
+
+    def test_preserves_other_mcp_servers_on_merge(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json tiene mcpServers.codegraph y mcpServers.context7
+        WHEN register_engram_mcp() THEN ambas entradas se preservan."""
+        from forge import installer
+        claude_json = tmp_path / ".claude.json"
+        existing = {
+            "mcpServers": {
+                "codegraph": {"command": "codegraph", "args": ["serve", "--mcp"]},
+                "context7": {"command": "npx", "args": ["-y", "@upstash/context7-mcp"]},
+            }
+        }
+        claude_json.write_text(json.dumps(existing))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_engram_mcp(tmp_path / "engram")
+
+        data = json.loads(claude_json.read_text())
+        assert "codegraph" in data["mcpServers"]
+        assert "context7" in data["mcpServers"]
+        assert "engram" in data["mcpServers"]
+
+    def test_output_is_valid_json_with_correct_args(self, tmp_path, monkeypatch):
+        """GIVEN register_engram_mcp() exitoso WHEN se lee ~/.claude.json
+        THEN args es lista con 'mcp' y '--tools=agent'."""
+        from forge import installer
+        claude_json = tmp_path / ".claude.json"
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        installer.register_engram_mcp(tmp_path / "engram")
+
+        data = json.loads(claude_json.read_text())
+        args = data["mcpServers"]["engram"]["args"]
+        assert isinstance(args, list)
+        assert "mcp" in args
+        assert "--tools=agent" in args
 
 
 # ---------------------------------------------------------------------------
@@ -1155,7 +1266,7 @@ class TestInstallEngram:
 
     def test_happy_path_calls_all_subfunctions(self, tmp_path, monkeypatch):
         """GIVEN todas las sub-funciones OK WHEN install_engram()
-        THEN llama _detect_platform, _download_binary, register_mcp, retorna (True, msg)."""
+        THEN llama _detect_platform, _download_binary, register_engram_mcp, retorna (True, msg)."""
         from forge import installer
 
         monkeypatch.setattr(installer, "ENGRAM_BIN_DIR_UNIX", tmp_path / "bin")
@@ -1186,7 +1297,7 @@ class TestInstallEngram:
              patch("os.chmod"), \
              patch.object(installer, "_xattr_cleanup_darwin"), \
              patch.object(installer, "_edit_path_unix", return_value="appended"), \
-             patch.object(installer, "register_mcp", return_value="created") as m_reg, \
+             patch.object(installer, "register_engram_mcp", return_value="created") as m_reg, \
              patch("tarfile.open", return_value=mock_tf), \
              patch("os.unlink"):
             ok, msg = installer.install_engram()

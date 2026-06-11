@@ -8,6 +8,74 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Fase 3 — Correcciones de arquitectura (D16, D18, D2, D8, D11)
+
+Cierra las discrepancias de arquitectura detectadas en el documento de exploración
+exhaustiva: registro MCP de engram corregido, límites del filtro PII documentados,
+y propiedad del `cycle_mode` migrada al orquestador.
+
+#### Added
+
+- **Documentación de límites del filtro PII** (`README.md`, `docs/guia-de-uso.md`): nueva
+  sección "Límites conocidos del filtro PII" con tres trade-offs explícitos: (D2) política
+  fail-open ante crash del hook (el prompt pasa sin redactar — ADR-4, intencional, distinto
+  a `FORGE_PII_DISABLE`); (D8) sobre-redacción de cadenas de conexión (el segmento
+  completo `protocolo://usuario:contraseña@` se redacta, no solo la contraseña — limitación
+  de Presidio sin reemplazo parcial, seguro por diseño); (D11) log de auditoría sin rotación
+  automática (append-only, ~150-200 bytes por evento, gestión manual por el dev, nunca
+  contiene texto del prompt).
+
+#### Changed
+
+- **Registro MCP de engram migrado a `~/.claude.json`** (D18, `forge/installer.py`):
+  `register_mcp()` reemplazado por `register_engram_mcp()`, que escribe
+  `mcpServers.engram` en `~/.claude.json` con el mismo patrón merge + backup `.forge-bak`
+  que CodeGraph y Context7. El command es la ruta absoluta al binario cuando el instalador
+  la conoce (más robusto que depender del PATH para MCP spawning), o `"engram"` como
+  fallback. Eliminado el mecanismo muerto `MCP_JSON_PATH` / `~/.claude/mcp/engram.json`
+  (formato flat que Claude Code nunca leyó). `detect_engram()` indicador 1 actualizado:
+  ya no lee el JSON flat, ahora verifica `mcpServers.engram` en `~/.claude.json`.
+  Tests actualizados: `TestRegisterEngramMcp` (idempotencia, merge, backup, ruta absoluta
+  vs fallback), `TestDetectEngram` (nuevo mecanismo + short-circuit). (`tests/test_installer.py`)
+
+- **`cycle_mode` preguntado por el orquestador** (D16, `templates/CLAUDE-md-institucional.md`,
+  `skills/_shared/fg-phase-common.md`, `README.md`, `docs/guia-de-uso.md`): la doctrina y
+  los docs ahora atribuyen correctamente la pregunta de modo interactivo/automático al
+  orquestador (antes del primer ciclo SDD de la sesión), no a `/fg-plan`. El campo
+  `cycle_mode` fue removido del envelope de `/fg-plan`. `rules.workflow.cycle_mode` en
+  `config.yaml` sigue siendo la fuente del valor pre-seleccionado.
+
+---
+
+### Fase 2 — Contratos agents-skills y correcciones de infraestructura (D1, D3, D13, D14, D15)
+
+Correcciones mecánicas detectadas durante la exploración del repo: prefijos de tools de
+engram, enum `skill_resolution`, kill-switch PII, log de errores del hook PII, y test
+de consistencia estructural.
+
+#### Added
+
+- **Test de consistencia estructural** (`tests/test_agents_consistency.py`): valida que
+  los agents declaren exactamente las tools que los skills de los que dependen requieren;
+  detecta automáticamente drift entre capas sin necesidad de revisión manual.
+
+#### Fixed
+
+- **Prefijos de tools de engram corregidos a `mcp__engram__*`** (D14, `agents/`): los
+  executors `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-explore`, `fg-setup`
+  y el agent de actualización de arquitectura usaban prefijos incorrectos; corregidos al
+  prefijo real del MCP server de engram.
+- **`skill_resolution` unificado** (D15, `skills/_shared/fg-phase-common.md`): enum
+  declarado como fuente canónica; todos los skills que listan el campo ahora usan
+  exactamente los cuatro valores válidos.
+- **`FORGE_PII_DISABLE` real** (D3, `forge/filters/hook_user_prompt.py`): la variable de
+  entorno ya detiene el filtro correctamente (antes la implementación no la chequeaba).
+- **`action: "error"` en el log de auditoría PII** (D1): el hook ahora registra un evento
+  de error en `.forge/auditoria-pii.jsonl` cuando el filtro falla, en lugar de silenciar
+  la excepción sin traza.
+
+---
+
 ### Doctrina del orquestador global — el CLAUDE.md institucional pasa a `~/.claude/`
 
 > **CAMBIO DE ARQUITECTURA**: la doctrina del orquestador (persona, gradación de ceremonia,
@@ -174,7 +242,7 @@ invocable por intent natural en lugar de comando explícito.
 ### Added
 
 - **`forge install` implementado** (`forge/installer.py`, ~270 LOC): depósito de skills, agents y registro de MCP de engram en `~/.claude/`. Incluye detección automática de engram (3 indicadores), prompt Y/N interactivo, flag `--install-engram` (non-interactive), flag `--skip-engram-check`, e idempotencia completa.
-- **Auto-install de engram**: descarga el binario desde GitHub Releases (`engram_{version}_{os}_{arch}.tar.gz|.zip`), extrae el binario, aplica `chmod +x` (Unix), limpia quarantine en macOS, edita `~/.profile` (Unix) o `HKCU\Environment\Path` (Windows), y escribe `~/.claude/mcp/engram.json` con schema flat.
+- **Auto-install de engram**: descarga el binario desde GitHub Releases (`engram_{version}_{os}_{arch}.tar.gz|.zip`), extrae el binario, aplica `chmod +x` (Unix), limpia quarantine en macOS, edita `~/.profile` (Unix) o `HKCU\Environment\Path` (Windows). *(El registro MCP original usaba `~/.claude/mcp/engram.json` schema flat — migrado a `~/.claude.json` `mcpServers.engram` en D18; ver [Unreleased].)*
 - **Deposit de skills con transformación de layout**: `fg-*.md` → `~/.claude/skills/<stem>/SKILL.md`; co-located companions (`strict-tdd.md`, `strict-tdd-verify.md`) depositados junto a su skill consumidora; archivos cross-cutting (`skill-resolver`, `engram-protocol`, `fg-phase-common`) → `~/.claude/skills/forge-shared/<name>/SKILL.md` con frontmatter `disable-model-invocation: true` inyectado.
 - **Exit codes claros**: `EXIT_OK=0`, `EXIT_ABORTED=10`, `EXIT_ENGRAM_INSTALL_FAILED=20`, `EXIT_DEPOSIT_FAILED=30`, `EXIT_PLATFORM_UNSUPPORTED=40`.
 - **Test suite** (`tests/test_installer.py`, `tests/test_cli.py`): 201 tests nuevos, cobertura ≥88% sobre `forge/installer.py` y 100% sobre `forge/cli.py` modificado. Strict TDD ciclo RED→GREEN→TRIANGULATE→REFACTOR por tarea.

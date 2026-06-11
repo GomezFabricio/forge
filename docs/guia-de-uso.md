@@ -110,7 +110,7 @@ forge install
 | `skills/fg-review/strict-tdd-verify.md` | Módulo de validación TDD para `/fg-review`. |
 | `agents/<name>.md` | Los 13 agentes: 6 reviewers especialistas + 7 executors `fg-*` (capa agents del modelo de 3 capas). |
 | `commands/fg-*.md` | Los 7 entrypoints de slash command (capa commands del modelo de 3 capas). |
-| `mcp/engram.json` | Registro MCP de engram (solo si se instala engram). |
+| `~/.claude.json` `mcpServers.engram` | Registro MCP de engram en el archivo global de Claude Code (solo si se instala engram). |
 | `settings.json` | Hook PII `UserPromptSubmit` (merge idempotente; omitible con `--skip-pii-hook`). |
 | `CLAUDE.md` | **Doctrina global del orquestador** (el institucional). Reemplaza el previo con backup en `backup/forge/<fecha>/`; idempotente si ya es el de forge. |
 
@@ -349,7 +349,7 @@ Para resetear a defaults: borrar el archivo y correr `/fg-setup` de nuevo.
 | `context.pending_detection` | bool | `true` (bootstrap) / `false` (adopt) | `true` = sin manifiestos detectados aún; forge re-detecta al próximo comando. |
 | `context.vision_skipped` | bool | `false` | `true` si el dev declinó la conversación de visión en modo bootstrap. |
 | `context.is_legacy` | bool | `false` | Marca el proyecto como legacy; activa `legacy-impact-analyzer` en `/fg-design`. |
-| `rules.workflow.cycle_mode` | `interactive` \| `automatic` | `interactive` | Default sugerido del modo de ciclo. `/fg-plan` lo pregunta una vez por sesión; el dev puede cambiar por sesión. |
+| `rules.workflow.cycle_mode` | `interactive` \| `automatic` | `interactive` | Default sugerido del modo de ciclo. El **orquestador** lo pregunta una vez al comenzar el primer ciclo SDD de la sesión; el dev puede cambiar por sesión. |
 | `rules.workflow.ceremonial_threshold` | `auto` \| `lite` \| `full` | `auto` | Sesgo del orquestador para el nivel de ceremonia (ver sección 4). |
 | `rules.pr_size.budget_lines` | entero | `400` | Umbral de líneas para "PR grande" en el Review Workload Forecast. |
 | `rules.pr_size.suggest_split` | bool | `false` | Si sugerir partir en chained PRs cuando supera el budget. |
@@ -470,6 +470,22 @@ Para desactivar el filtro sin revertir código:
 ```bash
 export FORGE_PII_DISABLE=1
 ```
+
+### Límites conocidos del filtro PII
+
+**Comportamiento ante fallos del filtro (fail-open, ADR-4)**
+
+Si el filtro falla durante la ejecución del hook (por ejemplo, crash de Presidio, error de importación, excepción no capturada), el prompt pasa a Anthropic **sin redactar**. Este comportamiento es intencional: la prioridad es no romper el loop de desarrollo bajo ninguna circunstancia. La compensación disponible es el log de auditoría (`.forge/auditoria-pii.jsonl`), que registra todos los eventos incluyendo los de tipo `error`.
+
+`FORGE_PII_DISABLE=1` desactiva el filtro de forma deliberada — es un kill-switch distinto al fail-open y tiene semántica diferente. Para entornos con requisitos de auditoría, la práctica recomendada es revisar el log periódicamente para detectar eventos `action: "error"` que indiquen prompts que no pasaron por el filtro.
+
+**Redacción de cadenas de conexión (`CONNECTION_STRING_PASSWORD`)**
+
+El detector de cadenas de conexión redacta el segmento completo `protocolo://usuario:contraseña@` y lo reemplaza por `[CONNECTION_STRING_PASSWORD]`. No es posible redactar solo la contraseña y preservar protocolo/usuario/host: Presidio no soporta reemplazo parcial dentro de un match. La sobre-redacción es segura por diseño (no hay fuga de datos), pero implica que el contexto de protocolo/usuario/host no llega al modelo en ese prompt.
+
+**Rotación del log de auditoría**
+
+`.forge/auditoria-pii.jsonl` es append-only sin rotación automática. Cada entrada ocupa entre 150 y 200 bytes y solo se escribe cuando hay un evento de redacción, passthrough (`#fg-pass` o kill-switch) o error (no en cada prompt). En la práctica el archivo crece varios megabytes por año, no gigabytes. El dev es responsable del archivado y la limpieza manual. El log **nunca contiene el texto del prompt** — solo un hash SHA-256 truncado a 16 caracteres hexadecimales para correlación.
 
 ---
 

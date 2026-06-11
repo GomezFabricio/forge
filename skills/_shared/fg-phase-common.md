@@ -20,7 +20,7 @@ Antes de ejecutar cualquier paso, cada skill debe:
    - `rules.implement.test_command` → comando de test para `/fg-implement`.
    - `rules.review.test_command` y `rules.review.coverage_threshold` → para `/fg-review`.
    - `rules.pr_size.*` → para Review Workload Forecast (sección C).
-   - `rules.workflow.cycle_mode` → default sugerido del ciclo para `/fg-plan`.
+   - `rules.workflow.cycle_mode` → default sugerido del ciclo; el orquestador lo pregunta una vez por sesión antes del primer ciclo.
    - `rules.implement.max_tasks_per_batch` → límite de tareas por batch para `/fg-implement`.
 
 2. **GATE de re-detección lazy** (corre ANTES de cualquier aborto skill-específico):
@@ -69,7 +69,7 @@ Cada skill agrega campos propios **sin remover los base**:
 
 | Skill | Campos adicionales |
 |---|---|
-| `/fg-plan` | `cycle_mode`, `inferred.tipo`, `inferred.nombre` |
+| `/fg-plan` | `inferred.tipo`, `inferred.nombre` |
 | `/fg-design` | `tasks_count`, `files_affected`, `decisiones_grandes`, `review_workload_forecast` |
 | `/fg-implement` | `tdd_cycle_evidence`, `tests_summary`, `flags_for_review`, `batch_status` |
 | `/fg-review` | `tdd_compliance`, `assertion_quality`, `coverage`, `roles_invoked`, `structural` |

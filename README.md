@@ -105,7 +105,7 @@ La instalación ejecuta los siguientes pasos en cadena:
    - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
    - `agents/<name>.md` — los 13 agentes (copia flat): 6 reviewers especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`) + 7 executors `fg-*` (la capa agents del modelo de 3 capas, uno por fase).
    - `commands/fg-*.md` — los 7 entrypoints de slash command (capa commands del modelo de 3 capas).
-   - `mcp/engram.json` — registro MCP de engram (solo si engram se instala durante `forge install`).
+   - (entrada en `~/.claude.json` `mcpServers.engram`) — registro MCP de engram en el archivo global de Claude Code (solo si engram se instala durante `forge install`).
    - `settings.json` — registra el hook PII `UserPromptSubmit` (merge idempotente, preservando hooks existentes). Omitible con `--skip-pii-hook`.
    - `CLAUDE.md` — la **doctrina global del orquestador** (el institucional). Reemplaza el `~/.claude/CLAUDE.md` actual respaldando el previo en `~/.claude/backup/forge/<fecha>/` si difiere; si ya es el de forge, no hace nada (idempotente).
 
@@ -257,7 +257,7 @@ La norma sana es **"1 sesión = 1 ciclo"** — si un cambio requiere múltiples 
 
 #### `rules.workflow.cycle_mode` — Default del modo de ciclo
 
-Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive` o `automatic`). `/fg-plan` lo lee al arrancar y lo usa como valor pre-seleccionado en la pregunta de modo — el dev siempre puede cambiar la elección por sesión.
+Define el modo de ejecución sugerido para los ciclos del proyecto (`interactive` o `automatic`). El **orquestador** lo lee al comenzar el primer ciclo SDD de la sesión y lo usa como valor pre-seleccionado al preguntar — el dev siempre puede cambiar la elección por sesión.
 
 #### `rules.workflow.ceremonial_threshold` — Sesgo del orquestador
 
@@ -551,6 +551,22 @@ Para desactivar el filtro sin revertir código:
 ```bash
 export FORGE_PII_DISABLE=1
 ```
+
+### Límites conocidos del filtro PII
+
+**Comportamiento ante fallos del filtro (fail-open, ADR-4)**
+
+Si el filtro falla durante la ejecución del hook (por ejemplo, crash de Presidio, error de importación, excepción no capturada), el prompt pasa a Anthropic **sin redactar**. Este comportamiento es intencional: la prioridad es no romper el loop de desarrollo bajo ninguna circunstancia. La compensación es el log de auditoría (`.forge/auditoria-pii.jsonl`), que registra todos los eventos incluyendo los de tipo `error`.
+
+`FORGE_PII_DISABLE=1` desactiva el filtro deliberadamente — es un kill-switch distinto al fail-open. En entornos críticos, la mitigación disponible es revisar el log de auditoría para identificar prompts que no pasaron por el filtro.
+
+**Redacción de cadenas de conexión (`CONNECTION_STRING_PASSWORD`)**
+
+El detector de cadenas de conexión redacta el segmento completo `protocolo://usuario:contraseña@` y lo reemplaza por `[CONNECTION_STRING_PASSWORD]`. No es posible redactar solo la contraseña y preservar protocolo/usuario/host: Presidio no soporta reemplazo parcial dentro de un match. La sobre-redacción es segura por diseño — el riesgo es perder contexto de protocolo/host en el prompt, no exponer datos.
+
+**Rotación del log de auditoría**
+
+`.forge/auditoria-pii.jsonl` es append-only sin rotación automática. Cada entrada ocupa entre 150 y 200 bytes y solo se escribe cuando hay un evento de redacción, passthrough (`#fg-pass` o kill-switch) o error (no en cada prompt). En la práctica el archivo crece varios megabytes por año, no gigabytes. El dev es responsable del archivado y limpieza manual. El log **nunca contiene el texto del prompt** — solo un hash SHA-256 truncado a 16 caracteres hexadecimales para correlación.
 
 ---
 

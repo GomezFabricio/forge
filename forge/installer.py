@@ -54,7 +54,6 @@ EXIT_DEPOSIT_FAILED = 30   # share/forge/ not found or write error
 EXIT_PLATFORM_UNSUPPORTED = 40  # OS / arch not in supported map
 
 CLAUDE_HOME = Path.home() / ".claude"
-MCP_JSON_PATH = CLAUDE_HOME / "mcp" / "engram.json"
 ENGRAM_BIN_DIR_UNIX = Path.home() / ".engram" / "bin"
 ENGRAM_BIN_DIR_WIN = Path.home() / ".engram" / "bin"
 
@@ -111,6 +110,12 @@ _CONTEXT7_MCP_BLOCK: dict = {
     "command": "npx",
     "args": ["-y", "@upstash/context7-mcp"],
 }
+
+# Bloque MCP base para engram en ~/.claude.json bajo mcpServers.engram.
+# El command se resuelve en register_engram_mcp(): ruta absoluta al binario cuando
+# el instalador lo conoce (más robusto que depender del PATH para MCP spawning),
+# o "engram" como fallback si solo se detectó vía which/--version.
+_ENGRAM_MCP_ARGS: list = ["mcp", "--tools=agent"]
 
 # Módulo del hook PII (UserPromptSubmit). Es la firma estable para idempotencia:
 # el path del intérprete puede variar entre instalaciones, el módulo no.
@@ -169,8 +174,8 @@ Si confirmás, voy a:
   2. Instalarlo en %USERPROFILE%\\.engram\\bin\\engram.exe
      (en Linux/macOS: ~/.engram/bin/engram).
   3. Agregarlo al PATH del usuario.
-  4. Registrar el MCP en ~/.claude/mcp/engram.json para que Claude
-     Code lo levante automáticamente.
+  4. Registrar el MCP en ~/.claude.json (mcpServers.engram) para
+     que Claude Code lo levante automáticamente.
 
 Si preferís instalarlo por tu cuenta (brew, pacman, manual), respondé N
 y volvé a correr 'forge install' cuando lo tengas listo.
@@ -211,14 +216,20 @@ def detect_engram() -> tuple[bool, dict]:
         "version_check": None,
     }
 
-    # Indicator 1: valid ~/.claude/mcp/engram.json pointing to existing binary
-    if MCP_JSON_PATH.exists():
+    # Indicator 1: mcpServers.engram entry in ~/.claude.json with a resolvable command
+    claude_json_path = CODEGRAPH_CLAUDE_JSON  # ~/.claude.json — same file, no duplicate path
+    if claude_json_path.exists():
         try:
-            data = json.loads(MCP_JSON_PATH.read_text(encoding="utf-8"))
-            cmd = data.get("command")
-            if cmd and Path(cmd).exists():
-                info["mcp_json"] = cmd
-                return True, info
+            data = json.loads(claude_json_path.read_text(encoding="utf-8"))
+            servers = data.get("mcpServers", {}) if isinstance(data, dict) else {}
+            engram_block = servers.get("engram", {}) if isinstance(servers, dict) else {}
+            cmd = engram_block.get("command") if isinstance(engram_block, dict) else None
+            if cmd:
+                # Accept the entry if the command is "engram" (rely on PATH) or an absolute path
+                # that actually exists on disk.
+                if cmd == "engram" or Path(cmd).exists():
+                    info["mcp_json"] = cmd
+                    return True, info
         except (json.JSONDecodeError, OSError):
             pass  # corrupted file — fall through to indicator 2
 
@@ -1095,24 +1106,71 @@ def _xattr_cleanup_darwin(binary_path: Path) -> None:
         )
 
 
-def register_mcp(binary_path: Path) -> str:
-    """Write (or overwrite) ~/.claude/mcp/engram.json with flat schema.
+def register_engram_mcp(binary_path: Path | None = None) -> str:
+    """Registra el bloque MCP de engram en ~/.claude.json con merge idempotente.
 
-    Schema: {"command": "<abs_path>", "args": ["mcp", "--tools=agent"]}
-    No mcpServers wrapper — forge is standalone.
+    Sigue el mismo patrón que register_codegraph_mcp() y register_context7_mcp():
+    lee ~/.claude.json existente (o {} si ausente/corrupto), verifica idempotencia,
+    crea backup .forge-bak antes de escribir y hace merge preservando el resto.
+
+    Args:
+        binary_path: ruta absoluta al binario de engram cuando se conoce (instalación
+                     nueva). None o "engram" usa el nombre genérico como command
+                     (depende del PATH del proceso que lo spawne).
 
     Returns:
-        'created'    — file did not exist before
-        'overwritten' — file existed and was replaced
+        'present'  — el bloque ya existía y es válido, no se modificó nada
+        'created'  — el archivo no existía o estaba vacío, se creó con el bloque
+        'merged'   — el archivo existía con otra config, se hizo merge
     """
-    MCP_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"command": str(binary_path), "args": ["mcp", "--tools=agent"]}
-    existed = MCP_JSON_PATH.exists()
-    MCP_JSON_PATH.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+    claude_json_path = CODEGRAPH_CLAUDE_JSON  # ~/.claude.json — mismo archivo, sin duplicar path
+
+    # Leer configuración existente
+    existing_content: str | None = None
+    config: dict = {}
+    if claude_json_path.exists():
+        try:
+            existing_content = claude_json_path.read_text(encoding="utf-8")
+            config = json.loads(existing_content) or {}
+            if not isinstance(config, dict):
+                config = {}
+        except (json.JSONDecodeError, OSError):
+            config = {}
+
+    # Idempotencia: si el bloque ya existe y es válido, no tocar nada
+    mcp_servers = config.get("mcpServers", {})
+    if isinstance(mcp_servers, dict) and "engram" in mcp_servers:
+        return "present"
+
+    # Crear backup antes de escribir
+    if existing_content is not None:
+        backup_path = claude_json_path.with_suffix(".json.forge-bak")
+        with contextlib.suppress(OSError):
+            backup_path.write_text(existing_content, encoding="utf-8")
+
+    # Construir el bloque: ruta absoluta si la conocemos, "engram" como fallback
+    command = str(binary_path) if binary_path is not None else "engram"
+    block = {
+        "type": "stdio",
+        "command": command,
+        "args": list(_ENGRAM_MCP_ARGS),
+    }
+
+    # Merge: agregar mcpServers.engram preservando el resto
+    if "mcpServers" not in config or not isinstance(config.get("mcpServers"), dict):
+        config["mcpServers"] = {}
+    config["mcpServers"]["engram"] = block
+
+    # Determinar status antes de escribir
+    was_empty = existing_content is None or existing_content.strip() == ""
+
+    claude_json_path.parent.mkdir(parents=True, exist_ok=True)
+    claude_json_path.write_text(
+        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    return "overwritten" if existed else "created"
+
+    return "created" if was_empty else "merged"
 
 
 def install_engram() -> tuple[bool, str]:
@@ -1217,8 +1275,8 @@ def install_engram() -> tuple[bool, str]:
     else:
         _edit_path_unix(bin_dir)
 
-    # Register MCP
-    register_mcp(binary_dest)
+    # Register MCP — absolute path known here, more robust than relying on PATH for MCP spawning
+    register_engram_mcp(binary_dest)
 
     return True, f"engram instalado en {binary_dest}"
 
@@ -1257,7 +1315,7 @@ def print_report(report: dict) -> None:
     print("\nforge install — resumen\n")
 
     if engram_info.get("mcp_json"):
-        print(f"  engram: detectado vía MCP JSON ({engram_info['mcp_json']})")
+        print(f"  engram: detectado vía ~/.claude.json mcpServers ({engram_info['mcp_json']})")
     elif engram_info.get("which"):
         print(f"  engram: detectado en PATH ({engram_info['which']})")
     elif engram_info.get("version_check"):
