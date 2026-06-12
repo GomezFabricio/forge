@@ -23,8 +23,45 @@ from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 
-# TODO(forge-bootstrap-package-root): PACKAGE_ROOT broken in non-editable wheel installs
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+def _resolve_package_root() -> Path:
+    """Return the package root that contains the ``config/`` directory.
+
+    Two layouts are supported:
+
+    * Editable / repo install (``pip install -e .`` / ``pipx install --editable .``):
+      ``forge/bootstrap.py`` lives at ``<repo-root>/forge/bootstrap.py``, so
+      ``Path(__file__).parent.parent`` is the repo root where ``config/`` sits.
+
+    * Non-editable wheel install:
+      The wheel maps ``config/`` into the platform data directory via
+      ``[tool.hatch.build.targets.wheel.shared-data]``.  The installer locates
+      these files at ``sysconfig.get_path("data") / share / forge`` — the same
+      root returned by ``installer.get_share_root()``.
+
+    Resolution order: check for ``config/`` existence under each candidate and
+    return the first match.  If neither candidate has ``config/`` (e.g. running
+    from an unexpected layout), fall back to the repo-relative candidate so that
+    errors surface as missing-file errors rather than silent wrong-path usage.
+    """
+    import sysconfig  # noqa: PLC0415 — stdlib, cheap import
+
+    # Candidate 1: editable / repo layout
+    repo_candidate = Path(__file__).resolve().parent.parent
+    if (repo_candidate / "config").exists():
+        return repo_candidate
+
+    # Candidate 2: wheel / non-editable layout (share/forge mirrors the repo root)
+    data_dir = sysconfig.get_path("data")
+    if data_dir:
+        wheel_candidate = Path(data_dir) / "share" / "forge"
+        if (wheel_candidate / "config").exists():
+            return wheel_candidate
+
+    # Neither candidate confirmed — return the repo-relative one so errors are explicit
+    return repo_candidate
+
+
+PACKAGE_ROOT = _resolve_package_root()
 
 STACK_MANIFESTS = {
     "pyproject.toml": "Python",

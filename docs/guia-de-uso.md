@@ -17,8 +17,9 @@ principal.
 5. [Referencia de config.yaml](#5-referencia-de-configyaml)
 6. [Hook de guardrails (`docs/auditoria/guardrails.yaml`)](#6-hook-de-guardrails-docsauditoriaguardrailsyaml)
 7. [Capa PII y #fg-pass](#7-capa-pii-y-fg-pass)
-8. [Comandos manuales (`/fg-*`)](#8-comandos-manuales-fg-)
-9. [Troubleshooting](#9-troubleshooting)
+8. [Defensa en profundidad](#8-defensa-en-profundidad)
+9. [Comandos manuales (`/fg-*`)](#9-comandos-manuales-fg-)
+10. [Troubleshooting](#10-troubleshooting)
 
 ---
 
@@ -563,7 +564,22 @@ El detector de cadenas de conexión redacta el segmento completo `protocolo://us
 
 ---
 
-## 8. Comandos manuales (`/fg-*`)
+## 8. Defensa en profundidad
+
+forge aplica cuatro capas de control complementarias. Ninguna es suficiente sola; su valor está en la combinación.
+
+| Capa | Mecanismo | Dónde vive | Kill-switch |
+|---|---|---|---|
+| **1. Hooks de entrada** | `UserPromptSubmit` redacta PII antes de que el prompt llegue a Anthropic. Fail-open: si falla, el prompt pasa sin redactar y se registra el error. | `~/.claude/settings.json` + `forge/filters/hook_user_prompt.py` | `FORGE_PII_DISABLE=1` |
+| **2. Guardrails de ejecución** | `PreToolUse` evalúa reglas `block`/`confirm` definidas en `docs/auditoria/guardrails.yaml` del proyecto antes de ejecutar cada Bash command. Fail-open: si el hook falla, el comando sigue con la política normal de Claude Code. | `~/.claude/settings.json` + `forge/guards/hook_pre_tool.py` + `docs/auditoria/guardrails.yaml` | `FORGE_GUARD_DISABLE=1` |
+| **3. Review con juicio** | `/fg-review` OBLIGATORIO en todo ciclo. Delega a hasta 6 reviewers especialistas según el contexto, audita assertions, valida TDD compliance si está activo. Capa LLM: detecta problemas que los patrones estáticos no ven. | `skills/fg-review.md` + `agents/code-reviewer.md` y demás reviewers | No tiene (es el piso innegociable del workflow) |
+| **4. Contratos en CI del propio repo** | Tests de consistencia determinísticos: paridad agents↔skills, enum `skill_resolution` desde fuente única (`fg-phase-common.md`), anti-R7 en el template de guardrails, sincronización template↔constante. Detectan drift estructural en el repo de forge antes de que llegue a los usuarios. | `tests/test_agents_consistency.py` (y demás tests de la suite) | No aplica (protegen el repo de forge, no los proyectos del dev) |
+
+**Nota sobre la capa 4**: los contratos de CI protegen la consistencia interna del repo `forge`. No se proyectan al proyecto del dev — el control sobre el proyecto del dev es responsabilidad de las capas 1, 2 y 3.
+
+---
+
+## 9. Comandos manuales (`/fg-*`)
 
 El dev no necesita estos comandos en el flujo normal — el orquestador los llama
 internamente. Son útiles para automatización, scripts, re-ejecuciones puntuales o
@@ -608,7 +624,7 @@ cada tarea:
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 ### forge no se activó con mi mensaje
 

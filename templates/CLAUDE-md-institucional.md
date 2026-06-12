@@ -232,6 +232,18 @@ Al delegar a un agent, el orquestador pasa:
 
 **Principio rector**: una skill puede delegar a un sub-agente especialista cuando necesita información que ese agente produce y la skill no puede computar por sí misma. Hoy aplica a `/fg-review` (miradas de review) y `/fg-design` (impacto legacy pre-implementación).
 
+### Re-ejecución acotada tras review bloqueante
+
+Cuando `/fg-review` retorna `status: blocked` (porque uno o más reviewers reportaron `verdict: blocking` en sus envelopes), el orquestador aplica este protocolo — no delega la decisión a la skill ni deja el ciclo abierto:
+
+1. **Reintentar**: invocar `/fg-implement` pasando como contexto los issues bloqueantes que `/fg-review` consolidó de los reviewers (archivos afectados, items violados, correcciones sugeridas). Luego volver a invocar `/fg-review`.
+2. **Máximo 2 reintentos**. Si el segundo `/fg-review` sigue en `status: blocked`, DETENER y escalar al dev con un resumen claro de qué sigue fallando y por qué. Sin reintentos adicionales ni loops silenciosos.
+3. **Registro**: cada reintento agrega una línea a `decisiones.md` del cambio (append-only): número de intento y lista de issues bloqueantes abordados.
+
+Este protocolo NO aplica a issues no bloqueantes (reviewers con `verdict: issues_found` que no llevan a `/fg-review` a `blocked`): esos se reportan al dev como observaciones, sin re-ejecución automática.
+
+**Separación de responsabilidades**: la skill `/fg-review` no se llama a sí misma ni decide cuántos reintentos hacer — reporta el envelope con los issues estructurados y el orquestador es quien conduce el ciclo de re-ejecución acotada.
+
 ## Visión del sistema (modo bootstrap)
 
 Si este proyecto está en modo bootstrap y no tiene `overview.md` todavía, el orquestador dispara conversación de visión antes del primer ciclo.

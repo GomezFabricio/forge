@@ -8,6 +8,31 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### P3, P5 y D10 — Protocolo de re-ejecución, defensa en profundidad y fix de wheel
+
+#### Added
+
+- **Re-ejecución acotada tras review bloqueante** (P3, `templates/CLAUDE-md-institucional.md`,
+  `skills/fg-review.md`): protocolo formal para `verdict: blocking` — el orquestador
+  re-invoca `/fg-implement` con los issues estructurados de los reviewers como contexto,
+  re-corre `/fg-review`, máximo 2 reintentos y luego escala al dev. Cada reintento se
+  registra en `decisiones.md` (append-only). No aplica a `issues_found` (no bloqueante).
+  La skill reporta; el orquestador decide — la separación executor/orquestador se preserva.
+- **Sección "Defensa en profundidad"** (P5, `README.md`, `docs/guia-de-uso.md`): mapa de
+  las 4 capas de enforcement reales — hook PII (entrada), guardrails PreToolUse
+  (ejecución), `/fg-review` + reviewers (juicio LLM) y tests de consistencia en CI
+  (contratos del propio repo) — con mecanismo, ubicación y kill-switch de cada una.
+
+#### Fixed
+
+- **`PACKAGE_ROOT` en instalaciones wheel non-editable** (D10, `forge/bootstrap.py`):
+  `_resolve_package_root()` resuelve la raíz de recursos verificando la existencia de
+  `config/` en dos layouts — repo/editable (`Path(__file__).parent.parent`) y wheel
+  (`sysconfig data_dir/share/forge`, la misma resolución que `installer.get_share_root()`).
+  Antes, `copy_config_templates()` fallaba con `FileNotFoundError` en wheels non-editable.
+
+---
+
 ### P2 — Hook PreToolUse de guardrails
 
 Capa de enforcement determinista que intercepta comandos Bash antes de ejecución

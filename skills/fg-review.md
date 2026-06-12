@@ -194,8 +194,11 @@ Cambiar Estado a `cerrado`.
 - Cerrar el cambio si hay tests fallando del propio cambio.
 - Saltarse el Assertion Quality Audit cuando Strict TDD está activo.
 - Invocar `/fg-update-arch` automáticamente — solo sugerirla.
+- Decidir cuántos reintentos ejecutar ni llamarse a sí misma — esa responsabilidad es del orquestador.
 
 ## Envelope de retorno
+
+Cuando `status` es `blocked`, el envelope incluye los issues estructurados (archivo, item violado, corrección sugerida) para que el orquestador pueda conducir el protocolo de re-ejecución acotada. La skill reporta — el orquestador decide si reintenta y cuántas veces.
 
 ```yaml
 status: success | partial | blocked
