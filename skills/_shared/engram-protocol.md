@@ -52,7 +52,7 @@ Git versiona, audita, comparte cross-team. Esto NO se duplica en engram.
 | `forge/discovery/<slug>` | discovery | Gotchas, edge cases, patrones aprendidos | Aprendizajes que sobreviven al cambio puntual |
 | `forge/setup/<project>` | config | Contexto inicial del proyecto detectado por `/fg-setup` (stack, layout) | Configuración cross-session del proyecto |
 | `forge/testing-capabilities/<project>` | config | Test runner, coverage, integration, e2e detectados; `strict_tdd: bool` | Activa Strict TDD Mode en `/fg-implement` y `/fg-review` |
-| `skill-registry` | config | Registry de skills disponibles con compact rules | Transversal a forge — sin prefijo `forge/` |
+| `skill-registry` | config | Registry de skills disponibles: índice de nombres, triggers y paths (frontmatter-only, sin resúmenes) | Transversal a forge — sin prefijo `forge/` |
 
 **Nota sobre el prefijo `forge/`**: temporal hasta que se decida el nombre final del producto. Si el producto se renombra, se hace un find/replace global. El uso de prefijo evita colisiones con otros workflows (ej: si el dev también usa workflows con prefijo `sdd/` u otro).
 

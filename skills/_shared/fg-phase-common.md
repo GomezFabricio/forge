@@ -75,6 +75,7 @@ Cada skill agrega campos propios **sin remover los base**:
 | `/fg-review` | `tdd_compliance`, `assertion_quality`, `coverage`, `roles_invoked`, `structural` |
 | `/fg-setup` | `stack_detected`, `test_runner`, `audit_config`, `codegraph_indexed` |
 | `/fg-update-arch` | `proposals_total`, `proposals_accepted`, `adrs_created` |
+| `/fg-update-registry` | `registry_path`, `skills_indexed`, `sources_scanned`, `engram_updated` |
 | `/fg-explore` | `mapa_path`, `senales_fuertes` (`consumidores`, `blast_radius`, `toca_transversales`, `nivel_sugerido`) |
 
 ### Valores de `status`

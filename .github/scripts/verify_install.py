@@ -11,7 +11,7 @@ from pathlib import Path
 claude = Path.home() / ".claude"
 errors: list[str] = []
 
-# Las 7 skills del workflow, cada una en su carpeta con SKILL.md.
+# Las 8 skills del workflow, cada una en su carpeta con SKILL.md.
 expected_skills = [
     "fg-setup",
     "fg-explore",
@@ -20,6 +20,7 @@ expected_skills = [
     "fg-implement",
     "fg-review",
     "fg-update-arch",
+    "fg-update-registry",
 ]
 for skill in expected_skills:
     path = claude / "skills" / skill / "SKILL.md"
@@ -38,7 +39,7 @@ for agent in ["code-reviewer", "security-reviewer", "legacy-impact-analyzer"]:
     if not path.is_file():
         errors.append(f"falta agent: {path}")
 
-# Los 7 comandos del workflow, depositados flat en ~/.claude/commands/.
+# Los 8 comandos del workflow, depositados flat en ~/.claude/commands/.
 expected_commands = [
     "fg-setup",
     "fg-explore",
@@ -47,6 +48,7 @@ expected_commands = [
     "fg-implement",
     "fg-review",
     "fg-update-arch",
+    "fg-update-registry",
 ]
 for cmd in expected_commands:
     path = claude / "commands" / f"{cmd}.md"

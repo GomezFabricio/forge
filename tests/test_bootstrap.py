@@ -350,7 +350,7 @@ class TestCreateAuditConfig:
 class TestUpdateGitignore:
     """Tests para update_gitignore(root). REQ-TEST-GITIGNORE, REQ-IDEMPOTENT."""
 
-    FORGE_ENTRIES = ["# forge", ".codegraph/", ".engram/", "!.engram/chunks/"]
+    FORGE_ENTRIES = ["# forge", ".codegraph/", ".atl/", ".engram/", "!.engram/chunks/"]
 
     def test_fresh_creation(self, tmp_path):
         """GIVEN sin .gitignore, THEN archivo creado con entradas forge."""

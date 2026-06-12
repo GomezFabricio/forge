@@ -179,6 +179,7 @@ El proyecto usa forge: un workflow de 4 fases por cambio, con setup inicial y ma
 Inicializa solo según contexto:  el orquestador detecta intent
 Por cambio:                      /fg-plan → /fg-design → /fg-implement → /fg-review
 Mantenimiento arq:               /fg-update-arch  (sugerido por /fg-review, invocable manualmente)
+Índice de skills:                /fg-update-registry  (invocar después de /fg-setup y al instalar/crear/renombrar skills)
 ```
 
 Estructura de cambios:
@@ -220,7 +221,7 @@ El workflow de forge opera en 3 capas:
 | Agent | Modelo |
 |-------|--------|
 | `fg-plan`, `fg-design`, `fg-review` | opus |
-| `fg-setup`, `fg-explore`, `fg-implement`, `fg-update-arch` | sonnet |
+| `fg-setup`, `fg-explore`, `fg-implement`, `fg-update-arch`, `fg-update-registry` | sonnet |
 
 #### Sub-agent context protocol
 

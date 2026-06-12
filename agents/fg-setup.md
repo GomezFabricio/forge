@@ -22,7 +22,7 @@ Ejecutá todos los pasos de la skill en este contexto:
 2. Detectar stack desde manifiestos del proyecto.
 3. Generar o actualizar `docs/auditoria/config.yaml` con defaults correctos para el stack.
 4. Inicializar CodeGraph e indexar el codebase.
-5. Generar `skill-registry` con los skills disponibles de forge.
+5. Generar el placeholder de `skill-registry` (el orquestador invoca `/fg-update-registry` después para el registry real).
 6. Crear estructura mínima de `docs/` si no existe.
 
 NO generes `CLAUDE.md`: la doctrina del orquestador es global (`~/.claude/CLAUDE.md`, vía `forge install`).

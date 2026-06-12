@@ -51,6 +51,7 @@ Setup del proyecto (una vez):   /fg-setup
 Exploración (fase 0 opcional):  /fg-explore
 Por cada cambio:                 /fg-plan → /fg-design → /fg-implement → /fg-review
 Mantenimiento de arquitectura:  /fg-update-arch  (sugerida por /fg-review)
+Mantenimiento del registry:     /fg-update-registry  (tras instalar/crear/renombrar skills)
 ```
 
 Cada cambio genera una carpeta de auditoría en `docs/auditoria/cambios/<YYYY-MM-tipo-nombre>/`.
@@ -106,12 +107,12 @@ forge install
 
 | Destino en `~/.claude/` | Contenido |
 |---|---|
-| `skills/<stem>/SKILL.md` | Las 7 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`). |
+| `skills/<stem>/SKILL.md` | Las 8 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`, `fg-update-registry`). |
 | `skills/forge-shared/<name>/SKILL.md` | Referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`). |
 | `skills/fg-implement/strict-tdd.md` | Módulo del ciclo Strict TDD. |
 | `skills/fg-review/strict-tdd-verify.md` | Módulo de validación TDD para `/fg-review`. |
-| `agents/<name>.md` | Los 13 agentes: 6 reviewers especialistas + 7 executors `fg-*` (capa agents del modelo de 3 capas). |
-| `commands/fg-*.md` | Los 7 entrypoints de slash command (capa commands del modelo de 3 capas). |
+| `agents/<name>.md` | Los 14 agentes: 6 reviewers especialistas + 8 executors `fg-*` (capa agents del modelo de 3 capas). |
+| `commands/fg-*.md` | Los 8 entrypoints de slash command (capa commands del modelo de 3 capas). |
 | `~/.claude.json` `mcpServers.engram` | Registro MCP de engram en el archivo global de Claude Code (solo si se instala engram). |
 | `settings.json` | Hook PII `UserPromptSubmit` (merge idempotente; omitible con `--skip-pii-hook`). |
 | `CLAUDE.md` | **Doctrina global del orquestador** (el institucional). Reemplaza el previo con backup en `backup/forge/<fecha>/`; idempotente si ya es el de forge. |
@@ -595,6 +596,7 @@ depuración.
 | `/fg-implement` | Implementa el checklist de `tareas.md` tarea por tarea. Si TDD está activo, aplica el ciclo de 7 pasos. Soporta batching: corta al llegar a `max_tasks_per_batch` y guarda progreso. |
 | `/fg-review` | Corre la suite completa, valida TDD Cycle Evidence (si activo), audita calidad de assertions, invoca sub-agentes especialistas según el contexto, y escribe el Cierre del `README.md`. Única skill que puede delegar. |
 | `/fg-update-arch` | Reconcilia `docs/arquitectura/` con la realidad del código vía CodeGraph. Propone diffs por archivo; el dev acepta, edita o rechaza cada uno individualmente. Sugerida por `/fg-review` cuando detecta cambios estructurales. |
+| `/fg-update-registry` | Regenera `.atl/skill-registry.md` indexando las skills del proyecto (`skills/`) y del usuario (`~/.claude/skills/`). Ejecutar después de instalar, crear o renombrar skills, o cuando el resolver avisa que no hay registry. |
 
 ### Sub-agentes que `/fg-review` puede invocar
 

@@ -8,6 +8,40 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### D12 + P1 — Nueva fase /fg-update-registry y skill-resolver reescrito al modelo índice/paths
+
+#### Added
+
+- **Nueva fase `/fg-update-registry`** (`commands/fg-update-registry.md`, `agents/fg-update-registry.md`,
+  `skills/fg-update-registry.md`): genera o regenera `.atl/skill-registry.md` como índice de skills del
+  proyecto. Escanea `skills/` del proyecto y `~/.claude/skills/` del usuario; lee solo el frontmatter
+  de cada `SKILL.md`; deduplica por nombre (project beats user); excluye `fg-*`, `sdd-*`, `_shared`,
+  `forge-shared` y `skill-registry`. Escribe la tabla de índice (nombre, trigger/descripción, scope,
+  path exacto) y persiste en engram con `topic_key: skill-registry`. El orquestador lo invoca después
+  de `/fg-setup` y cada vez que se instalan, crean, mueven o renombran skills.
+- **`.atl/` agregado a `.gitignore`** por `bootstrap.update_gitignore()`: el registry es un artefacto
+  regenerable, no se versiona.
+
+#### Changed
+
+- **`skills/_shared/skill-resolver.md` reescrito al modelo índice/paths**: el Paso 3 ahora pasa los
+  paths exactos de `SKILL.md` bajo `## Skills to load before work` en lugar de inyectar compact rules
+  pre-digeridas. El registry es un índice — `SKILL.md` sigue siendo la fuente de verdad. Los sub-agentes
+  leen los archivos completos preservando el intent del autor. El feedback-loop enum permanece idéntico
+  (`paths-injected | fallback-registry | fallback-path | none`). Aviso de registry ausente actualizado
+  a `/fg-update-registry`. Sección de presupuesto de tokens reescrita honestamente: ~1 línea por path
+  en el orquestador; el costo real está en el contexto del sub-agente (que es el punto).
+- **`/fg-setup` paso 8** y envelope: el paso solo escribe el placeholder; el registry real lo genera
+  el orquestador invocando `/fg-update-registry` después del setup. `next_recommended` apunta a
+  `/fg-update-registry`.
+- **Conteos actualizados**: de 7 a 8 skills, de 7 a 8 commands, de 13 a 14 agentes en README,
+  `docs/guia-de-uso.md`, `CONTRIBUTING.md`, `templates/CLAUDE-md-institucional.md`,
+  `forge/installer.py` y `.github/scripts/verify_install.py`.
+- **`tests/test_agents_consistency.py`**: `FASES_EXECUTORS` actualizado a 8 fases (agregado
+  `update-registry`); docstring de clase actualizado.
+
+---
+
 ### P3, P5 y D10 — Protocolo de re-ejecución, defensa en profundidad y fix de wheel
 
 #### Added

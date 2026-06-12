@@ -129,8 +129,8 @@ forge usa **Conventional Commits** con type en inglés y subject en español.
 | `bootstrap` | `forge/bootstrap.py` (lógica de `/fg-setup`). |
 | `cli` | `forge/cli.py` (entry point del binario `forge`). |
 | `hooks` | Hooks de Claude Code que forge instala. |
-| `skills` | Las 7 skills (`/fg-*`). |
-| `agents` | Los 13 agentes: 6 reviewers especialistas + 7 executors `fg-*`. |
+| `skills` | Las 8 skills (`/fg-*`). |
+| `agents` | Los 14 agentes: 6 reviewers especialistas + 8 executors `fg-*`. |
 | `templates` | Templates de `templates/` (CLAUDE-md-institucional, etc.). |
 | `config` | YAMLs per-project. |
 | `deps` | Dependencias en `pyproject.toml`. |

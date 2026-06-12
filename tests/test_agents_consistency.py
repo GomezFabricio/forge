@@ -26,6 +26,7 @@ FASES_EXECUTORS = [
     "implement",
     "review",
     "update-arch",
+    "update-registry",
 ]
 
 REVIEWERS = [
@@ -56,7 +57,7 @@ def _parse_frontmatter(path: Path) -> dict:
 
 
 class TestPresenciaExecutors:
-    """Verifica que los 7 executor agents existan en agents/."""
+    """Verifica que los 8 executor agents existan en agents/."""
 
     def test_todos_los_executors_existen(self):
         """Cada fase debe tener su archivo agents/fg-{fase}.md."""

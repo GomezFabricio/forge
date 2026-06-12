@@ -728,6 +728,7 @@ def update_gitignore(root: Path) -> str:
     required = [
         "# forge",
         ".codegraph/",
+        ".atl/",
         ".engram/",
         "!.engram/chunks/",
     ]
@@ -751,9 +752,8 @@ def generate_skill_registry_placeholder(root: Path) -> str:
         return "preserved"
     registry_path.write_text(
         "# Skill Registry\n\n"
-        "Placeholder generado por /fg-setup. La generación real del registry con compact rules\n"
-        "es trabajo del skill registry generator (ver _shared/skill-resolver.md). Cuando esté\n"
-        "integrado, este archivo se regenera automáticamente con las skills disponibles.\n",
+        "Placeholder generado por /fg-setup. Para generar el índice real de skills,\n"
+        "invocar /fg-update-registry después de completar el setup.\n",
         encoding="utf-8",
     )
     return "placeholder_created"

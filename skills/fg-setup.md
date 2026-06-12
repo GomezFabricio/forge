@@ -1,6 +1,6 @@
 ---
 name: fg-setup
-description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/auditoria/config.yaml con defaults, inicializa CodeGraph, genera el skill-registry. NO crea CLAUDE.md (la doctrina del orquestador es global, vía forge install). NO activa Strict TDD ni genera scaffolding del proyecto.
+description: Instala forge en un proyecto existente. Idempotente. Detecta stack, genera docs/auditoria/config.yaml con defaults, inicializa CodeGraph, escribe el placeholder de skill-registry (el índice real lo genera /fg-update-registry). NO crea CLAUDE.md (la doctrina del orquestador es global, vía forge install). NO activa Strict TDD ni genera scaffolding del proyecto.
 when_to_apply: Una vez al adoptar forge en un proyecto. Re-ejecutable para upgrade — detecta lo existente y solo agrega lo faltante.
 ---
 
@@ -159,9 +159,11 @@ Avisar al dev: "TDD está OFF por default. Para activarlo, editá `docs/auditori
 - Indexar el código actual del proyecto en `.codegraph/codegraph.db`.
 - Reportar al dev la cantidad de nodos y aristas detectados.
 
-### 8. Generar `.atl/skill-registry.md`
+### 8. Generar `.atl/skill-registry.md` (placeholder)
 
-Escanear las skills disponibles para el proyecto: las propias de forge (`skills/*.md` instaladas globalmente o en el repo del proyecto), las del usuario en `~/.claude/skills/` (cualquier skill instalada por el dev en su máquina), y las de plugins activos de Claude Code. Generar el registry con compact rules pre-digeridas, siguiendo el protocolo de `_shared/skill-resolver.md`.
+Llamar `bootstrap.generate_skill_registry_placeholder(root)` para crear el archivo `.atl/skill-registry.md` si no existe. Este paso solo escribe el placeholder; el registry real con el índice de skills se genera cuando el orquestador invoca `/fg-update-registry` después de completar el setup.
+
+El orquestador DEBE invocar `/fg-update-registry` como siguiente paso después de que `/fg-setup` termine con éxito.
 
 ### 9. Actualizar `.gitignore`
 
@@ -248,11 +250,13 @@ CodeGraph: {N nodos, N aristas indexados | "no inicializado"}
 Archivos generados:
 - docs/auditoria/config.yaml ({creado | preservado existente})
 - config/modulos-transversales.yaml ({creado | preservado existente})
-- .atl/skill-registry.md (generado)
+- .atl/skill-registry.md (placeholder — el registry real lo genera /fg-update-registry)
 - .gitignore (actualizado)
 
 Nota: TDD está OFF por default. Para activarlo, editá docs/auditoria/config.yaml
       y cambiá rules.implement.tdd a true.
+
+Próximo paso sugerido: /fg-update-registry (genera el índice de skills del proyecto)
 ```
 
 ## Reglas
@@ -305,4 +309,5 @@ files_preserved:
   - <lista de archivos que ya existían y no se tocaron>
 warnings:
   - <ej: "no se detectó test runner — config.yaml queda con test_runner: null">
+next_recommended: /fg-update-registry   # genera el skill registry real tras el setup
 ```

@@ -100,11 +100,11 @@ La instalación ejecuta los siguientes pasos en cadena:
 1. Verifica que haya **Python 3.10+** disponible. Si no encuentra `pipx`, lo instala (`python -m pip install --user pipx` + `pipx ensurepath`).
 2. Instala el paquete con **pipx** desde el repositorio (`pipx install --force git+https://github.com/GomezFabricio/forge.git`; la vía institucional usa `--editable .` sobre el clon local). forge **no está publicado en PyPI** todavía. pipx lo aísla del Python global del sistema y permite upgrade/uninstall limpios.
 3. Ejecuta **`forge install`**, que deposita en `~/.claude/`:
-   - `skills/<stem>/SKILL.md` — las 7 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`), cada una en su propia carpeta.
+   - `skills/<stem>/SKILL.md` — las 8 skills del workflow (`fg-setup`, `fg-explore`, `fg-plan`, `fg-design`, `fg-implement`, `fg-review`, `fg-update-arch`, `fg-update-registry`), cada una en su propia carpeta.
    - `skills/forge-shared/<name>/SKILL.md` — referencias compartidas (`skill-resolver`, `engram-protocol`, `fg-phase-common`), con frontmatter que evita invocación accidental por el modelo.
    - `skills/fg-implement/strict-tdd.md` y `skills/fg-review/strict-tdd-verify.md` — módulos del ciclo Strict TDD, co-locados con su skill consumidora.
-   - `agents/<name>.md` — los 13 agentes (copia flat): 6 reviewers especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`) + 7 executors `fg-*` (la capa agents del modelo de 3 capas, uno por fase).
-   - `commands/fg-*.md` — los 7 entrypoints de slash command (capa commands del modelo de 3 capas).
+   - `agents/<name>.md` — los 14 agentes (copia flat): 6 reviewers especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`) + 8 executors `fg-*` (la capa agents del modelo de 3 capas, uno por fase).
+   - `commands/fg-*.md` — los 8 entrypoints de slash command (capa commands del modelo de 3 capas).
    - (entrada en `~/.claude.json` `mcpServers.engram`) — registro MCP de engram en el archivo global de Claude Code (solo si engram se instala durante `forge install`).
    - `settings.json` — registra el hook PII `UserPromptSubmit` (merge idempotente, preservando hooks existentes). Omitible con `--skip-pii-hook`.
    - `CLAUDE.md` — la **doctrina global del orquestador** (el institucional). Reemplaza el `~/.claude/CLAUDE.md` actual respaldando el previo en `~/.claude/backup/forge/<fecha>/` si difiere; si ya es el de forge, no hace nada (idempotente).
@@ -163,7 +163,7 @@ El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritua
 
 **Condición para modo Rápido**: la arquitectura debe estar al día. El orquestador lo verifica mediante Grep sobre los READMEs de cambios. Si hay cambios estructurales sin sincronizar, el orquestador eleva automáticamente a Completo.
 
-### Las 7 skills
+### Las 8 skills
 
 | Skill | Propósito |
 |---|---|
@@ -174,6 +174,7 @@ El orquestador evalúa cada cambio antes de arrancar y propone el nivel de ritua
 | `/fg-implement` | Implementa el checklist tarea por tarea aplicando el ciclo Strict TDD si está activo (Safety Net → Understand → RED → GREEN → TRIANGULATE → REFACTOR). |
 | `/fg-review` | Corre la suite completa, valida TDD Cycle Evidence, audita assertion quality, delega a sub-agentes especialistas según el cambio, y consolida el cierre. Única skill que delega. |
 | `/fg-update-arch` | Reconcilia la documentación permanente del proyecto (`docs/arquitectura/`) con la realidad del código. Propone diff por archivo, nunca todo-o-nada. |
+| `/fg-update-registry` | Genera o regenera el índice de skills del proyecto en `.atl/skill-registry.md`. Invocar después de `/fg-setup` y al instalar, crear, mover o renombrar skills. |
 
 ### Estructura de docs por cambio
 
@@ -419,7 +420,7 @@ forge/
 │           ├── ar_cuit.py       ← CUIT/CUIL con dígito verificador AFIP
 │           ├── ar_dni.py        ← DNI argentino
 │           └── secrets.py       ← secretos técnicos (JWT, AWS keys, GitHub PAT, etc.)
-├── skills/                      ← 7 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
+├── skills/                      ← 8 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
 │   ├── fg-setup.md
 │   ├── fg-explore.md
 │   ├── fg-plan.md
@@ -427,8 +428,9 @@ forge/
 │   ├── fg-implement.md
 │   ├── fg-review.md
 │   ├── fg-update-arch.md
+│   ├── fg-update-registry.md
 │   └── _shared/                 ← skill-resolver, persistence-contract, strict-tdd
-├── agents/                      ← 13 agentes (van a ~/.claude/agents/): 6 reviewers + 7 executors fg-*
+├── agents/                      ← 14 agentes (van a ~/.claude/agents/): 6 reviewers + 8 executors fg-*
 │   ├── code-reviewer.md         ← reviewers especialistas (invocados por /fg-review)
 │   ├── security-reviewer.md
 │   ├── dba-reviewer.md
@@ -441,7 +443,8 @@ forge/
 │   ├── fg-design.md
 │   ├── fg-implement.md
 │   ├── fg-review.md
-│   └── fg-update-arch.md
+│   ├── fg-update-arch.md
+│   └── fg-update-registry.md
 ├── config/                      ← template de configuración per-project (se copia al proyecto)
 │   └── modulos-transversales.yaml
 ├── templates/                   ← templates de artefactos generados (se aplican al proyecto)

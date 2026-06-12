@@ -461,7 +461,8 @@ class TestInstallAssets:
         agents_dir.mkdir(parents=True)
 
         # fg-*.md skills individuales
-        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-explore", "fg-setup"]:
+        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-explore", "fg-setup",
+                     "fg-update-arch", "fg-update-registry"]:
             (skills_dir / f"{name}.md").write_text(f"# {name}\n\nContent for {name}.\n")
 
         # _shared co-located
@@ -475,7 +476,8 @@ class TestInstallAssets:
 
         # agents
         for name in ["fg-plan", "fg-design", "fg-implement",
-                     "fg-review", "fg-explore", "fg-setup"]:
+                     "fg-review", "fg-explore", "fg-setup",
+                     "fg-update-arch", "fg-update-registry"]:
             (agents_dir / f"{name}.md").write_text(f"# {name}\n\nAgent content.\n")
 
         return share
@@ -497,9 +499,9 @@ class TestInstallAssets:
         assert skill_file.exists()
         assert "fg-implement" in skill_file.read_text()
 
-    def test_all_six_fg_skills_deposited(self, tmp_path, monkeypatch):
-        """GIVEN 6 fg-*.md en share/skills/ WHEN install_assets()
-        THEN manifest['skills_deposited'] == 6."""
+    def test_all_eight_fg_skills_deposited(self, tmp_path, monkeypatch):
+        """GIVEN 8 fg-*.md en share/skills/ WHEN install_assets()
+        THEN manifest['skills_deposited'] == 8."""
         from forge import installer
 
         share = self._make_share_root(tmp_path)
@@ -508,7 +510,7 @@ class TestInstallAssets:
         monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
 
         manifest = installer.install_assets()
-        assert manifest["skills_deposited"] == 6
+        assert manifest["skills_deposited"] == 8
 
     def test_agents_deposited_flat(self, tmp_path, monkeypatch):
         """GIVEN agents/*.md en share/agents/ WHEN install_assets()
@@ -525,7 +527,7 @@ class TestInstallAssets:
         agents_dir = claude_home / "agents"
         assert (agents_dir / "fg-plan.md").exists()
         assert (agents_dir / "fg-implement.md").exists()
-        assert manifest["agents_deposited"] == 6
+        assert manifest["agents_deposited"] == 8
 
     def test_idempotent_second_run_no_error(self, tmp_path, monkeypatch):
         """GIVEN install_assets() ya corrió WHEN corre por segunda vez
@@ -761,7 +763,8 @@ class TestDepositCommands:
         commands_dir.mkdir(parents=True)
 
         # fg-*.md skills individuales
-        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-explore", "fg-setup"]:
+        for name in ["fg-implement", "fg-review", "fg-plan", "fg-design", "fg-explore", "fg-setup",
+                     "fg-update-arch", "fg-update-registry"]:
             (skills_dir / f"{name}.md").write_text(f"# {name}\n\nContent for {name}.\n")
 
         # _shared co-located
@@ -775,7 +778,8 @@ class TestDepositCommands:
 
         # agents
         for name in ["fg-plan", "fg-design", "fg-implement",
-                     "fg-review", "fg-explore", "fg-setup"]:
+                     "fg-review", "fg-explore", "fg-setup",
+                     "fg-update-arch", "fg-update-registry"]:
             (agents_dir / f"{name}.md").write_text(f"# {name}\n\nAgent content.\n")
 
         # commands (7 fg-*.md)
