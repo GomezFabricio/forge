@@ -114,7 +114,7 @@ forge install
 | `agents/<name>.md` | Los 14 agentes: 6 reviewers especialistas + 8 executors `fg-*` (capa agents del modelo de 3 capas). |
 | `commands/fg-*.md` | Los 8 entrypoints de slash command (capa commands del modelo de 3 capas). |
 | `~/.claude.json` `mcpServers.engram` | Registro MCP de engram en el archivo global de Claude Code (solo si se instala engram). |
-| `settings.json` | Hook PII `UserPromptSubmit` (merge idempotente; omitible con `--skip-pii-hook`). |
+| `settings.json` | Hook PII `UserPromptSubmit` y hook de guardrails `PreToolUse` (merge idempotente; omitibles con `--skip-pii-hook` y `--skip-guard-hook`). |
 | `CLAUDE.md` | **Doctrina global del orquestador** (el institucional). Reemplaza el previo con backup en `backup/forge/<fecha>/`; idempotente si ya es el de forge. |
 
 > Los MCP de CodeGraph y Context7 se registran en `~/.claude.json` (no en `~/.claude/`).
@@ -169,8 +169,9 @@ agregá este bloque a `~/.claude/settings.json`:
 
 ```
 docs/auditoria/config.yaml
+docs/auditoria/guardrails.yaml   (plantilla, no se sobreescribe si ya existe)
 config/modulos-transversales.yaml
-.atl/skill-registry.md
+.atl/skill-registry.md           (placeholder — el índice real lo genera /fg-update-registry)
 .gitignore  (actualizado)
 ```
 
@@ -588,7 +589,7 @@ depuración.
 
 | Comando | Propósito |
 |---|---|
-| `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, genera el skill-registry. No crea `CLAUDE.md` (la doctrina del orquestador es global). |
+| `/fg-setup` | Adopta forge en el proyecto. Idempotente: re-ejecutable para upgrade. Detecta stack, genera `config.yaml`, inicializa CodeGraph, deposita `guardrails.yaml` (plantilla), escribe el placeholder de `.atl/skill-registry.md` (el índice real lo genera `/fg-update-registry`). No crea `CLAUDE.md` (la doctrina del orquestador es global). |
 | `/fg-explore [área]` | Fase 0 opcional. Mapea el cambio vía CodeGraph y genera `exploracion.md` (archivos afectados reales, consumidores, blast radius, acoplamientos no obvios). Reutilizable por `/fg-design`. Puede correr antes de `/fg-plan`. |
 | `/fg-plan <descripción libre>` | Crea la carpeta de cambio con el `README.md` inicial. Infiere tipo (`feat`/`fix`/`refactor`/etc.) y nombre kebab-case desde lenguaje natural. El nivel de ceremonia llega ya resuelto desde el orquestador. |
 | `/fg-plan --from <doc> "<descripción>"` | Igual que `/fg-plan` pero usa un documento externo como contexto primario del cambio. |
@@ -687,6 +688,28 @@ guarda el progreso en engram. La próxima invocación retoma donde quedó.
 
 Recomendación: correr cada batch en una sesión nueva para mantener el contexto del
 modelo fresco ("1 sesión = 1 ciclo").
+
+### El guard bloqueó un comando legítimo
+
+Dos opciones:
+
+- **Desactivar temporalmente** (sesión actual):
+  ```bash
+  export FORGE_GUARD_DISABLE=1
+  ```
+- **Ajustar la regla**: editar `docs/auditoria/guardrails.yaml` del proyecto, cambiar
+  `action: block` a `action: confirm` o borrar la regla que genera el falso positivo.
+  El archivo es del dev — forge no lo sobreescribe.
+
+El log `.forge/auditoria-guard.jsonl` registra qué patrón hizo match para facilitar
+el diagnóstico.
+
+### El resolver avisa que no hay skill-registry
+
+Correr `/fg-update-registry` en el proyecto. `/fg-setup` solo escribe un placeholder
+en `.atl/skill-registry.md`; el índice real con las paths de cada skill lo genera
+`/fg-update-registry`. También invocarla después de instalar, crear, mover o renombrar
+skills.
 
 ### Cómo verificar qué detecta el filtro PII en un prompt
 

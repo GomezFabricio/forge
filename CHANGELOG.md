@@ -358,10 +358,6 @@ invocable por intent natural en lugar de comando explícito.
 - **Flag `--global` del README**: ya removida del CLI en `6e4763b`, ahora también limpia en docs (#14).
 - **Referencias stale a `commands/fg-*.md`** en README: la estructura de depósito no usa `commands/` (#14).
 
-### Pendiente para próximas iteraciones
-
-- Fix de `PACKAGE_ROOT` en `bootstrap.py` para instalaciones wheel non-editable (ver TODO marcado).
-
 ## [0.1.0] — 2026-05-27
 
 ### Added

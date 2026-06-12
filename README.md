@@ -38,7 +38,7 @@ forge corre sobre **Claude Code** en Windows, macOS y Linux. La instalación es 
 | macOS 12+ | Apple Silicon (arm64), Intel (x64) | Soportado por diseño |
 | Linux (glibc) | x64, arm64 | Soportado por diseño |
 
-> **Sobre la validación, sin maquillaje**: el código tiene rutas explícitas para las tres plataformas (descarga de engram y CodeGraph por OS + arquitectura, scripts `.sh` y `.ps1`). La suite (482 tests) corre con subprocess y red mockeados y se ejercita principalmente en Windows; **todavía no hay CI multi-OS**. En macOS/Linux puede haber detalles del entorno por pulir.
+> **Sobre la validación, sin maquillaje**: el código tiene rutas explícitas para las tres plataformas (descarga de engram y CodeGraph por OS + arquitectura, scripts `.sh` y `.ps1`). La suite (~542 tests) corre con subprocess y red mockeados y se ejercita principalmente en Windows; **todavía no hay CI multi-OS**. En macOS/Linux puede haber detalles del entorno por pulir.
 
 ### Prerequisitos
 
@@ -106,10 +106,10 @@ La instalación ejecuta los siguientes pasos en cadena:
    - `agents/<name>.md` — los 14 agentes (copia flat): 6 reviewers especialistas (`code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`) + 8 executors `fg-*` (la capa agents del modelo de 3 capas, uno por fase).
    - `commands/fg-*.md` — los 8 entrypoints de slash command (capa commands del modelo de 3 capas).
    - (entrada en `~/.claude.json` `mcpServers.engram`) — registro MCP de engram en el archivo global de Claude Code (solo si engram se instala durante `forge install`).
-   - `settings.json` — registra el hook PII `UserPromptSubmit` (merge idempotente, preservando hooks existentes). Omitible con `--skip-pii-hook`.
+   - `settings.json` — registra el hook PII `UserPromptSubmit` y el hook de guardrails `PreToolUse` (merge idempotente, preservando hooks existentes). Omitibles con `--skip-pii-hook` y `--skip-guard-hook` respectivamente.
    - `CLAUDE.md` — la **doctrina global del orquestador** (el institucional). Reemplaza el `~/.claude/CLAUDE.md` actual respaldando el previo en `~/.claude/backup/forge/<fecha>/` si difiere; si ya es el de forge, no hace nada (idempotente).
 
-> **v0.1.0**: `forge install` está implementado end-to-end. Deposita skills, sub-agentes y commands en `~/.claude/`, instala la doctrina global del orquestador en `~/.claude/CLAUDE.md` (con backup del previo), y registra opcionalmente los MCP de engram/CodeGraph/Context7 y el hook PII en `~/.claude/settings.json`.
+> **v0.1.0**: `forge install` está implementado end-to-end. Deposita skills, sub-agentes y commands en `~/.claude/`, instala la doctrina global del orquestador en `~/.claude/CLAUDE.md` (con backup del previo), y registra opcionalmente los MCP de engram/CodeGraph/Context7 y los hooks PII y guardrails en `~/.claude/settings.json`.
 
 ### Después de instalar
 
@@ -148,7 +148,8 @@ Un cambio en forge sigue 4 fases por defecto, con una fase 0 opcional de explora
 Setup del proyecto (una vez):  /fg-setup
 Exploración (fase 0 opcional): /fg-explore
 Por cada cambio:               /fg-plan → /fg-design → /fg-implement → /fg-review
-Mantenimiento arquitectura:    /fg-update-arch  (sugerida por /fg-review)
+Mantenimiento arquitectura:    /fg-update-arch      (sugerida por /fg-review)
+Mantenimiento del registry:    /fg-update-registry  (tras instalar/crear/renombrar skills)
 ```
 
 ### Gradación de ceremonia
@@ -320,7 +321,7 @@ Independiente del TDD, el **modo de ejecución del ciclo** lo decide el dev al a
 - **Interactivo**: cada fase pausa al cerrar y espera confirmación del dev para seguir.
 - **Automático**: las fases se encadenan sin pausa hasta el final del ciclo.
 
-La elección se cachea para la sesión actual — `/fg-plan` pregunta una sola vez por sesión y reusa la respuesta para los ciclos siguientes. Sesión nueva → vuelve a preguntar. El cache no se persiste en filesystem.
+La elección se cachea para la sesión actual — el **orquestador** pregunta una sola vez al comenzar el primer ciclo SDD de la sesión y reusa la respuesta para los ciclos siguientes. Sesión nueva → vuelve a preguntar. El cache no se persiste en filesystem.
 
 ---
 
@@ -408,7 +409,7 @@ forge/
 │   ├── bootstrap.py             ← ejecutor de /fg-setup (instala forge en un proyecto)
 │   ├── installer.py             ← lógica de `forge install` (deposita skills, agents, MCP)
 │   ├── structural_detector.py   ← detector de cambios estructurales usado por /fg-review
-│   └── filters/                 ← capa de filtrado PII (hook UserPromptSubmit)
+│   ├── filters/                 ← capa de filtrado PII (hook UserPromptSubmit)
 │       ├── __init__.py
 │       ├── analyzer.py          ← orquesta los recognizers y produce detecciones
 │       ├── anonymizer.py        ← reemplaza entidades detectadas con placeholders
@@ -420,6 +421,8 @@ forge/
 │           ├── ar_cuit.py       ← CUIT/CUIL con dígito verificador AFIP
 │           ├── ar_dni.py        ← DNI argentino
 │           └── secrets.py       ← secretos técnicos (JWT, AWS keys, GitHub PAT, etc.)
+│   └── guards/                  ← capa de guardrails (hook PreToolUse)
+│       └── hook_pre_tool.py     ← punto de entrada del hook PreToolUse
 ├── skills/                      ← 8 skills + módulos compartidos (van a ~/.claude/skills/<stem>/SKILL.md y ~/.claude/skills/forge-shared/)
 │   ├── fg-setup.md
 │   ├── fg-explore.md
@@ -453,6 +456,7 @@ forge/
 │   ├── tareas.md
 │   ├── tareas-lite.md           ← template reducido para modo Rápido
 │   ├── decisiones.md
+│   ├── guardrails.yaml          ← plantilla de guardrails (depositada por /fg-setup)
 │   └── CLAUDE-md-institucional.md
 ├── docs/                        ← documentación interna del paquete
 │   └── codegraph-integration.md
