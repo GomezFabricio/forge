@@ -4,12 +4,18 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 import yaml
 
-from forge.guards.hook_pre_tool import process_hook, _is_guard_disabled, _hash_command
+from forge.guards.hook_pre_tool import (
+    MAX_COMMAND_LEN,
+    process_hook,
+    _is_guard_disabled,
+    _hash_command,
+)
 
 
 def _make_payload(command: str, cwd: str, tool_name: str = "Bash") -> dict:
@@ -430,6 +436,132 @@ class TestGuardrailsRegexFixes:
         """'git clean -X -- config-file.txt' must NOT trigger confirm (false positive gone)."""
         result = process_hook(_make_payload("git clean -X -- config-file.txt", str(template_cwd)))
         assert result == {}, "git clean -X -- config-file.txt was incorrectly matched"
+
+
+class TestTopLevelErrorAudit:
+    """Task A (D3): unexpected exceptions in process_hook must still fail open
+    AND leave a machine-readable audit trace (action="error"), never the raw command."""
+
+    def test_unexpected_exception_fails_open_and_audits(self, tmp_path, monkeypatch):
+        log_path = tmp_path / "guard.jsonl"
+        command = "rm -rf /super/secret/path"
+        _write_guardrails(tmp_path, [
+            {"pattern": "rm -rf", "action": "block", "reason": "bad"}
+        ])
+
+        # Force an unexpected exception deep inside process_hook by making
+        # rule evaluation blow up after input validation has passed.
+        import forge.guards.hook_pre_tool as hook_mod
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("synthetic failure inside evaluation")
+
+        monkeypatch.setattr(hook_mod, "_evaluate_rules", _boom)
+
+        # (1) Must NOT raise and must fail open with {}
+        result = process_hook(_make_payload(command, str(tmp_path)), log_path=log_path)
+        assert result == {}
+
+        # (2) An action="error" line must have been appended to the audit log
+        assert log_path.exists()
+        lines = [json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().split("\n")]
+        error_lines = [entry for entry in lines if entry.get("action") == "error"]
+        assert error_lines, "no action=error line written on top-level error path"
+
+        # (3) The raw command must NOT appear anywhere in the audit log
+        raw_log = log_path.read_text(encoding="utf-8")
+        assert command not in raw_log
+
+    def test_main_handler_audits_on_exception(self, tmp_path, monkeypatch):
+        """The main() top-level handler must also emit an audit error line when
+        process_hook itself somehow raises, while still exiting 0 with {}."""
+        import forge.guards.hook_pre_tool as hook_mod
+
+        log_path = tmp_path / ".forge" / "auditoria-guard.jsonl"
+        command = "echo top-level-secret-marker"
+        payload = json.dumps({
+            "tool_name": "Bash",
+            "cwd": str(tmp_path),
+            "tool_input": {"command": command},
+        })
+
+        # Make process_hook raise so main()'s outer guard is exercised.
+        def _boom(*args, **kwargs):
+            raise RuntimeError("synthetic process_hook failure")
+
+        monkeypatch.setattr(hook_mod, "process_hook", _boom)
+
+        # Drive main() with the payload on stdin and capture stdout.
+        import io
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload.encode("utf-8"))))
+        out = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", out)
+        err = io.StringIO()
+        monkeypatch.setattr(sys, "stderr", err)
+
+        rc = hook_mod.main()
+
+        # Fail-open: exit 0 and {} on stdout
+        assert rc == 0
+        assert json.loads(out.getvalue()) == {}
+
+        # Audit error line written, raw command absent
+        assert log_path.exists()
+        raw_log = log_path.read_text(encoding="utf-8")
+        lines = [json.loads(line) for line in raw_log.strip().split("\n")]
+        assert any(entry.get("action") == "error" for entry in lines)
+        assert command not in raw_log
+
+
+class TestReDoSLengthCap:
+    """Task B: a catastrophic-backtracking pattern fed an input LONGER than
+    MAX_COMMAND_LEN must return PROMPTLY because the input is truncated below
+    the blow-up threshold. This test cannot hang — it never relies on a timeout."""
+
+    def test_max_command_len_is_bounded(self):
+        assert isinstance(MAX_COMMAND_LEN, int)
+        assert 0 < MAX_COMMAND_LEN <= 100_000
+
+    def test_catastrophic_pattern_returns_promptly_and_fails_open(self, tmp_path):
+        log_path = tmp_path / "guard.jsonl"
+        # Classic catastrophic backtracking pattern.
+        _write_guardrails(tmp_path, [
+            {"pattern": "(a+)+$", "action": "block", "reason": "evil"}
+        ])
+        # Input MUCH longer than the cap and crafted to trigger exponential
+        # backtracking if it were not truncated: many 'a' then a non-matching char.
+        evil = "a" * (MAX_COMMAND_LEN + 5000) + "!"
+
+        start = time.monotonic()
+        result = process_hook(_make_payload(evil, str(tmp_path)), log_path=log_path)
+        elapsed = time.monotonic() - start
+
+        # Must return well under a generous bound. Without the cap, this same
+        # pattern against an unbounded input would spin for tens of seconds.
+        assert elapsed < 2.0, f"guard took {elapsed:.3f}s — length cap not effective"
+        # Fail-open contract: a decision dict or {} — never an exception.
+        assert isinstance(result, dict)
+
+    def test_cap_does_not_break_short_inputs(self, tmp_path):
+        """A normal-length command must still be evaluated and matched exactly."""
+        log_path = tmp_path / "guard.jsonl"
+        _write_guardrails(tmp_path, [
+            {"pattern": "rm -rf", "action": "block", "reason": "bad"}
+        ])
+        result = process_hook(_make_payload("rm -rf /tmp/x", str(tmp_path)), log_path=log_path)
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_match_within_cap_still_fires_on_long_command(self, tmp_path):
+        """If the matching substring is within the cap window, a very long command
+        is still blocked (the cap truncates the tail, not the head)."""
+        log_path = tmp_path / "guard.jsonl"
+        _write_guardrails(tmp_path, [
+            {"pattern": "rm -rf", "action": "block", "reason": "bad"}
+        ])
+        # 'rm -rf' is at the very start; a huge benign tail follows.
+        long_cmd = "rm -rf /tmp/x " + ("y" * (MAX_COMMAND_LEN + 1000))
+        result = process_hook(_make_payload(long_cmd, str(tmp_path)), log_path=log_path)
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 @pytest.mark.slow
