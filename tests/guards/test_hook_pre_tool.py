@@ -327,6 +327,111 @@ class TestTemplateFalsePositives:
         assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+class TestGuardrailsRegexFixes:
+    """Regression tests for the 4 regex fixes applied in guardrails.yaml.
+
+    "[fails now]" tests are expected to FAIL before the fixes are applied.
+    "[regression guard]" tests must stay passing before AND after the fixes.
+    """
+
+    @pytest.fixture()
+    def template_cwd(self, tmp_path):
+        """Deposit the real templates/guardrails.yaml into a tmp project."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        template_path = repo_root / "templates" / "guardrails.yaml"
+        guardrails_dir = tmp_path / "docs" / "auditoria"
+        guardrails_dir.mkdir(parents=True)
+        (guardrails_dir / "guardrails.yaml").write_text(
+            template_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        return tmp_path
+
+    # --- Fix 2: docker compose down volume flag anchoring ---
+
+    def test_docker_compose_down_remove_orphans_not_blocked(self, template_cwd):
+        """docker compose down --remove-orphans must NOT be blocked (false positive)."""
+        result = process_hook(_make_payload("docker compose down --remove-orphans", str(template_cwd)))
+        assert result == {}, "docker compose down --remove-orphans was incorrectly blocked"
+
+    def test_docker_compose_down_timeout_remove_orphans_not_blocked(self, template_cwd):
+        """docker compose down with other flags but no volume flag must NOT be blocked."""
+        result = process_hook(_make_payload("docker compose down --timeout 30 --remove-orphans", str(template_cwd)))
+        assert result == {}, "docker compose down --timeout 30 --remove-orphans was incorrectly blocked"
+
+    def test_docker_compose_down_v_still_blocked(self, template_cwd):
+        """docker compose down -v must still be blocked (regression guard)."""
+        result = process_hook(_make_payload("docker compose down -v", str(template_cwd)))
+        assert result != {}
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_docker_compose_down_v_terminator_still_blocked(self, template_cwd):
+        """docker compose down -v + shell terminator must still be blocked.
+
+        Mirrors the git push --force boundary: a command chained after -v with no
+        space (-v;cmd, -v&&cmd, -v|cmd) must not bypass the block rule.
+        """
+        result = process_hook(_make_payload("docker compose down -v;echo done", str(template_cwd)))
+        assert result != {}
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_docker_compose_down_volumes_flag_blocked(self, template_cwd):
+        """docker compose down --volumes must be blocked."""
+        result = process_hook(_make_payload("docker compose down --volumes", str(template_cwd)))
+        assert result != {}
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    # --- Fix 1: rm -rf leading whitespace / newline separator ---
+
+    def test_rm_rf_leading_space_blocked(self, template_cwd):
+        """' rm -rf /tmp/x' (leading space) must be blocked."""
+        result = process_hook(_make_payload(" rm -rf /tmp/x", str(template_cwd)))
+        assert result != {}, "rm -rf with leading space was not blocked"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_rm_rf_newline_separator_blocked(self, template_cwd):
+        """Commands separated by newline: 'echo hi\\nrm -rf /tmp/x' must be blocked."""
+        result = process_hook(_make_payload("echo hi\nrm -rf /tmp/x", str(template_cwd)))
+        assert result != {}, "rm -rf after newline was not blocked"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_rm_rf_bare_still_blocked(self, template_cwd):
+        """'rm -rf /tmp/x' (bare, no separator) must still be blocked (regression guard)."""
+        result = process_hook(_make_payload("rm -rf /tmp/x", str(template_cwd)))
+        assert result != {}
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_git_rm_rf_cached_not_blocked(self, template_cwd):
+        """'git rm -rf --cached file' must NOT be blocked (critical regression guard)."""
+        result = process_hook(_make_payload("git rm -rf --cached file", str(template_cwd)))
+        assert result == {}, "git rm -rf --cached was incorrectly blocked"
+
+    # --- Fix 3: git push --force shell terminators ---
+
+    def test_git_push_force_semicolon_asks(self, template_cwd):
+        """'git push --force;' (semicolon terminator) must fire confirm/ask."""
+        result = process_hook(_make_payload("git push --force;", str(template_cwd)))
+        assert result != {}, "git push --force; did not trigger a confirm"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+    def test_git_push_force_with_lease_not_matched(self, template_cwd):
+        """'git push --force-with-lease' must NOT be matched (regression guard)."""
+        result = process_hook(_make_payload("git push --force-with-lease", str(template_cwd)))
+        assert result == {}, "git push --force-with-lease was incorrectly matched"
+
+    # --- Fix 4: git clean false positive on pathspec ---
+
+    def test_git_clean_fd_still_asks(self, template_cwd):
+        """'git clean -fd' must still trigger confirm/ask (regression guard)."""
+        result = process_hook(_make_payload("git clean -fd", str(template_cwd)))
+        assert result != {}
+        assert result["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+    def test_git_clean_pathspec_config_file_not_matched(self, template_cwd):
+        """'git clean -X -- config-file.txt' must NOT trigger confirm (false positive gone)."""
+        result = process_hook(_make_payload("git clean -X -- config-file.txt", str(template_cwd)))
+        assert result == {}, "git clean -X -- config-file.txt was incorrectly matched"
+
+
 @pytest.mark.slow
 class TestE2ESubprocess:
     def test_e2e_block_rule(self, tmp_path):
