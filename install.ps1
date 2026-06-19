@@ -12,13 +12,15 @@
 # Cualquier argumento extra se pasa tal cual a `forge install`
 # (ej: --skip-context7, --install-codegraph, --skip-pii-hook).
 #
-# Nota: NO usamos `$ErrorActionPreference = 'Stop'` de forma global. En Windows
-# PowerShell 5.1, cuando un ejecutable nativo (python/pip/pipx) escribe en stderr,
-# PowerShell envuelve esa salida en un `NativeCommandError` terminante. Como pip y
-# pipx escriben avisos normales en stderr, con 'Stop' el script abortaría en
-# operaciones que en realidad fueron exitosas. En su lugar verificamos
-# `$LASTEXITCODE` después de cada paso, que es la forma fiable de detectar fallos
-# de comandos nativos.
+# IMPORTANTE: fijamos 'Continue' EXPLÍCITAMENTE. En Windows PowerShell 5.1, cuando
+# un ejecutable nativo (python/pip/pipx) escribe en stderr, PowerShell envuelve esa
+# salida en un `NativeCommandError`; con `$ErrorActionPreference = 'Stop'` eso se
+# vuelve terminante y aborta el script aunque el comando haya sido exitoso (pip y
+# pipx escriben avisos normales en stderr). Al invocarse vía `iwr ... | iex`, el
+# script corre en el scope de la sesión y HEREDA su ErrorActionPreference, así que
+# no alcanza con "no ponerlo en Stop": hay que forzarlo a 'Continue'. Los fallos
+# reales se detectan verificando `$LASTEXITCODE` después de cada comando nativo.
+$ErrorActionPreference = 'Continue'
 
 $RepoUrl = if ($env:FORGE_REPO_URL) {
     $env:FORGE_REPO_URL
@@ -41,8 +43,9 @@ if (-not $python) {
     Stop-Install 'se requiere Python 3.10 o superior. Instalalo y volvé a correr.'
 }
 
-# 2. Asegurar pipx (lo invocamos vía módulo para no depender del PATH de esta sesión)
-& $python -m pipx --version *> $null
+# 2. Asegurar pipx. Detectamos con `find_spec` (no imprime nada) en vez de
+#    `python -m pipx --version`, que escupe "No module named pipx" a stderr.
+& $python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('pipx') else 1)"
 if ($LASTEXITCODE -ne 0) {
     Write-Step 'pipx no encontrado — instalando con pip --user...'
     & $python -m pip install --user pipx
