@@ -93,7 +93,7 @@ re-evalúa (`fg-plan.md:176`).
 
 ---
 
-### Paso 5 — `/fg-plan` infiere tipo, nombre y contexto; pregunta al dev
+### Paso 5 — `/fg-plan` infiere tipo, nombre y contexto
 
 Antes de ejecutar, `/fg-plan` corre el gate de re-detección lazy (`fg-phase-common.md`,
 Sección A — `needs_detection()`). El stack no cambió desde el último ciclo — la detección

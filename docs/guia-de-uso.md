@@ -162,8 +162,9 @@ Esta sección resume cada escenario. Para verlos desarrollados paso a paso —qu
 **Lo que forge hace:**
 
 1. Detecta que no hay `.forge/` ni manifiestos → corre `/fg-setup` en modo `bootstrap`.
-2. Conversa con el dev para capturar la visión (qué es el sistema, quién lo usa, stack,
-   módulos principales).
+2. El **orquestador** conversa con el dev para capturar la visión (qué es el sistema,
+   quién lo usa, stack, módulos principales) — la fase `fg-setup` no conversa; recibe
+   el resultado y escribe los docs (ver sección 11).
 3. Genera `docs/arquitectura/overview.md` y `stack.md` con lo que el dev mencionó —
    sin inventar nada.
 4. Arranca `/fg-plan` iterativo para el primer cambio.
@@ -779,6 +780,15 @@ El progreso de implementación (`implement-progress`) es el único que se **merg
 Si alguna dispara, el cambio se marca `structural: true` en el frontmatter del `README` y `/fg-review` **sugiere** `/fg-update-arch` (nunca lo auto-invoca). Si CodeGraph no está disponible, la heurística 4 se omite en silencio.
 
 La configuración vive en `config/modulos-transversales.yaml` del proyecto: `transversal_paths` (viene **vacío** — el equipo lo llena con la heurística "si toco este path, ¿se rompen tests en módulos no relacionados?"), `manifest_files` (12 manifiestos estándar) y `migration_paths` (5 paths de ORM). Se deposita con copy-if-missing: si ya existe, se preserva.
+
+### El orquestador pregunta, los executors no
+
+Las skills `fg-*` corren como executors (sub-agentes) y **no pueden preguntarle al dev**: Claude Code no expone `AskUserQuestion` ni prompts interactivos a los sub-agentes. Por eso toda interacción con el dev la maneja el **orquestador**:
+
+- Cuando una fase necesita una decisión, la devuelve como dato en el campo `decisions_needed` de su envelope (o `status: blocked` si no puede avanzar). El orquestador la lee, le pregunta al dev —con `AskUserQuestion` cuando las opciones son discretas, así aparecen como formulario clicable— y re-invoca la fase con la respuesta resuelta.
+- Los flujos multi-turno (la conversación de visión de `/fg-setup`, la aprobación diff-por-archivo de ADRs de `/fg-update-arch`) también los conduce el orquestador: la fase devuelve los datos (preguntas guía, propuestas), el orquestador conversa o itera, y re-invoca para que la fase escriba o aplique el resultado.
+
+Contrato completo en `skills/_shared/fg-phase-common.md` (Sección B.1) y la doctrina en el `CLAUDE.md` institucional.
 
 ---
 

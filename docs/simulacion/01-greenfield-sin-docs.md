@@ -76,20 +76,21 @@ para inicializarse en un directorio vacío. Config resultante:
 `pending_detection:true`, `stacks:[]`.
 Ref: `skills/fg-setup.md:42-52`.
 
-### Paso 4 — Oferta de git init
+### Paso 4 — Oferta de git init (la pregunta la hace el orquestador)
 
-Como no existe `.git/`, fg-setup pregunta **una sola vez**:
+Como no existe `.git/`, fg-setup **no pregunta inline** (es un sub-agente y no puede). Devuelve la decisión en `decisions_needed` y sigue con el setup sin git:
 
-> "No encontré un repositorio git. ¿Querés que corra git init ahora? (s/n)"
+```yaml
+decisions_needed:
+  - question: "No encontré un repositorio git en el proyecto. ¿Querés que se corra git init?"
+    options: [Sí, No]
+    default: Sí
+```
 
-El dev responde "s". La skill corre `git init` y reporta
-`git_initialized:true` en el envelope. Si el dev hubiera dicho "n", la skill
-continúa sin git y no insiste.
+El **orquestador** lee eso y le pregunta al dev con `AskUserQuestion` (le aparece como formulario Sí/No). El dev elige "Sí"; el orquestador corre `git init` (o re-invoca el setup) y queda `git_initialized:true`.
 
-Nota: el Python (`bootstrap.run()`) solo reporta si `.git/` existe o no; la
-decisión de ofrecerlo y ejecutarlo es responsabilidad de la skill, no del
-código.
-Ref: `skills/fg-setup.md:53-60`.
+Nota: el Python (`bootstrap.run()`) solo reporta si `.git/` existe o no; nunca corre git init.
+Ref: `skills/fg-setup.md:53-60`; `skills/_shared/fg-phase-common.md` Sección B.1.
 
 **Artefacto:** `.git/`
 
@@ -144,27 +145,24 @@ Ref: `skills/fg-setup.md:90-173, 26-31, 152-154`; `guia-de-uso.md:178`.
 fg-setup intenta inicializar CodeGraph. En un directorio vacío no hay código
 que indexar: reporta 0 nodos, 0 aristas. No bloquea la continuación.
 
-Si el binario de CodeGraph no estuviera disponible, fg-setup preguntaría al
-dev si continuar en modo degradado o instalarlo primero. En este caso el
-binario existe, pero no hay código.
-Ref: `skills/fg-setup.md:156-161`.
+Si el binario de CodeGraph no estuviera disponible, fg-setup **no pregunta inline**: devuelve la decisión en `decisions_needed` (seguir degradado o instalarlo primero) y el orquestador la resuelve con el dev. En este caso el binario existe, pero no hay código.
+Ref: `skills/fg-setup.md:156-161`; `skills/_shared/fg-phase-common.md` Sección B.1.
 
 **Artefacto:** `.codegraph/` (vacío).
 
-### Paso 8 — Conversación de Visión: arranque (solo bootstrap)
+### Paso 8 — La visión hace falta: fg-setup la deriva al orquestador
 
-El sub-flow de Visión corre **únicamente en modo bootstrap**. La idempotencia
-funciona así:
+El sub-flow de Visión corre **únicamente en modo bootstrap**, pero **fg-setup NO lo conduce**: es un sub-agente y no puede conversar con el dev. La fase solo chequea la idempotencia:
 
 - Si `overview.md` ya existe → `vision_status:preserved`, se saltea.
-- Si `vision_skipped:true` en config → pregunta una vez si retomar.
-- Ninguna condición aplica aquí → arranca la primera ronda.
+- Si `vision_skipped:true` en config → devuelve `decisions_needed` ("¿Reintentar la visión?") para que el orquestador decida.
+- Ninguna condición aplica aquí → fg-setup devuelve `vision_status:pending-orchestrator` y, en `decisions_needed`, la señal de que el orquestador debe conducir la conversación (con las 5 preguntas guía). El resto del setup (config, guardrails, CodeGraph, registry placeholder) ya quedó hecho — `pending-orchestrator` no bloquea esos artefactos.
 
-Ref: `skills/fg-setup.md:175-186`.
+Ref: `skills/fg-setup.md:181-216`; `skills/_shared/fg-phase-common.md` Sección B.1.
 
-### Paso 9 — Primera ronda: 5 preguntas de visión
+### Paso 9 — El orquestador conduce la conversación de visión
 
-fg-setup hace las 5 preguntas:
+El **orquestador** (no la fase) le hace al dev las 5 preguntas guía, en texto libre:
 
 1. ¿Qué es el sistema, quién lo usa, qué problema resuelve?
 2. ¿Multi-tenant o single-tenant? ¿Qué roles de usuario?
@@ -180,42 +178,28 @@ El dev responde:
 4. Backend Python con FastAPI, frontend React, base Postgres.
 5. Módulos: pacientes, profesionales, agenda de turnos.
 
-La skill usa **exclusivamente lo mencionado**. No inventa módulos (notificaciones,
-pagos, multi-clínica) ni decisiones técnicas no dichas.
-Ref: `skills/fg-setup.md:188-200`.
+El dev cubrió los cinco temas, así que no hace falta una segunda ronda de calibración (que pediría solo lo no mencionado). El orquestador usa **exclusivamente lo dicho**: no inventa módulos (notificaciones, pagos, multi-clínica) ni decisiones técnicas no mencionadas.
 
-### Paso 10 — Segunda ronda de calibración
+### Paso 10 — El orquestador destila y confirma los drafts
 
-La segunda ronda pregunta **solo lo que el dev no mencionó en la primera**.
-En este caso el dev cubrió los cinco temas: no queda nada pendiente. No hay
-segunda ronda real.
-Ref: `skills/fg-setup.md:202-212`.
+El orquestador destila borradores de `overview.md` y `stack.md` con solo lo dicho, y se los muestra al dev:
 
-### Paso 11 — Destilación y confirmación de drafts
-
-fg-setup destila borradores de `overview.md` y `stack.md` con solo lo dicho, y
-los muestra en bloques cercados. Contenido resultante:
-
-- `overview.md`: clínica single-tenant, roles recepcionista/profesional/admin,
-  módulos pacientes/profesionales/agenda.
+- `overview.md`: clínica single-tenant, roles recepcionista/profesional/admin, módulos pacientes/profesionales/agenda.
 - `stack.md`: FastAPI (Python), React, Postgres, auth email+password.
 
-Pregunta: **"¿Aceptás estos drafts? [s/n/editar]"**
+Pregunta la aceptación con `AskUserQuestion` (opciones discretas: **Aceptar / Editar / Rechazar**), así le aparece al dev como formulario clicable. El dev elige "Aceptar". ("Editar" permite una iteración de ajuste; "Rechazar" deja la visión saltada.)
 
-El dev responde "s". La skill llama `bootstrap.create_arquitectura_docs(...)` y
-`bootstrap.patch_config_stacks(root, ['Python', 'Node'])` para actualizar
-`context.stacks` en `config.yaml`. `vision_status:completed`.
+### Paso 11 — Re-invocación: fg-setup escribe los docs
 
-Alternativas: "editar" permite una sola iteración de ajuste; "n" llama
-`mark_vision_skipped()` y persiste `vision_skipped:true` en config.
+Con los drafts aceptados, el orquestador **re-invoca a fg-setup** pasándole el `overview_content` y el `stack_content`. fg-setup (idempotente) llama `bootstrap.create_arquitectura_docs(...)` y `bootstrap.patch_config_stacks(root, ['Python', 'Node'])` para actualizar `context.stacks` en `config.yaml`. `vision_status:completed`.
 
-Ref: `skills/fg-setup.md:214-236`.
+Si el dev hubiera rechazado, el orquestador informa el skip y fg-setup llama `mark_vision_skipped()`, persistiendo `vision_skipped:true` en config.
 
-**Artefactos:** `docs/arquitectura/overview.md`, `docs/arquitectura/stack.md`,
-`docs/auditoria/config.yaml` (stacks parcheados).
+Ref: `skills/fg-setup.md:181-216` (paso 10 reescrito: la fase reporta, el orquestador conduce y re-invoca).
 
-Nota: `overview.md` y `stack.md` se generan **únicamente en modo bootstrap**
-(conversación de Visión). En modo adopt fg-setup no los crea.
+**Artefactos:** `docs/arquitectura/overview.md`, `docs/arquitectura/stack.md`, `docs/auditoria/config.yaml` (stacks parcheados).
+
+Nota: `overview.md` y `stack.md` se generan **únicamente en modo bootstrap**. En modo adopt fg-setup no los crea.
 
 ### Paso 12 — Reporte final de fg-setup
 
@@ -319,9 +303,9 @@ Branch 3b (abortar por falta de contexto) solo se activaría si overview.md
 fuera `None` Y `stacks==[]` Y `vision_skipped==false`. No es el caso.
 Ref: `skills/fg-plan.md:81-121`.
 
-### Paso 20 — Preguntas sobre el problema (no sobre el naming)
+### Paso 20 — Clarificación del problema (no del naming)
 
-fg-plan pregunta sobre **alcance y restricciones**, nunca sobre el nombre:
+fg-plan identifica huecos de **alcance y restricciones** (nunca el nombre) y los devuelve en `decisions_needed`; el **orquestador** se los pregunta al dev:
 
 > "¿Los horarios son bloques recurrentes semanales o fechas puntuales?
 > ¿Hay duración fija de turno por profesional?
@@ -377,10 +361,10 @@ Ref: `guia-de-uso.md:293-297`; `skills/fg-review.md:35`;
 
 | Pregunta | Momento | Se cachea / persiste |
 |---|---|---|
-| ¿Querés que corra git init ahora? (s/n) | fg-setup, paso bootstrap, cuando no existe `.git/` | Acción inmediata. No se cachea. Reporta `git_initialized` en envelope. No insiste si "n". |
-| 5 preguntas de Visión (qué es / tenant+roles / canal+auth / stack / módulos) | fg-setup paso 10b, solo en bootstrap | Destiladas en `docs/arquitectura/overview.md` y `stack.md`. Stacks parcheados en `config.yaml`. |
-| 2da ronda de calibración: solo lo no mencionado en 10b | fg-setup paso 10c | En este caso: no hubo segunda ronda (dev cubrió todo). Lo que se preguntara se destila a overview/stack. |
-| ¿Aceptás estos drafts? [s/n/editar] | fg-setup paso 10d, tras destilar | "s" persiste los archivos. "editar" permite UNA iteración. "n" escribe `vision_skipped:true` en `config.yaml` (persistido). |
+| ¿Correr git init? (Sí/No) | El orquestador, vía `AskUserQuestion`, cuando fg-setup reporta que no existe `.git/` (`decisions_needed`) | Acción inmediata. No se cachea. Reporta `git_initialized` en envelope. |
+| 5 preguntas de Visión (qué es / tenant+roles / canal+auth / stack / módulos) | El orquestador, en texto libre, cuando fg-setup devuelve `vision_status:pending-orchestrator` (solo bootstrap) | El orquestador destila las respuestas; re-invoca fg-setup, que escribe `overview.md`/`stack.md` y parchea stacks en `config.yaml`. |
+| 2da ronda de calibración: solo lo no mencionado | El orquestador, si quedó algo sin cubrir en la 1ra ronda | En este caso no hubo (el dev cubrió todo). |
+| ¿Aceptás estos drafts? (Aceptar/Editar/Rechazar) | El orquestador, vía `AskUserQuestion`, tras destilar | "Aceptar" → re-invoca fg-setup que persiste los archivos. "Editar" → una iteración. "Rechazar" → `vision_skipped:true` en `config.yaml`. |
 | ¿Interactivo o automático? (default del proyecto: interactivo) | El orquestador lo pregunta 1x por sesión, antes del primer ciclo | Cacheado en memoria de sesión. NO persistido. Sesión nueva → vuelve a preguntar. |
 | ¿Bloques semanales o fechas puntuales? ¿Duración fija? ¿Feriados en este slice? | fg-plan, sobre el problema (nunca sobre el naming) | Volcado a `README.md` del cambio (Alcance / Restricciones). |
 
@@ -448,7 +432,7 @@ puede re-correr `/fg-setup`: la idempotencia detecta que `overview.md` no
 existe y la Visión no está marcada como skipped, por lo que reintenta.
 
 **Dev que declina la Visión.**
-Si el dev responde "n" al draft o dice "saltar" en las preguntas, `overview.md`
+Si el dev elige "Rechazar" el draft (o declina las preguntas), el orquestador informa el skip y `overview.md`
 y `stack.md` no se generan. `/fg-plan` operará en Branch 3c (contexto
 desconocido, modo degradado): puede continuar pero con contexto limitado.
 
@@ -509,7 +493,7 @@ validaciones de ciclo TDD. Para activarlo: editar `config.yaml`.
   selecciona modo bootstrap automáticamente. No hace falta invocar `/fg-setup`
   manualmente.
 
-- La Conversación de Visión destila `overview.md` y `stack.md` usando
+- La Conversación de Visión la conduce el **orquestador**; destila `overview.md` y `stack.md` usando
   exclusivamente lo que el dev dijo. No infiere módulos ni decisiones técnicas
   no mencionadas. Un dev que olvide un módulo puede agregarlo después con
   `/fg-update-arch`.

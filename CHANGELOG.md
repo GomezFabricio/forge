@@ -8,6 +8,22 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Modelo de interacción — los executors no preguntan al dev, el orquestador resuelve
+
+#### Changed
+
+- **Las skills `fg-*` ya no le preguntan al dev de forma inline.** Un sub-agente no puede usar `AskUserQuestion` ni prompts interactivos (restricción de Claude Code), así que las fases reportan las decisiones como dato y el **orquestador** las resuelve. Nuevo campo `decisions_needed` en el envelope (`skills/_shared/fg-phase-common.md`, Sección B.1); el orquestador pregunta —con `AskUserQuestion` cuando las opciones son discretas— y re-invoca la fase con la respuesta resuelta. Alinea forge con el patrón de SDD (los executors reportan blockers, el orquestador interactúa).
+- **`fg-setup`**: la conversación de visión (bootstrap) la conduce ahora el orquestador. La fase devuelve `vision_status: pending-orchestrator` y, en la re-invocación, escribe `overview.md`/`stack.md` desde el contenido aceptado. git init, manifiesto polyglot y CodeGraph degradado pasan por `decisions_needed`.
+- **`fg-plan`**: ambigüedad de tipo/nombre y clarificación de scope → `decisions_needed`.
+- **`fg-design`**: cambio activo, estrategia de migración legacy, `size:exception`, decisiones técnicas no obvias y re-correr/sobrescribir → `decisions_needed`.
+- **`fg-review`**: severidad/scope ambiguos → `decisions_needed`.
+- **`fg-update-arch`**: las propuestas de ADR se devuelven como lista de datos (`proposals`); el orquestador itera la aprobación (aceptar/editar/rechazar con `AskUserQuestion`) y re-invoca con `proposal_decisions` para aplicar.
+- **`templates/CLAUDE-md-institucional.md`**: doctrina del orquestador como dueño de la interacción + los dos patrones multi-turno (conversación guiada, aprobación multi-ítem).
+
+#### Fixed
+
+- **Inconsistencias de documentación en las skills**: `fg-setup.md` ahora documenta que deposita `docs/auditoria/guardrails.yaml`; `fg-implement.md` condiciona la escritura de `evidencia-tdd.md` a Strict TDD activo (antes la prosa y el envelope se contradecían). Eliminado el archivo huérfano `.forge/redactions.jsonl`.
+
 ### D12 + P1 — Nueva fase /fg-update-registry y skill-resolver reescrito al modelo índice/paths
 
 #### Added
