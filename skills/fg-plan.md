@@ -65,10 +65,15 @@ Ejemplos:
 
 ### 3. Validar inferencia ambigua
 
-Si una de las inferencias no es clara (la descripción podría caer en dos tipos, o el nombre tiene múltiples interpretaciones razonables), preguntar al dev antes de continuar. Mentor cordial: stop on confusion, never assume.
+Si una de las inferencias no es clara (la descripción podría caer en dos tipos, o el nombre tiene múltiples interpretaciones razonables), **NO preguntar inline** (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1). Devolver `status: blocked` con la ambigüedad en `decisions_needed`, con las interpretaciones como opciones discretas:
 
-Ejemplo de pregunta:
-> "La descripción podría ser `feat-login-usuarios` (sistema nuevo) o `refactor-login-existente` (refactor del actual). ¿Cuál corresponde?"
+```yaml
+decisions_needed:
+  - question: "La descripción es ambigua. ¿Cuál corresponde?"
+    options: [feat-login-usuarios (sistema nuevo), refactor-login-existente (refactor del actual)]
+```
+
+El orquestador le pregunta al dev (con `AskUserQuestion`, así elige de la lista) y re-invoca pasando el tipo/nombre resuelto. Mentor cordial: stop on confusion, never assume — pero la pregunta la hace el orquestador, no la fase.
 
 ### 4. Crear la carpeta del cambio
 

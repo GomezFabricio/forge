@@ -230,6 +230,16 @@ Al delegar a un agent, el orquestador pasa:
 - **(a) Skill path**: el path exacto del `SKILL.md` a leer antes de arrancar (ej. `skills/fg-implement/SKILL.md`).
 - **(b) Engram topic keys**: los topic keys de los artefactos previos del cambio (README, diseño, tareas, progreso anterior) para que el agent los recupere vía `mem_search` + `mem_get_observation`.
 - **(c) Strict TDD forwarding**: si `rules.implement.tdd: true`, el orquestador incluye explícitamente el `test_command` y la obligación de seguir el ciclo de 7 pasos. El agent NO debe inferir esto por su cuenta — lo recibe del orquestador.
+- **(d) Decisiones resueltas**: cualquier decisión del dev que la fase necesite y que el orquestador ya resolvió (cuál es el cambio activo, modo de ciclo, delivery strategy, o las respuestas a un `decisions_needed` de una invocación previa). El agent las recibe ya resueltas — NO pregunta.
+
+#### Interacción con el dev — el orquestador pregunta, los executors no
+
+Los agents `fg-*` corren como sub-agentes y **no pueden preguntarle al dev**: Claude Code no expone `AskUserQuestion` ni prompts interactivos a los sub-agentes. Toda interacción dev-facing es responsabilidad del **orquestador**:
+
+- Cuando un agent necesita una decisión, la devuelve en el campo `decisions_needed` de su envelope (y `status: blocked` si no puede avanzar sin ella). Contrato completo en `skills/_shared/fg-phase-common.md`, Sección B.1.
+- El orquestador lee esas decisiones y le pregunta al dev. **Cuando las opciones son discretas, usa la tool `AskUserQuestion`** para que aparezcan como formulario clicable; si la respuesta es abierta, pregunta en texto libre.
+- El orquestador resuelve, **re-invoca la fase pasando la respuesta como contexto (d)**, y cachea las decisiones de sesión (modo de ciclo, delivery strategy) para no volver a preguntar en el mismo ciclo.
+- Decisiones conocidas de antemano (cuál es el cambio activo, modo de ciclo) → el orquestador pregunta ANTES de delegar. Decisiones emergentes (estrategia de migración, severidad ambigua) → las recibe en `decisions_needed` y re-invoca.
 
 **Principio rector**: una skill puede delegar a un sub-agente especialista cuando necesita información que ese agente produce y la skill no puede computar por sí misma. Hoy aplica a `/fg-review` (miradas de review) y `/fg-design` (impacto legacy pre-implementación).
 

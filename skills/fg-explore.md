@@ -48,8 +48,14 @@ Identificar la carpeta del cambio activo bajo `docs/auditoria/cambios/`.
 
 Si no existe ningún cambio activo o no se puede identificar la carpeta:
 
-- Preguntar al dev: "¿Cuál es el cambio activo? (ej: `2026-05-feat-login-usuarios`)"
-- Si el dev no puede especificarlo, abortar con mensaje claro:
+- NO preguntar inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1). Devolver `status: blocked` y, si hay varias carpetas candidatas, listarlas en `decisions_needed`:
+  ```yaml
+  decisions_needed:
+    - question: "¿Cuál es el cambio activo para explorar?"
+      options: [<carpetas candidatas bajo docs/auditoria/cambios/>]
+  ```
+  El orquestador resuelve cuál es el cambio (o crea la carpeta con `/fg-plan`) y re-invoca pasándolo en el contexto.
+- Si no hay ninguna carpeta de cambio, `status: blocked` con la razón en `risks`:
   > "No se encontró ninguna carpeta de cambio activo bajo `docs/auditoria/cambios/`. El orquestador debe crear la carpeta del cambio antes de invocar `/fg-explore`."
 - **MUST NOT** generar ningún artefacto parcial antes de resolver este gate.
 
@@ -151,14 +157,15 @@ Crear `docs/auditoria/cambios/<cambio>/exploracion.md` desde `templates/explorac
 
 Si `exploracion.md` ya existe para el cambio activo:
 
-- NO sobrescribir silenciosamente.
-- Mostrar al dev:
-  > "Ya existe `exploracion.md` para `<cambio>`. ¿Qué querés hacer?
-  > 1. **Regenerar** — reemplazar con el mapa actualizado (esta ejecución).
-  > 2. **Conservar** — mantener el existente, abortar esta ejecución.
-  > 3. **Abortar** — revisar el existente manualmente antes de decidir."
-- Si el dev elige Regenerar: sobrescribir con el mapa nuevo.
-- Si el dev elige Conservar o Abortar: retornar `status: success` (con nota en `risks`) sin modificar el archivo.
+- NO sobrescribir silenciosamente, y NO preguntar inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1).
+- Devolver `status: blocked` con `decisions_needed`:
+  ```yaml
+  decisions_needed:
+    - question: "Ya existe `exploracion.md` para <cambio>. ¿Qué hacer?"
+      options: [Regenerar, Conservar, Abortar]
+      default: Conservar
+  ```
+- El orquestador pregunta y re-invoca con la decisión: **Regenerar** → la fase sobrescribe con el mapa nuevo; **Conservar/Abortar** → la fase retorna `status: success` (con nota en `risks`) sin modificar el archivo.
 
 **Contenido del archivo** (poblar las 6 secciones de `templates/exploracion.md`):
 
@@ -200,7 +207,7 @@ Cuando CodeGraph no está indexado o disponible, `/fg-explore` **MUST NOT bloque
 
 - Ejecutar el gate del paso 2 antes de generar cualquier artefacto: sin carpeta del cambio activo, no avanzar.
 - Usar los tool names reales de CodeGraph: `mcp__codegraph__codegraph_explore`, `mcp__codegraph__codegraph_search`, `mcp__codegraph__codegraph_files`, `mcp__codegraph__codegraph_node`, `mcp__codegraph__codegraph_callers`, `mcp__codegraph__codegraph_callees`, `mcp__codegraph__codegraph_impact`, `mcp__codegraph__codegraph_status`. No usar narrativa vaga como "consultar CodeGraph" sin el nombre del tool.
-- Respetar la idempotencia (paso 6): si `exploracion.md` ya existe, preguntar antes de sobrescribir.
+- Respetar la idempotencia (paso 6): si `exploracion.md` ya existe, devolver `decisions_needed` (no preguntar inline) antes de sobrescribir.
 - Incluir los 4 campos del bloque de señales fuertes en toda ejecución — con valores conservadores bajo degradación.
 - Retornar `status: partial` (nunca `blocked`) cuando CodeGraph no está disponible.
 - Escribir `exploracion.md` en español.

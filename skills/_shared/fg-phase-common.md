@@ -59,6 +59,7 @@ artifacts:
 next_recommended: <siguiente skill o comando sugerido>
 risks: None | <descripción de riesgos detectados>
 skill_resolution: paths-injected | fallback-registry | fallback-path | none
+decisions_needed: None | <decisiones que el orquestador debe resolver con el dev — ver Sección B.1>
 ```
 
 > **Fuente canónica del enum `skill_resolution`**: los cuatro valores válidos (`paths-injected`, `fallback-registry`, `fallback-path`, `none`) están definidos aquí. Cualquier skill que liste el campo en su envelope DEBE usar exactamente estos valores.
@@ -85,6 +86,33 @@ Cada skill agrega campos propios **sin remover los base**:
 | `success` | Todos los pasos completados sin bloqueos. |
 | `partial` | Algunos pasos completados; tareas pendientes reportadas al dev. |
 | `blocked` | La skill no puede avanzar sin acción del dev. La razón está en `risks`. |
+
+---
+
+## Sección B.1 — Interacción con el dev (los executors NO preguntan)
+
+> **Regla de interacción (executor boundary).** Las skills `fg-*` corren como executors (sub-agentes). Un sub-agente **NO puede preguntarle al dev de forma interactiva** — Claude Code lo prohíbe (`AskUserQuestion` y cualquier prompt interactivo no están disponibles para sub-agentes). Por lo tanto **ninguna skill `fg-*` formula preguntas al dev directamente.**
+
+Cuando una fase necesita una decisión del dev:
+
+1. La devuelve como DATO en el campo `decisions_needed` del envelope. Si no puede avanzar sin esa decisión, además setea `status: blocked` con la razón en `risks`.
+2. El **ORQUESTADOR** lee `decisions_needed`, le pregunta al dev — usando `AskUserQuestion` cuando las opciones son discretas, para que aparezcan como formulario clicable — resuelve, y **re-invoca la fase pasándole la respuesta ya resuelta** en el contexto de lanzamiento.
+3. Los executors **REPORTAN**; el orquestador es el único que **INTERACTÚA** con el dev.
+
+Formato de cada entrada de `decisions_needed`:
+
+```yaml
+decisions_needed:
+  - question: <texto claro y autocontenido>
+    options: [<opción1>, <opción2>, ...]   # si son discretas → el orquestador usa AskUserQuestion
+    default: <opción sugerida>             # opcional
+```
+
+Dos modos según cuándo se conoce la decisión:
+- **Conocida de antemano** (cuál es el cambio activo, modo de ciclo, etc.): el orquestador pregunta ANTES de delegar y pasa la respuesta en el contexto de lanzamiento del executor.
+- **Emergente** (estrategia de migración descubierta en `/fg-design`, severidad ambigua en `/fg-review`, etc.): el executor la devuelve en `decisions_needed`; el orquestador pregunta y re-invoca.
+
+Si la respuesta es abierta (no discreta), el orquestador pregunta en texto libre — pero la pregunta siempre sale del orquestador, nunca del executor.
 
 ---
 
@@ -120,7 +148,7 @@ Al final de `/fg-design`, estimar las líneas cambiadas del PR resultante:
 |---|---|
 | `off` | No mencionar el budget en ningún momento. Terminar inmediatamente. 1 issue = 1 MR sin fricción. |
 | `warn` | Si `estimated_changed_lines > budget_lines`: emitir bloque informativo. No bloquear. Continuar. |
-| `block` | Si `estimated_changed_lines > budget_lines`: pedir al dev `size:exception` documentada antes de continuar. No avanzar sin justificación. |
+| `block` | Si `estimated_changed_lines > budget_lines`: setear `decision_needed_before_apply: Yes`, devolver la decisión en `decisions_needed` y `status: blocked`. El **orquestador** le pide al dev una `size:exception` documentada antes de continuar (Sección B.1). La fase NO pregunta directamente. |
 
 ### Bloque de salida (campo `review_workload_forecast` en el envelope de `/fg-design`)
 
@@ -160,7 +188,7 @@ Estimated changed lines: N
 
 ### Modos de delivery strategy
 
-Cuando el forecast indica riesgo (`enforcement: warn` o `block`), mostrar al dev las opciones disponibles:
+Cuando el forecast indica riesgo (`enforcement: warn` o `block`), la fase lo reporta en `review_workload_forecast` y, si requiere decisión, en `decisions_needed`. El **orquestador** (no la fase) le muestra al dev estas opciones, vía `AskUserQuestion` (Sección B.1):
 
 | Modo | Descripción |
 |---|---|
@@ -194,7 +222,7 @@ Una vez que el dev eligió delivery strategy y chain strategy en una sesión, **
 
 Si un artefacto ya existe (ej: `/fg-design` se re-corre y `diseño.md` ya existe), **NO sobrescribir silenciosamente**. Opciones:
 
-1. Preguntar al dev si quiere re-generar ese artefacto específico.
+1. Devolver una entrada en `decisions_needed` (o `status: blocked`) para que el ORQUESTADOR le pregunte al dev si quiere re-generar ese artefacto específico (Sección B.1). La fase NO pregunta directamente.
 2. Reportar que el artefacto fue preservado y omitir la re-generación.
 
 La regla aplica a: `README.md`, `diseño.md`, `tareas.md`, `decisiones.md`, `exploracion.md`, `docs/auditoria/config.yaml`, `CLAUDE.md`, `config/modulos-transversales.yaml`.

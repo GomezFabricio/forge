@@ -33,7 +33,7 @@ Después de `/fg-plan`, cuando el dev quiere definir cómo se va a implementar e
 ### 1. Leer el contexto del cambio
 
 - Leer `README.md` del cambio activo (sección Qué, Por qué, Alcance, Restricciones).
-- Si no hay un cambio activo claro, preguntar al dev cuál.
+- Si no hay un cambio activo claro, NO preguntar inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1): devolver `status: blocked` con `decisions_needed` listando las carpetas candidatas. El orquestador lo resuelve y re-invoca.
 
 ### 2. Consultar CodeGraph para identificar archivos afectados realmente
 
@@ -69,13 +69,19 @@ Si `bootstrap.is_legacy_project(root)` retorna True, invocar el sub-agente `lega
 
 2. **Breaking changes** (`breaking_changes_downstream`):
    - Si `verdict: blocking` O `total_critical > 0`:
-     - Presentar tabla de issues al dev.
-     - Forzar elección de estrategia de migración: `1. Strangler Fig` / `2. Branch by Abstraction` / `3. Parallel Run` / `4. No-touch`.
-     - Append a `decisiones.md`:
+     - Incluir la tabla de issues en el envelope (NO mostrarla inline ni preguntar — un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1).
+     - La estrategia de migración es una decisión del dev. Si todavía NO llegó resuelta en el contexto de lanzamiento, devolver `status: blocked` con:
+       ```yaml
+       decisions_needed:
+         - question: "Breaking changes detectados. ¿Qué estrategia de migración?"
+           options: [Strangler Fig, Branch by Abstraction, Parallel Run, No-touch]
+       ```
+       El orquestador pregunta (con `AskUserQuestion`) y re-invoca `/fg-design` pasando la estrategia elegida.
+     - Cuando la estrategia ya está resuelta (llegó en el contexto), hacer append a `decisiones.md`:
        ```
        - YYYY-MM-DD: Estrategia de migración elegida: <choice>. Razón: breaking changes detectados por legacy-impact-analyzer (severidad: <X CRITICAL, Y HIGH>).
        ```
-     - Continuar `/fg-design`.
+       y continuar `/fg-design`.
 
 3. **Estrategia sugerida por el analyzer** (`migration_strategy_suggested`):
    - Citar en `diseño.md` Enfoque como contexto.
@@ -161,7 +167,7 @@ Aplicar la lógica de la **Sección C** de `fg-phase-common.md` (cargada al inic
    - Estimar `estimated_changed_lines` sumando los archivos de "Archivos afectados" de `diseño.md`.
    - Calcular `budget_risk` (Low / Medium / High) según el umbral `rules.pr_size.budget_lines`.
    - Emitir el bloque de texto con las guard lines exactas (ver Sección C).
-   - Si `enforcement: block` y el riesgo es High: pedir al dev `size:exception` documentada antes de continuar.
+   - Si `enforcement: block` y el riesgo es High: setear `decision_needed_before_apply: Yes`, devolver `status: blocked` con la `size:exception` en `decisions_needed`. El orquestador la pide al dev (ver Sección B.1); la fase NO pregunta.
 
 El campo `review_workload_forecast` se incluye en el envelope de retorno.
 
@@ -172,7 +178,7 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 ### 10. Reportar al dev
 
 - Confirmar los tres archivos creados: `diseño.md`, `tareas.md`, `decisiones.md`.
-- Si alguno ya existe, NO sobrescribir — preguntar al dev si quiere re-correr `/fg-design` (caso re-diseño parcial).
+- Si alguno ya existe, NO sobrescribir ni preguntar inline — devolver `decisions_needed` para que el orquestador pregunte si re-correr `/fg-design` (caso re-diseño parcial). Ver Sección B.1.
 - Mostrar la cantidad de tareas del checklist de `tareas.md`.
 - Sugerir el siguiente paso: `/fg-implement`.
 
@@ -201,7 +207,7 @@ Cambiar la sección "Estado" del `README.md` a `diseñado`.
 - Saltarse la creación de `decisiones.md` (aunque esté vacío, debe existir).
 - Empezar a escribir código del cambio (eso es `/fg-implement`).
 - Modificar el `README.md` excepto por el campo Estado.
-- Sobrescribir archivos existentes — si alguno de los tres ya existe, preguntar al dev.
+- Sobrescribir archivos existentes — si alguno de los tres ya existe, devolver `decisions_needed` (el orquestador pregunta; nunca preguntar inline).
 
 ## Envelope de retorno
 

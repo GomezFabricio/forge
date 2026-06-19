@@ -50,14 +50,18 @@ Llamar `bootstrap.detect_mode(root)` para determinar el modo antes de cualquier 
 **Modo bootstrap**: el directorio no tiene señales de un proyecto todavía. Está bien — forge puede inicializarse en un directorio vacío. En este modo:
 - Saltear la detección de stack obligatoria.
 - Crear `docs/auditoria/config.yaml` con `pending_detection: true` y `stacks: []`.
-- Si `.git/` no existe, **ofrecer `git init` inline** (una sola pregunta, sin insistir):
+- Si `.git/` no existe, **NO preguntar inline** (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1). Continuar el setup sin git, reportar `git_initialized: false`, y agregar al envelope:
 
-  > "No encontré un repositorio git. ¿Querés que corra `git init` ahora? (s/n)"
+  ```yaml
+  decisions_needed:
+    - question: "No encontré un repositorio git en el proyecto. ¿Querés que se corra `git init`?"
+      options: [Sí, No]
+      default: Sí
+  ```
 
-  Si el dev responde **s**: correr `git init`, reportarlo en el envelope (`git_initialized: true`).
-  Si el dev responde **n** o no responde: continuar sin git init, reportar `git_initialized: false`. NO abortar ni repetir la oferta.
+  El **orquestador** le pregunta al dev; si responde que sí, corre `git init` (o re-invoca el setup). La fase NO corre `git init` por su cuenta ni insiste.
 
-  **El código Python (`bootstrap.run()`) NO corre `git init`** — solo reporta si `.git/` existe. El consent es responsabilidad de la skill, no del Python.
+  **El código Python (`bootstrap.run()`) NO corre `git init`** — solo reporta si `.git/` existe.
 
 ### 2. Detectar el stack del proyecto
 
@@ -272,10 +276,12 @@ Próximo paso sugerido: /fg-update-registry (genera el índice de skills del pro
 - Generar `docs/auditoria/config.yaml` con la detección del paso 3 y defaults conservadores. NO sobrescribir si ya existe.
 - NO activar Strict TDD desde `/fg-setup` — eso lo decide el dev editando el config a mano.
 
-### Preguntar
+### Decisiones para el orquestador
 
-- Si hay múltiples manifiestos (polyglot), preguntar cuál es el principal para CodeGraph.
-- Si CodeGraph no está disponible, preguntar si seguir sin él (degradado) o instalarlo primero.
+Estos casos NO se preguntan inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1). Devolverlos en `decisions_needed` para que el orquestador los resuelva con el dev:
+
+- Si hay múltiples manifiestos (polyglot): `decisions_needed` con la pregunta de cuál es el principal para CodeGraph y las opciones detectadas. Mientras tanto, indexar con un default razonable y reportarlo.
+- Si CodeGraph no está disponible: `decisions_needed` con opciones `[Seguir sin CodeGraph (degradado), Instalarlo primero]`. Default: seguir degradado.
 
 ### Nunca
 

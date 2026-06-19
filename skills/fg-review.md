@@ -188,10 +188,12 @@ Cambiar Estado a `cerrado`.
 - Escribir la sección Cierre del README con síntesis de todos los reviews.
 - Tests que fallan ahora pero pasaron en `/fg-implement` → CRITICAL.
 
-### Preguntar
+### Decisiones para el orquestador
 
-- Cuando un role retorna issues que son ambiguos (¿son CRITICAL o WARNING?), preguntar al dev.
-- Cuando la falla de un test es de scope ambiguo (¿pre-existente o introducida acá?), preguntar.
+NO preguntar inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1). Devolver en `decisions_needed` para que el orquestador resuelva con el dev:
+
+- Cuando un role retorna issues ambiguos (¿CRITICAL o WARNING?): `decisions_needed` con la clasificación a decidir.
+- Cuando la falla de un test es de scope ambiguo (¿pre-existente o introducida acá?): `decisions_needed` con esa pregunta.
 
 ### Nunca
 
