@@ -121,18 +121,20 @@ Para cada tarea del checklist en orden, aplicar el ciclo completo de 7 pasos:
 Cuando todas las tareas estén tachadas:
 
 - Verificar que la suite completa de tests del cambio pase (no solo los nuevos).
-- Generar la **TDD Cycle Evidence table** con una fila por tarea (ver formato en `_shared/strict-tdd.md`).
-- Persistir la evidencia en disco escribiendo `docs/auditoria/cambios/<cambio>/evidencia-tdd.md`:
-  - Si el archivo **no existe**: crearlo con la tabla completa y el resumen de tests (usando el template en `templates/evidencia-tdd.md`).
-  - Si el archivo **ya existe** (continuación de batch previo): leerlo, mergear las filas nuevas al final de la tabla y actualizar el resumen de tests. **NUNCA sobreescribir — siempre mergear.**
-  - El contenido del archivo es la misma tabla que se incluye en el envelope: una fila por tarea con columnas Safety Net / RED / GREEN / TRIANGULATE / REFACTOR, más el resumen de tests al pie.
+- **Solo si Strict TDD está activo** (`rules.implement.tdd: true`):
+  - Generar la **TDD Cycle Evidence table** con una fila por tarea (ver formato en `_shared/strict-tdd.md`).
+  - Persistir la evidencia en disco escribiendo `docs/auditoria/cambios/<cambio>/evidencia-tdd.md`:
+    - Si el archivo **no existe**: crearlo con la tabla completa y el resumen de tests (usando el template en `templates/evidencia-tdd.md`).
+    - Si el archivo **ya existe** (continuación de batch previo): leerlo, mergear las filas nuevas al final de la tabla y actualizar el resumen de tests. **NUNCA sobreescribir — siempre mergear.**
+    - El contenido del archivo es la misma tabla que se incluye en el envelope: una fila por tarea con columnas Safety Net / RED / GREEN / TRIANGULATE / REFACTOR, más el resumen de tests al pie.
+  - En modo estándar (TDD off), `evidencia-tdd.md` **no se genera**: la tabla solo se reporta en el envelope.
 - Actualizar el campo Estado del `README.md` a `implementado`.
 
 ### 5. Reportar al dev
 
 - Confirmar implementación completa o reportar tareas no terminadas.
 - Mostrar la TDD Cycle Evidence table al user (será el insumo principal de `/fg-review`).
-- Confirmar que `evidencia-tdd.md` fue escrito (o mergeado) en la carpeta del cambio.
+- Si TDD está activo, confirmar que `evidencia-tdd.md` fue escrito (o mergeado) en la carpeta del cambio.
 - Sugerir el siguiente paso: `/fg-review`.
 
 ## Reglas (Strict TDD)

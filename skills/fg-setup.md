@@ -106,6 +106,8 @@ Es la configuración persistente del proyecto que el equipo edita a mano para de
 
 Si `docs/auditoria/config.yaml` ya existe (re-ejecución de `/fg-setup`), **NO sobrescribir**. Solo se crea cuando no existe.
 
+Junto con el config, `/fg-setup` deposita `docs/auditoria/guardrails.yaml` (la plantilla de reglas del hook de guardrails `PreToolUse`), con la misma semántica idempotente: se crea si no existe, se preserva si ya está.
+
 Formato generado (con comentarios densos para que el equipo entienda cada key sin contexto adicional):
 
 ```yaml
@@ -249,6 +251,7 @@ CodeGraph: {N nodos, N aristas indexados | "no inicializado"}
 
 Archivos generados:
 - docs/auditoria/config.yaml ({creado | preservado existente})
+- docs/auditoria/guardrails.yaml ({creado | preservado existente})
 - config/modulos-transversales.yaml ({creado | preservado existente})
 - .atl/skill-registry.md (placeholder — el registry real lo genera /fg-update-registry)
 - .gitignore (actualizado)

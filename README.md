@@ -481,7 +481,8 @@ mi-proyecto/
 │   └── modulos-transversales.yaml   ← qué considera estructural el detector
 ├── docs/
 │   └── auditoria/               ← cadena de auditoría IA-asistida
-│       ├── index.md
+│       ├── config.yaml          ← configuración del workflow forge
+│       ├── guardrails.yaml      ← plantilla de reglas del hook PreToolUse
 │       └── cambios/             ← un cambio = una carpeta
 │           └── 2026-05-feat-login/
 │               ├── README.md        ← portada (lectura humano)
