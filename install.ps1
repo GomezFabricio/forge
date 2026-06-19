@@ -11,8 +11,14 @@
 #
 # Cualquier argumento extra se pasa tal cual a `forge install`
 # (ej: --skip-context7, --install-codegraph, --skip-pii-hook).
-
-$ErrorActionPreference = 'Stop'
+#
+# Nota: NO usamos `$ErrorActionPreference = 'Stop'` de forma global. En Windows
+# PowerShell 5.1, cuando un ejecutable nativo (python/pip/pipx) escribe en stderr,
+# PowerShell envuelve esa salida en un `NativeCommandError` terminante. Como pip y
+# pipx escriben avisos normales en stderr, con 'Stop' el script abortaría en
+# operaciones que en realidad fueron exitosas. En su lugar verificamos
+# `$LASTEXITCODE` después de cada paso, que es la forma fiable de detectar fallos
+# de comandos nativos.
 
 $RepoUrl = if ($env:FORGE_REPO_URL) {
     $env:FORGE_REPO_URL
@@ -21,6 +27,7 @@ $RepoUrl = if ($env:FORGE_REPO_URL) {
 }
 
 function Write-Step($msg) { Write-Host "forge install: $msg" }
+function Stop-Install($msg) { Write-Host "forge install: $msg" -ForegroundColor Red; exit 1 }
 
 # 1. Verificar Python 3.10+
 $python = $null
@@ -31,8 +38,7 @@ foreach ($candidate in @('python', 'python3')) {
     }
 }
 if (-not $python) {
-    Write-Error 'forge install: se requiere Python 3.10 o superior. Instalalo y volvé a correr.'
-    exit 1
+    Stop-Install 'se requiere Python 3.10 o superior. Instalalo y volvé a correr.'
 }
 
 # 2. Asegurar pipx (lo invocamos vía módulo para no depender del PATH de esta sesión)
@@ -40,17 +46,26 @@ if (-not $python) {
 if ($LASTEXITCODE -ne 0) {
     Write-Step 'pipx no encontrado — instalando con pip --user...'
     & $python -m pip install --user pipx
-    & $python -m pipx ensurepath
+    if ($LASTEXITCODE -ne 0) {
+        Stop-Install 'no se pudo instalar pipx con pip. Revisá tu instalación de Python.'
+    }
+    & $python -m pipx ensurepath *> $null
 }
 
 # 3. Instalar forge (--force reinstala/upgradea de forma idempotente)
 Write-Step "instalando forge desde $RepoUrl ..."
 & $python -m pipx install --force $RepoUrl
+if ($LASTEXITCODE -ne 0) {
+    Stop-Install "pipx no pudo instalar forge desde $RepoUrl."
+}
 
 # 4. Depositar assets en ~/.claude/ (pipx deja el shim en %USERPROFILE%\.local\bin,
 #    que puede no estar en el PATH de esta sesión recién instalado pipx)
 $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 Write-Step 'depositando skills, agents y hook PII en ~/.claude/ ...'
 forge install @args
+if ($LASTEXITCODE -ne 0) {
+    Stop-Install "'forge install' falló. Revisá el mensaje de arriba."
+}
 
 Write-Step "listo. Si el PATH no tomó 'forge', abrí una nueva terminal."
