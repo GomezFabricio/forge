@@ -3356,3 +3356,529 @@ class TestRunGuardHook:
              patch.object(installer, "print_report"):
             result = installer.run(self._make_args())
         assert result == installer.EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: Engram detected via PATH but no MCP block → register_engram_mcp called
+# ---------------------------------------------------------------------------
+
+
+class TestFix1DetectedEngramRegistersMcp:
+    """Fix 1: when engram detected via PATH (which) but no mcpServers.engram block,
+    run() must call register_engram_mcp with the detected path."""
+
+    def _make_args(self, **kw):
+        import argparse
+        base = dict(
+            install_engram=False,
+            skip_engram_check=True,
+            skip_codegraph=True,
+            install_codegraph=False,
+            skip_context7=True,
+            skip_pii_hook=True,
+            skip_guard_hook=True,
+        )
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def test_detected_via_which_no_mcp_block_registers_mcp(self, tmp_path, monkeypatch):
+        """GIVEN engram detected via shutil.which AND ~/.claude.json has NO mcpServers.engram
+        WHEN run() THEN register_engram_mcp is called with the detected absolute path."""
+        from forge import installer
+
+        detected_path = "/usr/local/bin/engram"
+        claude_json = tmp_path / ".claude.json"
+        # File exists but has no engram MCP block
+        claude_json.write_text(json.dumps({"mcpServers": {"codegraph": {"command": "codegraph"}}}))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        with patch.object(installer, "detect_engram",
+                          return_value=(True, {"which": detected_path, "mcp_json": None, "version_check": None})), \
+             patch.object(installer, "register_engram_mcp") as mock_reg, \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+        mock_reg.assert_called_once()
+        # Must be called with the detected path, not None
+        call_args = mock_reg.call_args
+        called_path = call_args[0][0] if call_args[0] else call_args[1].get("binary_path")
+        # Compare as Path to handle cross-platform slash differences
+        assert Path(str(called_path)) == Path(detected_path)
+
+    def test_detected_via_which_mcp_block_written_to_disk(self, tmp_path, monkeypatch):
+        """GIVEN engram on PATH, no existing mcpServers.engram in file
+        WHEN run() THEN ~/.claude.json ends up with mcpServers.engram pointing at detected path."""
+        from forge import installer
+
+        detected_path = "/usr/local/bin/engram"
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({}))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        with patch.object(installer, "detect_engram",
+                          return_value=(True, {"which": detected_path, "mcp_json": None, "version_check": None})), \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+        data = json.loads(claude_json.read_text(encoding="utf-8"))
+        assert "engram" in data.get("mcpServers", {})
+        # Compare as Path to handle cross-platform slash differences
+        assert Path(data["mcpServers"]["engram"]["command"]) == Path(detected_path)
+
+    def test_detected_via_which_idempotent_second_run(self, tmp_path, monkeypatch):
+        """GIVEN engram already registered in mcpServers.engram (mcp_json set)
+        WHEN run() twice THEN register_engram_mcp NOT called (already present)."""
+        from forge import installer
+
+        detected_path = "/usr/local/bin/engram"
+        # mcp_json is SET — means block already exists
+        with patch.object(installer, "detect_engram",
+                          return_value=(True, {"which": detected_path, "mcp_json": detected_path, "version_check": None})), \
+             patch.object(installer, "register_engram_mcp") as mock_reg, \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            installer.run(self._make_args())
+
+        mock_reg.assert_not_called()
+
+    def test_detected_via_version_check_no_mcp_block_registers_with_generic_command(self, tmp_path, monkeypatch):
+        """GIVEN engram detected via --version (no which path, no mcp_json)
+        WHEN run() THEN register_engram_mcp is called (with None/generic fallback)."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({}))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+
+        with patch.object(installer, "detect_engram",
+                          return_value=(True, {"which": None, "mcp_json": None, "version_check": "engram 1.15"})), \
+             patch.object(installer, "register_engram_mcp") as mock_reg, \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args())
+
+        assert result == installer.EXIT_OK
+        mock_reg.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: detect_engram must verify binary is usable
+# ---------------------------------------------------------------------------
+
+
+class TestFix2DetectEngramUsabilityCheck:
+    """Fix 2: detect_engram indicator 1 must verify the binary is actually usable."""
+
+    def test_indicator1_abs_path_not_exists_falls_through(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.engram.command points to a non-existent absolute path
+        WHEN detect_engram() THEN indicator 1 is NOT triggered; falls to indicator 2."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        nonexistent_binary = str(tmp_path / "gone" / "engram")
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": nonexistent_binary, "args": ["mcp", "--tools=agent"]}
+            }
+        }))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        # Indicator 2 also negative → should return False
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            found, info = installer.detect_engram()
+
+        assert found is False
+        assert info["mcp_json"] is None, "A stale path must not report mcp_json"
+
+    def test_indicator1_generic_engram_not_on_path_falls_through(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.engram.command == 'engram' but shutil.which('engram') returns None
+        WHEN detect_engram() indicator 1 THEN not triggered (binary not usable)."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": "engram", "args": ["mcp", "--tools=agent"]}
+            }
+        }))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        # 'engram' not on PATH
+        monkeypatch.setattr("shutil.which", lambda _: None)
+
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            found, info = installer.detect_engram()
+
+        assert found is False
+        assert info["mcp_json"] is None
+
+    def test_indicator1_abs_path_exists_non_executable_falls_through(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.engram.command points to an existing but non-executable file
+        WHEN detect_engram() THEN indicator 1 not triggered (binary not usable)."""
+        import os as _os
+        from forge import installer
+
+        binary = tmp_path / "engram_noexec"
+        binary.write_bytes(b"fake")
+        # Remove execute bit (not applicable on Windows, but test the os.access guard)
+        # On Windows os.access with X_OK often returns True; we monkeypatch it to return False
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": str(binary), "args": ["mcp"]}
+            }
+        }))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.setattr("shutil.which", lambda _: None)
+        monkeypatch.setattr("os.access", lambda path, mode: False)
+
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            found, info = installer.detect_engram()
+
+        assert found is False
+        assert info["mcp_json"] is None
+
+    def test_indicator1_abs_path_exists_and_executable_returns_true(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.engram.command points to an existing executable file
+        WHEN detect_engram() THEN indicator 1 triggered, returns (True, info)."""
+        from forge import installer
+
+        binary = tmp_path / "engram_exec"
+        binary.write_bytes(b"fake exec")
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": str(binary), "args": ["mcp"]}
+            }
+        }))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        # Override os.access to return True (simulates executable file)
+        monkeypatch.setattr("os.access", lambda path, mode: True)
+
+        found, info = installer.detect_engram()
+
+        assert found is True
+        assert info["mcp_json"] == str(binary)
+
+    def test_indicator1_generic_engram_on_path_returns_true(self, tmp_path, monkeypatch):
+        """GIVEN mcpServers.engram.command == 'engram' AND shutil.which('engram') returns a path
+        WHEN detect_engram() THEN indicator 1 triggered, returns (True, info)."""
+        from forge import installer
+
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(json.dumps({
+            "mcpServers": {
+                "engram": {"type": "stdio", "command": "engram", "args": ["mcp"]}
+            }
+        }))
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/engram" if name == "engram" else None)
+
+        found, info = installer.detect_engram()
+
+        assert found is True
+        assert info["mcp_json"] == "engram"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: Single pristine backup per config file per run
+# ---------------------------------------------------------------------------
+
+
+class TestFix3PristineBackup:
+    """Fix 3: after a full run() that registers all MCP servers + both hooks,
+    .forge-bak must contain the PRISTINE original content, not an intermediate state."""
+
+    def _make_args_full_run(self, **kw):
+        import argparse
+        base = dict(
+            install_engram=False,
+            skip_engram_check=True,
+            skip_codegraph=False,
+            install_codegraph=True,
+            skip_context7=False,
+            install_context7=True,
+            skip_pii_hook=False,
+            skip_guard_hook=False,
+        )
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def test_claude_json_bak_is_pristine_after_full_run(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude.json has pristine user content
+        WHEN run() registers codegraph + context7 + engram (detected-but-no-block)
+        THEN .claude.json.forge-bak equals the PRISTINE original, not intermediate state."""
+        from forge import installer
+
+        pristine = json.dumps({"theme": "dark", "userKey": "userValue"}, indent=2)
+        claude_json = tmp_path / ".claude.json"
+        claude_json.write_text(pristine, encoding="utf-8")
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        monkeypatch.setattr(installer, "CLAUDE_HOME", tmp_path / ".claude")
+
+        # engram detected via which (no mcp_json → will call register_engram_mcp)
+        with patch.object(installer, "detect_engram",
+                          return_value=(True, {"which": "/usr/bin/engram", "mcp_json": None, "version_check": None})), \
+             patch.object(installer, "detect_codegraph", return_value=(False, {})), \
+             patch.object(installer, "install_codegraph", return_value=(True, "ok")), \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args_full_run())
+
+        assert result == installer.EXIT_OK
+        bak = tmp_path / ".claude.json.forge-bak"
+        assert bak.exists(), ".claude.json.forge-bak must exist"
+        assert bak.read_text(encoding="utf-8") == pristine, (
+            "Backup must contain PRISTINE content, not post-mutation state"
+        )
+
+    def test_settings_json_bak_is_pristine_after_full_run(self, tmp_path, monkeypatch):
+        """GIVEN ~/.claude/settings.json has pristine user content
+        WHEN run() registers pii_hook + guard_hook sequentially
+        THEN settings.json.forge-bak equals the PRISTINE original, not post-pii state."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        pristine_settings = json.dumps({"theme": "light", "model": "sonnet"}, indent=2)
+        settings_path = claude_home / "settings.json"
+        settings_path.write_text(pristine_settings, encoding="utf-8")
+
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+        monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", tmp_path / ".claude.json")
+
+        with patch.object(installer, "detect_engram", return_value=(True, {"mcp_json": "/p", "which": None, "version_check": None})), \
+             patch.object(installer, "install_global_claude_md", return_value="present"), \
+             patch.object(installer, "install_assets", return_value={
+                 "skills_deposited": 6, "shared_deposited": 3,
+                 "agents_deposited": 6, "commands_deposited": 7, "warnings": []}), \
+             patch.object(installer, "print_report"):
+            result = installer.run(self._make_args_full_run(
+                skip_codegraph=True, skip_context7=True,
+                skip_pii_hook=False, skip_guard_hook=False,
+            ))
+
+        assert result == installer.EXIT_OK
+        bak = claude_home / "settings.json.forge-bak"
+        assert bak.exists(), "settings.json.forge-bak must exist"
+        assert bak.read_text(encoding="utf-8") == pristine_settings, (
+            "Backup must be the PRISTINE settings.json, not post-pii-hook mutation"
+        )
+
+    def test_backup_once_helper_does_not_overwrite_on_second_call(self, tmp_path, monkeypatch):
+        """GIVEN _backup_once is called twice for the same path
+        THEN the backup still holds the content from the FIRST call."""
+        from forge import installer
+
+        target = tmp_path / "config.json"
+        pristine = '{"original": true}'
+        target.write_text(pristine, encoding="utf-8")
+
+        # First backup
+        backed_up: set = set()
+        installer._backup_once(target, backed_up)
+
+        # Mutate the original
+        target.write_text('{"mutated": true}', encoding="utf-8")
+
+        # Second backup (must be no-op)
+        installer._backup_once(target, backed_up)
+
+        bak = target.with_suffix(".json.forge-bak")
+        assert bak.read_text(encoding="utf-8") == pristine
+
+    def test_backup_once_does_not_overwrite_existing_bak_with_fresh_set(self, tmp_path):
+        """GIVEN a .forge-bak already exists (written by an earlier registrar that
+        did not register in this run's set, e.g. install_engram before codegraph)
+        WHEN _backup_once runs with a FRESH set for the same path
+        THEN it must NOT overwrite the existing pristine backup."""
+        from forge import installer
+
+        target = tmp_path / "config.json"
+        target.write_text('{"mutated": true}', encoding="utf-8")
+        bak = target.with_suffix(".json.forge-bak")
+        pristine = '{"original": true}'
+        bak.write_text(pristine, encoding="utf-8")  # pre-existing pristine backup
+
+        installer._backup_once(target, set())  # fresh set, but bak already exists
+
+        assert bak.read_text(encoding="utf-8") == pristine
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: tarfile.extract with filter="data" on Python 3.12+
+# ---------------------------------------------------------------------------
+
+
+class TestFix4TarfileFilter:
+    """Fix 4: tarfile.extract must pass filter='data' on Python 3.12+ to avoid
+    DeprecationWarning and enable symlink hardening."""
+
+    def test_install_codegraph_uses_filter_data_on_312(self, tmp_path, monkeypatch):
+        """GIVEN Python >= 3.12, tarfile extraction path in install_codegraph
+        WHEN install_codegraph() extracts a tar.gz THEN tf.extract receives filter='data'."""
+        import sys
+        import hashlib
+        from forge import installer
+
+        if sys.version_info < (3, 12):
+            pytest.skip("filter='data' guard only tested on 3.12+")
+
+        asset_name = "codegraph-linux-x64.tar.gz"
+        binary_content = b"fake binary"
+        sha256 = hashlib.sha256(binary_content).hexdigest()
+        sha256sums_text = f"{sha256}  {asset_name}\n"
+
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
+        monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
+
+        api_resp = MagicMock()
+        api_resp.read.return_value = json.dumps({
+            "tag_name": "v0.3.0",
+            "assets": [
+                {"name": asset_name, "browser_download_url": "https://example.com/cg.tar.gz"},
+                {"name": "SHA256SUMS", "browser_download_url": "https://example.com/SHA256SUMS"},
+            ],
+        }).encode()
+        api_resp.__enter__ = lambda s: s
+        api_resp.__exit__ = MagicMock(return_value=False)
+
+        sha256sums_resp = MagicMock()
+        sha256sums_resp.read.return_value = sha256sums_text.encode()
+        sha256sums_resp.__enter__ = lambda s: s
+        sha256sums_resp.__exit__ = MagicMock(return_value=False)
+
+        import tarfile
+        mock_member = MagicMock(spec=tarfile.TarInfo)
+        mock_member.name = "codegraph-linux-x64/codegraph"
+        extract_calls = []
+
+        mock_tf = MagicMock()
+        mock_tf.__enter__ = lambda s: s
+        mock_tf.__exit__ = MagicMock(return_value=False)
+        mock_tf.getmembers.return_value = [mock_member]
+
+        def capture_extract(*args, **kwargs):
+            extract_calls.append(kwargs)
+
+        mock_tf.extract = capture_extract
+
+        def fake_download(url, dest):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(binary_content)
+
+        with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
+             patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
+             patch.object(installer, "_download_binary", side_effect=fake_download), \
+             patch("tarfile.open", return_value=mock_tf), \
+             patch("os.chmod"), \
+             patch("os.unlink"), \
+             patch.object(installer, "_xattr_cleanup_darwin"):
+            ok, msg = installer.install_codegraph()
+
+        assert ok is True
+        assert extract_calls, "tf.extract was never called"
+        assert extract_calls[0].get("filter") == "data", (
+            f"Expected filter='data' in extract kwargs, got: {extract_calls[0]}"
+        )
+
+    def test_install_engram_uses_filter_data_on_312(self, tmp_path, monkeypatch):
+        """GIVEN Python >= 3.12, tarfile extraction path in install_engram
+        WHEN install_engram() extracts a tar.gz THEN tf.extract receives filter='data'."""
+        import sys
+        from forge import installer
+
+        if sys.version_info < (3, 12):
+            pytest.skip("filter='data' guard only tested on 3.12+")
+
+        monkeypatch.setattr(installer, "ENGRAM_BIN_DIR_UNIX", tmp_path / "bin")
+        monkeypatch.setattr(installer, "ENGRAM_BIN_DIR_WIN", tmp_path / "bin")
+
+        api_response = MagicMock()
+        api_response.read.return_value = json.dumps({
+            "assets": [
+                {"name": "engram_1.16.1_linux_amd64.tar.gz",
+                 "browser_download_url": "https://example.com/engram.tar.gz"}
+            ]
+        }).encode()
+        api_response.__enter__ = lambda s: s
+        api_response.__exit__ = MagicMock(return_value=False)
+
+        import tarfile
+        mock_member = MagicMock()
+        mock_member.name = "engram"
+        extract_calls = []
+
+        mock_tf = MagicMock()
+        mock_tf.__enter__ = lambda s: s
+        mock_tf.__exit__ = MagicMock(return_value=False)
+        mock_tf.getmembers.return_value = [mock_member]
+
+        def capture_extract(*args, **kwargs):
+            extract_calls.append(kwargs)
+
+        mock_tf.extract = capture_extract
+
+        with patch.object(installer, "_detect_platform", return_value=("linux", "amd64")), \
+             patch("urllib.request.urlopen", return_value=api_response), \
+             patch.object(installer, "_download_binary"), \
+             patch("os.chmod"), \
+             patch.object(installer, "_xattr_cleanup_darwin"), \
+             patch.object(installer, "_edit_path_unix", return_value="appended"), \
+             patch.object(installer, "register_engram_mcp", return_value="created"), \
+             patch("tarfile.open", return_value=mock_tf), \
+             patch("os.unlink"):
+            ok, msg = installer.install_engram()
+
+        assert ok is True
+        assert extract_calls, "tf.extract was never called"
+        assert extract_calls[0].get("filter") == "data", (
+            f"Expected filter='data' in extract kwargs, got: {extract_calls[0]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Fix 5: Nits — _hook_command factory, ENGRAM_BIN_DIR dedup, CLAUDE_JSON rename
+# ---------------------------------------------------------------------------
+
+
+class TestFix5Nits:
+    """Fix 5: nit cleanups — hook command factory, constant dedup, CLAUDE_JSON rename."""
+
+    def test_hook_command_factory_exists(self):
+        """GIVEN the installer module WHEN importing _hook_command
+        THEN it exists and produces the correct command string for a given module."""
+        from forge import installer
+        assert hasattr(installer, "_hook_command"), "_hook_command factory must exist"
+        cmd = installer._hook_command("forge.filters.hook_user_prompt")
+        assert "forge.filters.hook_user_prompt" in cmd
+        assert "-m" in cmd
+
+    def test_pii_hook_command_uses_factory(self):
+        """GIVEN _pii_hook_command() WHEN called THEN result matches _hook_command(PII_HOOK_MODULE)."""
+        from forge import installer
+        assert installer._pii_hook_command() == installer._hook_command(installer.PII_HOOK_MODULE)
+
+    def test_guard_hook_command_uses_factory(self):
+        """GIVEN _guard_hook_command() WHEN called THEN result matches _hook_command(GUARD_HOOK_MODULE)."""
+        from forge import installer
+        assert installer._guard_hook_command() == installer._hook_command(installer.GUARD_HOOK_MODULE)
