@@ -94,48 +94,44 @@ Actualizar `overview.md` o `stack.md` cuando:
 - Es un hecho descriptivo del sistema actual (qué dependencias usamos, qué módulos hay, cómo están organizados).
 - No requiere justificar la elección, solo describir lo que es.
 
-### 6. Presentar las propuestas al dev como diff por archivo
+### 6. Devolver las propuestas como datos (el orquestador las presenta)
 
-**Nunca todo-o-nada**. Cada propuesta se presenta independiente:
+**Nunca todo-o-nada, y NO presentar ni preguntar inline** (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1). Devolver cada propuesta como un ítem independiente en el campo `proposals` del envelope:
 
-```
-=== Propuesta 1: actualizar docs/arquitectura/stack.md ===
-Sección: Dependencias
-
-+ - bcrypt 4.0.1 (hashing de passwords, agregado en 2026-05-feat-login-usuarios)
-+ - python-jose 3.3.0 (JWT, agregado en 2026-05-feat-login-usuarios)
-
-¿Aceptar [a], editar [e], rechazar [r]?
-
-=== Propuesta 2: crear docs/arquitectura/decisions/001-auth-jwt.md ===
-
-# ADR 001 — Autenticación con JWT en vez de sesiones por cookie
-
-## Contexto
-[...]
-
-## Decisión
-Usamos JWT firmados con secret rotativo para autenticación stateless.
-
-## Alternativas consideradas
-- Sesiones por cookie con store en Redis
-- OAuth2 con provider externo
-
-## Consecuencias
-[...]
-
-¿Aceptar [a], editar [e], rechazar [r]?
+```yaml
+proposals:
+  - id: 1
+    target: docs/arquitectura/stack.md
+    action: update
+    section: Dependencias
+    diff: |
+      + - bcrypt 4.0.1 (hashing de passwords, agregado en 2026-05-feat-login-usuarios)
+      + - python-jose 3.3.0 (JWT, agregado en 2026-05-feat-login-usuarios)
+  - id: 2
+    target: docs/arquitectura/decisions/001-auth-jwt.md
+    action: create
+    content: |
+      # ADR 001 — Autenticación con JWT en vez de sesiones por cookie
+      ## Contexto
+      [...]
+      ## Decisión
+      Usamos JWT firmados con secret rotativo para autenticación stateless.
+      ## Alternativas consideradas
+      - Sesiones por cookie con store en Redis
+      - OAuth2 con provider externo
+      ## Consecuencias
+      [...]
 ```
 
-### 7. Para cada propuesta aceptada
+El **orquestador** itera sobre `proposals`, presenta cada una al dev y pregunta `aceptar / editar / rechazar` (con `AskUserQuestion`), captura las decisiones, y re-invoca `/fg-update-arch` pasando las decisiones resueltas (`proposal_decisions`) para que se apliquen.
 
-- Aplicar el cambio al archivo correspondiente.
-- Si es un ADR nuevo: usar el siguiente número en secuencia (`001`, `002`, etc.).
-- Si es un ADR que supersede a otro: marcar el viejo con `superseded-by: ADR-NNN`.
+### 7. Aplicar las propuestas resueltas (en la re-invocación del orquestador)
 
-Si el dev edita la propuesta antes de aceptar, aplicar la versión editada.
+Cuando el orquestador re-invoca con `proposal_decisions` (la decisión del dev por cada `proposal.id`):
 
-Si el dev rechaza, no aplicar y registrar que se decidió no incluir ese cambio en arquitectura (opcionalmente, agregar nota en el cambio original).
+- **Aceptada**: aplicar el cambio al archivo correspondiente. Si es un ADR nuevo, usar el siguiente número en secuencia (`001`, `002`, etc.). Si supersede a otro, marcar el viejo con `superseded-by: ADR-NNN`.
+- **Editada**: el orquestador pasa la versión editada — aplicar esa.
+- **Rechazada**: no aplicar; registrar que se decidió no incluir ese cambio en arquitectura (opcionalmente, nota en el cambio original).
 
 ### 8. Marcar los cambios procesados
 

@@ -98,7 +98,7 @@ En la sección "Enfoque" de `diseño.md`, escribir:
 - Librerías o tools que se van a usar y por qué (ej: "bcrypt para hashing porque ya está en el proyecto").
 - Patrones que se siguen (ej: "mismo patrón que el módulo `users/`").
 
-Si hay decisiones técnicas grandes que NO son obvias del contexto, preguntarlas al dev y registrarlas en la sección "Decisiones técnicas".
+Si hay decisiones técnicas grandes que NO son obvias del contexto, NO preguntarlas inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1): devolverlas en `decisions_needed`. El orquestador pregunta y re-invoca; la fase las registra entonces en la sección "Decisiones técnicas".
 
 ### 4. Documentar la arquitectura
 

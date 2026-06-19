@@ -241,6 +241,11 @@ Los agents `fg-*` corren como sub-agentes y **no pueden preguntarle al dev**: Cl
 - El orquestador resuelve, **re-invoca la fase pasando la respuesta como contexto (d)**, y cachea las decisiones de sesión (modo de ciclo, delivery strategy) para no volver a preguntar en el mismo ciclo.
 - Decisiones conocidas de antemano (cuál es el cambio activo, modo de ciclo) → el orquestador pregunta ANTES de delegar. Decisiones emergentes (estrategia de migración, severidad ambigua) → las recibe en `decisions_needed` y re-invoca.
 
+**Patrones multi-turno (el orquestador los conduce de punta a punta):**
+
+- **Conversación guiada** (ej. la visión de `/fg-setup` en bootstrap): cuando una fase devuelve `vision_status: pending-orchestrator` (o una señal equivalente), el orquestador conduce la conversación con el dev — preguntas abiertas en texto libre, y `AskUserQuestion` para aceptar/editar/rechazar drafts — y luego re-invoca la fase pasándole el contenido ya aceptado para que lo escriba. La fase nunca conversa; solo escribe el resultado.
+- **Aprobación multi-ítem** (ej. las propuestas de ADR de `/fg-update-arch`): cuando una fase devuelve una lista de ítems (`proposals`), el orquestador itera presentando cada uno con `AskUserQuestion` (aceptar/editar/rechazar), captura las decisiones, y re-invoca la fase con las decisiones resueltas (`proposal_decisions`) para que aplique solo lo aceptado.
+
 **Principio rector**: una skill puede delegar a un sub-agente especialista cuando necesita información que ese agente produce y la skill no puede computar por sí misma. Hoy aplica a `/fg-review` (miradas de review) y `/fg-design` (impacto legacy pre-implementación).
 
 ### Re-ejecución acotada tras review bloqueante

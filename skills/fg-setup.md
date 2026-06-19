@@ -178,66 +178,43 @@ El orquestador DEBE invocar `/fg-update-registry` como siguiente paso después d
 
 Si el `.gitignore` ya tiene esas líneas, no duplicar.
 
-### 10. Conversación de visión del sistema (solo en modo bootstrap)
-
-Si `mode == bootstrap`, ejecutar este sub-flow. NO es una skill nueva — parte de `/fg-setup`.
+### 10. Visión del sistema — la conduce el ORQUESTADOR (solo en modo bootstrap)
 
 Si `mode != bootstrap` → saltar todo el paso 10 y continuar al paso 11. Envelope: `vision_status: n/a`.
+
+La conversación de visión es **multi-turno**, así que **este executor NO la ejecuta** (un sub-agente no puede conversar con el dev; ver `_shared/fg-phase-common.md` Sección B.1). La conduce el orquestador (ver la doctrina en `~/.claude/CLAUDE.md`). Este paso solo decide si la visión hace falta y, en la re-invocación del orquestador, ESCRIBE los docs.
 
 #### 10a. Idempotencia
 
 Verificar antes de iniciar la conversación:
 
 1. Si `docs/arquitectura/overview.md` ya existe → saltar el sub-flow, continuar al paso 11. Envelope: `vision_status: preserved`.
-2. Si `config.yaml` tiene `context.vision_skipped: true` → preguntar una sola vez: "¿Querés intentar la conversación de visión de nuevo? [s/n]". Si "n" → saltar, continuar al paso 11. Si "s" → continuar al paso 10b.
+2. Si `config.yaml` tiene `context.vision_skipped: true` → NO reintentar por cuenta propia: devolver `decisions_needed` (`question: "La visión fue declinada antes. ¿Reintentarla?"`, `options: [Sí, No]`, `default: No`) y `vision_status: skipped`. El orquestador decide.
 
-#### 10b. 1ra ronda de preguntas
+#### 10b. Si la visión hace falta y el orquestador NO mandó contenido aún
 
-Iniciar la conversación con estas 5 preguntas (adaptar tono, mantener el foco):
+Devolver, **sin conversar**:
+- `vision_status: pending-orchestrator`.
+- En `decisions_needed`, la señal de que el orquestador debe conducir la conversación de visión. Las 5 preguntas guía que el orquestador usa:
+  1. ¿Qué es este sistema? ¿Quién lo usa? ¿Qué problema resuelve?
+  2. ¿Multi-tenant o single-tenant? Roles principales.
+  3. ¿Web / mobile / CLI / API pura? ¿Estrategia de autenticación?
+  4. Stack tecnológico.
+  5. Módulos o áreas principales previstas.
 
-1. ¿Qué es este sistema? ¿Quién lo usa? ¿Qué problema resuelve?
-2. ¿Multi-tenant o single-tenant? Roles principales.
-3. ¿Web / mobile / CLI / API pura? ¿Estrategia de autenticación?
-4. Stack tecnológico: si el dev lo sabe, anotarlo; si no, decidir juntos.
-5. Módulos o áreas principales previstas.
+El resto del setup (config, CodeGraph, etc.) ya se completó en los pasos anteriores — `pending-orchestrator` no bloquea esos artefactos.
 
-El dev puede saltar en cualquier momento respondiendo "saltar", "no" o "después" → ir directamente al paso 10d (skip path: `mark_vision_skipped`).
+#### 10c. Si el orquestador re-invoca con el contenido aceptado
 
-**Incluir SOLO lo que el dev mencionó. NO inventar módulos, integraciones, ni decisiones técnicas. Si algo no se mencionó, dejarlo fuera.**
+Cuando el orquestador, tras conducir la conversación y obtener el OK del dev, re-invoca `/fg-setup` pasándole el `overview_content` y el `stack_content` aceptados:
 
-#### 10c. 2da ronda de calibración (solo lo que falte)
+- Llamar `bootstrap.create_arquitectura_docs(root, overview_content, stack_content)`.
+- Si el dev mencionó stacks, llamar también `bootstrap.patch_config_stacks(root, stacks)` y loguear en el envelope: "stacks actualizados en config.yaml: [<stack(s)>]".
+- Agregar paths al envelope (`files_created` / `files_preserved`). Envelope: `vision_status: completed`.
 
-Preguntar únicamente lo que el dev no mencionó en 10b:
+Si el orquestador informa que el dev declinó la visión: llamar `bootstrap.mark_vision_skipped(root)`. Envelope: `vision_status: skipped`. Warning: "Visión saltada — overview.md y stack.md no se generaron. Re-ejecutar /fg-setup o /fg-update-arch para crearlos."
 
-- ¿Multi-tenant / single-tenant?
-- ¿Roles dentro de cada tenant?
-- ¿Web / mobile / ambos?
-- ¿Stack (lenguaje, framework, DB, auth) — propuesta o decidir juntos?
-- ¿Qué módulos prevés?
-
-**NO inventar respuestas. Solo preguntar lo que el dev no mencionó.**
-
-#### 10d. Destilar y validar
-
-Construir drafts de `overview.md` y `stack.md` con **SOLO lo que el dev mencionó**. NO inventar módulos, decisiones técnicas ni roles no mencionados.
-
-Mostrar ambos drafts en fenced blocks:
-
-```markdown
-# System Overview
-[contenido destilado de la conversación]
-```
-
-```markdown
-# Stack
-[contenido destilado de la conversación]
-```
-
-Preguntar: `¿Aceptás estos drafts? [s/n/editar]`
-
-- **`s`** → llamar `bootstrap.create_arquitectura_docs(root, overview_content, stack_content)`. Si el dev mencionó stacks durante la conversación, llamar también `bootstrap.patch_config_stacks(root, stacks)` y loguear en el envelope: "stacks actualizados en config.yaml: [<stack(s)>]". Agregar paths al envelope (`files_created` o `files_preserved` según lo retorne el helper). Envelope: `vision_status: completed`.
-- **`editar`** → pedir al dev qué cambiar. Regenerar los drafts UNA SOLA VEZ y mostrarlos de nuevo. Aceptar solo `[s/n]` — NO ofrecer "editar" de nuevo (límite máx. 1 iteración de edición para evitar loops indefinidos). Si "n" después de la edición → ejecutar skip path.
-- **`n`** (en cualquier punto) → skip path: llamar `bootstrap.mark_vision_skipped(root)`. Envelope: `vision_status: skipped`. Agregar a `envelope.warnings[]`: "Visión saltada — overview.md y stack.md no se generaron. Re-ejecutar /fg-setup o /fg-update-arch para crearlos."
+**Regla de no-invención** (vigente para el orquestador al conversar y para el contenido que se escribe): incluir SOLO lo que el dev mencionó. NO inventar módulos, integraciones ni decisiones técnicas.
 
 Si el contexto LLM se agota antes de completar el paso 10d → no escribir archivos parciales, no patchear config. Envelope: `vision_status: incomplete` con advertencia explicando la interrupción.
 

@@ -125,14 +125,14 @@ El contexto de un cambio puede venir de tres fuentes en orden de prioridad: doc 
 
 **IMPORTANTE**: el orden de check es estricto: primero `--from` (Branch 1), luego `overview.md` (Branch 2), luego stacks (Branch 3a vs 3b/3c según vision_skipped).
 
-### 6. Preguntar lo que no quede claro del problema
+### 6. Clarificar lo que no quede claro del problema (vía el orquestador)
 
-NO preguntar sobre el naming (eso se infiere). Preguntar sobre el problema en sí: alcance, restricciones técnicas, dependencias con otros equipos, criterios de aceptación, etc.
+NO preguntar inline (un sub-agente no puede; ver `_shared/fg-phase-common.md` Sección B.1) ni preguntar sobre el naming (eso se infiere). Si el problema está poco especificado para escribir un README sólido, **identificar los huecos** (alcance, restricciones técnicas, dependencias con otros equipos, criterios de aceptación) y devolverlos en `decisions_needed`; el orquestador pregunta y re-invoca con las respuestas. Si el problema ya está suficientemente claro, continuar sin bloquear.
 
-Ejemplos de preguntas válidas:
-- "¿El login debe soportar OAuth o solo usuario/contraseña?"
+Ejemplos de preguntas que el orquestador haría (la fase las propone en `decisions_needed`, no las formula):
+- "¿El login debe soportar OAuth o solo usuario/contraseña?" (discreta → `AskUserQuestion`)
 - "¿Hay algún endpoint existente que reemplazar, o es completamente nuevo?"
-- "¿Qué pasa si el usuario ya tiene una sesión activa?"
+- "¿Qué pasa si el usuario ya tiene una sesión activa?" (abierta → texto libre)
 
 ### 7. Generar el README.md inicial
 
