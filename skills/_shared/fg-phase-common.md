@@ -40,7 +40,7 @@ Antes de ejecutar cualquier paso, cada skill debe:
    - Usar `context.test_runner.command` como comando de test.
    - Emitir advertencia al dev: "No se encontró `docs/auditoria/config.yaml`. Corré `/fg-setup` primero."
 
-5. **Registrar en el envelope de retorno** el campo `skill_resolution` indicando qué módulos se cargaron.
+5. **Registrar en el envelope de retorno** el campo `skill_resolution` con el valor del enum de feedback de inyección de skills (ver Sección B para los valores canónicos). Este valor describe cómo la skill recibió sus dependencias — NO es un listado de módulos cargados. Fuente canónica del enum: `skill-resolver.md` (feedback loop) y Sección B de este archivo.
 
 ---
 

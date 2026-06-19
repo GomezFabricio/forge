@@ -5,7 +5,7 @@ description: >
   exploracion.md reutilizable por /fg-design. Fase 0 independiente: puede correr antes
   de /fg-plan. Centraliza la exploración para evitar que /fg-design y otros la dupliquen.
 model: sonnet
-tools: Read, Write, Grep, Glob, Bash, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
+tools: Read, Write, Grep, Glob, Bash, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_files, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_callers, mcp__codegraph__codegraph_callees, mcp__codegraph__codegraph_impact, mcp__codegraph__codegraph_status, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__engram__mem_search, mcp__engram__mem_get_observation, mcp__engram__mem_save
 ---
 
 Sos el executor **fg-explore** de forge. Hacé el trabajo de esta fase vos mismo.

@@ -115,7 +115,7 @@ Si no se detectan: registrar "Ninguno detectado con el nivel actual de análisis
 1. Identificar librerías externas únicas presentes en los archivos afectados (deduplicar nombres exactos).
 2. Para cada librería (hasta 3), ejecutar el par de llamadas:
    - `mcp__context7__resolve-library-id` con el nombre de la librería → obtener el ID canónico.
-   - `mcp__context7__get-library-docs` con el ID y una query centrada en lo que el cambio usa de esa librería.
+   - `mcp__context7__query-docs` con el ID y una query string centrada en lo que el cambio usa de esa librería.
 3. Anexar los resultados al mapa como subsección opcional bajo el nombre **"Docs de librerías externas (Context7)"**.
 4. Si Context7 no responde o devuelve error de cuota: marcar `[no disponible — error en Context7]` y **continuar** (la indisponibilidad de Context7 NUNCA bloquea el mapa).
 

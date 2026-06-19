@@ -199,4 +199,7 @@ files_updated:
 changes_marked_synced:
   - <YYYY-MM-tipo-nombre del cambio>
 suggested_commit: true (si hubo cambios aplicados)
+next_recommended: none
+risks: None | <riesgos detectados>
+skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```

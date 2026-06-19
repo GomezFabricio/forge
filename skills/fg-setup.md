@@ -310,4 +310,5 @@ files_preserved:
 warnings:
   - <ej: "no se detectó test runner — config.yaml queda con test_runner: null">
 next_recommended: /fg-update-registry   # genera el skill registry real tras el setup
+skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```
