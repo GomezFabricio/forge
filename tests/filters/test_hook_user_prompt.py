@@ -67,6 +67,13 @@ class TestProcessPromptPipeline:
         modified = result["modified_prompt"]
         assert "[EMAIL_ADDRESS]" in modified
         assert "[AWS_ACCESS_KEY]" in modified
+        # Privacy: raw values must NOT appear anywhere in the redacted prompt.
+        assert "user@example.com" not in modified, (
+            "CRITICAL PII LEAK: raw email address found in modified_prompt"
+        )
+        assert "AKIAIOSFODNN7EXAMPLE" not in modified, (
+            "CRITICAL PII LEAK: raw AWS access key found in modified_prompt"
+        )
 
     def test_fg_pass_skips_analysis(self, tmp_path):
         """OVR-01-A: #fg-pass in prompt skips all analysis and returns {}."""
@@ -111,6 +118,11 @@ class TestProcessPromptPipeline:
         entry = json.loads(lines[0])
         assert entry["action"] == "redacted"
         assert "CUIT" in entry["types"]
+        # Privacy: the raw CUIT value must NOT appear anywhere in the log entry.
+        log_text = lines[0]
+        assert CUIT_VALID_1 not in log_text, (
+            "CRITICAL PII LEAK: raw CUIT value found in log entry"
+        )
 
     def test_passthrough_logs_passthrough(self, tmp_path):
         """LOG: #fg-pass triggers a passthrough event in the log."""

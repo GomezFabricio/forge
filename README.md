@@ -28,7 +28,7 @@ Para una guía completa de uso por escenario, configuración y troubleshooting: 
 
 ## Instalación
 
-forge corre sobre **Claude Code** en Windows, macOS y Linux. La instalación es **una sola vez por máquina**: deposita skills, sub-agentes y el hook PII en `~/.claude/` y queda latente en todos tus proyectos.
+forge corre sobre **Claude Code** en Windows, macOS y Linux. La instalación es **una sola vez por máquina**: deposita skills, sub-agentes y dos hooks en `~/.claude/` — el hook PII (`UserPromptSubmit`) que redacta datos sensibles antes de enviarlos al modelo, y el hook de guardrails (`PreToolUse`) que aplica reglas de comportamiento antes de cada herramienta — y queda latente en todos tus proyectos.
 
 ### Compatibilidad
 

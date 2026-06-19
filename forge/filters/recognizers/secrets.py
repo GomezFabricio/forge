@@ -9,7 +9,7 @@ Scoring notes (see ADR-2 in design):
 - ANTHROPIC_KEY: 1.0 — most specific prefix (sk-ant-)
 - OPENAI_KEY: base 0.4 (< threshold) + context boost to 0.85; lookahead excludes sk-ant-
 - AWS_ACCESS_KEY: 0.95 — AKIA/ABIA/ACCA/ASIA prefix is highly specific
-- AWS_SECRET_KEY: base 0.0 (never fires alone) + context boost to 0.85
+- AWS_SECRET_KEY: base 0.4 (below 0.5 threshold, never fires alone) + context boost to 0.85
 - BEARER_TOKEN: base 0.3 (< threshold) + context boost to 0.85
 - All others: high-specificity patterns at their respective scores
 """
@@ -72,10 +72,12 @@ def build_aws_access_key_recognizer() -> PatternRecognizer:
 
 
 def build_aws_secret_key_recognizer() -> PatternRecognizer:
-    """40-char base64 string. Base score 0 — requires AWS context to fire.
+    """40-char base64 string. Base score 0.4 — requires AWS context to fire.
 
+    Base score 0.4 is below the 0.5 firing threshold so the pattern never
+    triggers alone. Context words boost the score to 0.85 (fires).
     Context words: aws_secret, secret_access_key, AWS_SECRET_ACCESS_KEY,
-    aws.secretAccessKey. Boost to 0.85.
+    aws.secretAccessKey.
     Entity AWS_SECRET_KEY.
     """
     return PatternRecognizer(
