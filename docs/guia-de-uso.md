@@ -20,6 +20,7 @@ principal.
 8. [Defensa en profundidad](#8-defensa-en-profundidad)
 9. [Comandos manuales (`/fg-*`)](#9-comandos-manuales-fg-)
 10. [Troubleshooting](#10-troubleshooting)
+11. [Cómo funciona por dentro (referencia)](#11-cómo-funciona-por-dentro-referencia)
 
 ---
 
@@ -147,6 +148,8 @@ agregá este bloque a `~/.claude/settings.json`:
 ---
 
 ## 3. Guía por escenario
+
+Esta sección resume cada escenario. Para verlos desarrollados paso a paso —qué escribe el dev, qué pregunta forge y cuándo, qué artefactos quedan— hay walkthroughs verificados en [`docs/simulacion/`](simulacion/README.md).
 
 ### Escenario 1 — Greenfield sin docs
 
@@ -728,6 +731,54 @@ texto_de_prueba = "CUIT: 20-12345678-6, email: dev@ejemplo.com"  #fg-pass
 
 Con `#fg-pass`, el filtro no redacta el prompt pero sí registra el evento en
 `.forge/auditoria-pii.jsonl`.
+
+---
+
+## 11. Cómo funciona por dentro (referencia)
+
+Esta sección es referencia conceptual: aclara cómo funcionan tres piezas que generan dudas y de dónde sale cada cosa. Para ver el comportamiento escenario por escenario, hay walkthroughs verificados en [`docs/simulacion/`](simulacion/README.md).
+
+### Los hooks que instala forge (y el `SessionStart` que NO es de forge)
+
+forge registra **exactamente dos hooks de Claude Code**, y los dos son código propio de forge:
+
+| Hook | Evento | Módulo | Qué hace |
+|---|---|---|---|
+| PII | `UserPromptSubmit` | `forge.filters.hook_user_prompt` | Redacta datos sensibles del prompt antes de enviarlo a Anthropic. |
+| Guardrail | `PreToolUse` (matcher `Bash`) | `forge.guards.hook_pre_tool` | Bloquea o pide confirmación sobre comandos Bash peligrosos. |
+
+forge **no registra ningún hook `SessionStart`**. Esto importa porque, al arrancar una sesión de Claude Code, aparece un mensaje del tipo *"Engram Persistent Memory — ACTIVE PROTOCOL"* que parece un hook de forge. **No lo es.** Ese mensaje viene del **producto engram** (el plugin `engram:memory` de Gentleman-Programming), no de forge. forge solo *consume* engram vía MCP (lo registra en `~/.claude.json`, que no es un hook). Lo único que forge aporta relacionado con engram, además del registro MCP, es la doctrina de referencia en `engram-protocol` — contenido para las skills, no un hook ni un MCP.
+
+Detalle relacionado: no existe ningún "wizard" en forge. Lo que parece un asistente de configuración es comportamiento conversacional del orquestador — por ejemplo, la pregunta del modo de ciclo (interactivo/automático) la hace el orquestador una vez por sesión y la cachea en memoria, no la persiste (ver `cycle_mode` en la sección 5).
+
+### Qué persiste forge en engram
+
+engram es **working memory, no audit trail**: el mismo `topic_key` sobreescribe el contenido previo (no hay historial de versiones — para eso está el filesystem versionado con git). forge guarda ahí **señales del proceso** (decisiones, descubrimientos no obvios, convenciones, estado del trabajo), **no datos del dominio** (registros del sistema, identificadores personales, valores de producción).
+
+Las skills llaman a guardar de forma proactiva, en momentos concretos:
+
+| Momento | topic_key | Tipo |
+|---|---|---|
+| Decisión de arquitectura/diseño | `forge/decision/<slug>` | decision |
+| Bug con causa no obvia, gotcha, patrón | `forge/discovery/<slug>` | discovery |
+| Avance / progreso de un cambio activo | `forge/<cambio>/state`, `forge/<cambio>/implement-progress` | architecture |
+| Setup inicial del proyecto | `forge/setup/<proyecto>` | config |
+| Índice de skills | `skill-registry` | config |
+
+El progreso de implementación (`implement-progress`) es el único que se **mergea** en vez de sobreescribirse — así el batching no pierde tareas ya hechas. Al cerrar una sesión, la skill guarda un resumen (`mem_session_summary`).
+
+### El detector de cambios estructurales
+
+`/fg-review` clasifica si un cambio es **estructural** con `forge/structural_detector.py`, que aplica cuatro heurísticas sobre los archivos modificados:
+
+1. **Manifiestos** — un archivo cuyo basename matchea un manifiesto de dependencias (`requirements.txt`, `package.json`, `go.mod`, etc.) → señal `new_dependencies`.
+2. **Paths transversales** — un archivo bajo un prefijo declarado en `transversal_paths` → `transversal_module_change`.
+3. **Migraciones** — un archivo bajo un `migration_paths` → `db_migration`.
+4. **Módulo top-level nuevo** — estrategia híbrida git + CodeGraph (confirma módulos reales con `nodeCount > 0`) → `new_top_level_module`.
+
+Si alguna dispara, el cambio se marca `structural: true` en el frontmatter del `README` y `/fg-review` **sugiere** `/fg-update-arch` (nunca lo auto-invoca). Si CodeGraph no está disponible, la heurística 4 se omite en silencio.
+
+La configuración vive en `config/modulos-transversales.yaml` del proyecto: `transversal_paths` (viene **vacío** — el equipo lo llena con la heurística "si toco este path, ¿se rompen tests en módulos no relacionados?"), `manifest_files` (12 manifiestos estándar) y `migration_paths` (5 paths de ORM). Se deposita con copy-if-missing: si ya existe, se preserva.
 
 ---
 

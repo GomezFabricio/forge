@@ -22,7 +22,10 @@ Los tres ejes que el producto endurece sobre la operación habitual de Claude Co
 
 forge **no reemplaza** Claude Code — vive encima de él, agregando las skills, hooks y sub-agentes que el workflow necesita.
 
-Para una guía completa de uso por escenario, configuración y troubleshooting: [docs/guia-de-uso.md](docs/guia-de-uso.md).
+Documentación:
+
+- [Guía de uso](docs/guia-de-uso.md) — instalación, escenarios, configuración, troubleshooting, y una sección de referencia de cómo funciona cada subsistema por dentro (hooks, ciclo SDD, engram, detector estructural).
+- [Simulaciones](docs/simulacion/README.md) — walkthroughs verificados de un dev usando forge en situaciones reales.
 
 ---
 
