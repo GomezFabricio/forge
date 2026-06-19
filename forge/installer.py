@@ -709,15 +709,30 @@ def _pii_hook_command() -> str:
     return _hook_command(PII_HOOK_MODULE)
 
 
-def _pii_hook_already_registered(user_prompt_submit: list) -> bool:
-    """True si algún hook de UserPromptSubmit ya invoca el módulo PII de forge."""
-    for group in user_prompt_submit:
+def _reconcile_hook_command(groups: list, module: str, desired: str) -> tuple[bool, bool]:
+    """Busca hooks que invoquen *module* y reconcilia su comando a *desired*.
+
+    La idempotencia se keyea por módulo (firma estable), pero el path del
+    intérprete puede quedar obsoleto entre instalaciones (p. ej. una instalación
+    previa registró el hook con el Python del sistema en vez del venv de pipx,
+    donde forge es importable). Esta función reescribe esos comandos in situ.
+
+    Returns:
+        (found, changed): found = el módulo ya estaba registrado en algún hook;
+        changed = se actualizó al menos un comando que difería de *desired*.
+    """
+    found = False
+    changed = False
+    for group in groups:
         if not isinstance(group, dict):
             continue
         for hook in group.get("hooks", []) or []:
-            if isinstance(hook, dict) and PII_HOOK_MODULE in str(hook.get("command", "")):
-                return True
-    return False
+            if isinstance(hook, dict) and module in str(hook.get("command", "")):
+                found = True
+                if hook.get("command") != desired:
+                    hook["command"] = desired
+                    changed = True
+    return found, changed
 
 
 def register_pii_hook() -> str:
@@ -745,12 +760,27 @@ def register_pii_hook() -> str:
         except (json.JSONDecodeError, OSError):
             config = {}
 
-    # Idempotencia: si el hook PII ya existe, no tocar nada
+    # Idempotencia + reconciliación del intérprete: 'present' si el comando ya
+    # coincide; si quedó apuntando a otro Python (instalación previa), reescribimos
+    # el comando a sys.executable y devolvemos 'updated'.
+    desired = _pii_hook_command()
     hooks = config.get("hooks")
     if isinstance(hooks, dict):
         ups = hooks.get("UserPromptSubmit")
-        if isinstance(ups, list) and _pii_hook_already_registered(ups):
-            return "present"
+        if isinstance(ups, list):
+            found, changed = _reconcile_hook_command(ups, PII_HOOK_MODULE, desired)
+            if found and not changed:
+                return "present"
+            if found and changed:
+                if existing_content is not None:
+                    backup_path = settings_path.with_suffix(".json.forge-bak")
+                    with contextlib.suppress(OSError):
+                        backup_path.write_text(existing_content, encoding="utf-8")
+                settings_path.write_text(
+                    json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                return "updated"
 
     # Backup antes de escribir
     if existing_content is not None:
@@ -786,17 +816,6 @@ def _guard_hook_command() -> str:
     return _hook_command(GUARD_HOOK_MODULE)
 
 
-def _guard_hook_already_registered(pre_tool_use: list) -> bool:
-    """True si algún hook de PreToolUse ya invoca el módulo guard de forge."""
-    for group in pre_tool_use:
-        if not isinstance(group, dict):
-            continue
-        for hook in group.get("hooks", []) or []:
-            if isinstance(hook, dict) and GUARD_HOOK_MODULE in str(hook.get("command", "")):
-                return True
-    return False
-
-
 def register_guard_hook() -> str:
     """Registra el hook PreToolUse de guardrails en ~/.claude/settings.json (merge idempotente).
 
@@ -820,12 +839,26 @@ def register_guard_hook() -> str:
         except (json.JSONDecodeError, OSError):
             config = {}
 
-    # Idempotencia: si el hook guard ya existe, no tocar nada
+    # Idempotencia + reconciliación del intérprete (ver register_pii_hook).
+    desired = _guard_hook_command()
     hooks = config.get("hooks")
     if isinstance(hooks, dict):
         ptu = hooks.get("PreToolUse")
-        if isinstance(ptu, list) and _guard_hook_already_registered(ptu):
-            return "present"
+        if isinstance(ptu, list):
+            found, changed = _reconcile_hook_command(ptu, GUARD_HOOK_MODULE, desired)
+            if found and not changed:
+                return "present"
+            if found and changed:
+                if existing_content is not None:
+                    backup_path = settings_path.with_suffix(".json.forge-bak")
+                    if not backup_path.exists():
+                        with contextlib.suppress(OSError):
+                            backup_path.write_text(existing_content, encoding="utf-8")
+                settings_path.write_text(
+                    json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                return "updated"
 
     # Backup antes de escribir — solo si aún no existe (preserva pristine de run())
     if existing_content is not None:

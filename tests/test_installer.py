@@ -2950,6 +2950,34 @@ class TestRegisterPiiHook:
         assert status2 == "present"
         assert settings.read_text(encoding="utf-8") == content_after_first
 
+    def test_reconciles_stale_interpreter_returns_updated(self, tmp_path, monkeypatch):
+        """GIVEN un hook PII registrado con OTRO intérprete WHEN register_pii_hook()
+        THEN reescribe el comando al intérprete actual y retorna 'updated'."""
+        from forge import installer
+
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        stale_cmd = f"C:\\otro\\python.exe -m {installer.PII_HOOK_MODULE}"
+        existing = {
+            "hooks": {
+                "UserPromptSubmit": [
+                    {"matcher": "", "hooks": [{"type": "command", "command": stale_cmd}]}
+                ]
+            }
+        }
+        settings.write_text(json.dumps(existing), encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        status = installer.register_pii_hook()
+
+        assert status == "updated"
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        cmds = [h["command"] for g in data["hooks"]["UserPromptSubmit"] for h in g["hooks"]]
+        assert stale_cmd not in cmds
+        assert installer._pii_hook_command() in cmds
+        assert len(cmds) == 1
+
     def test_appends_to_existing_userpromptsubmit_group(self, tmp_path, monkeypatch):
         """GIVEN settings.json ya tiene un UserPromptSubmit de otra herramienta
         WHEN register_pii_hook() THEN agrega el hook PII sin pisar el existente."""
@@ -3260,6 +3288,33 @@ class TestRegisterGuardHook:
         status2 = installer.register_guard_hook()
         assert status2 == "present"
         assert (claude_home / "settings.json").read_text(encoding="utf-8") == content_after_first
+
+    def test_reconciles_stale_interpreter_returns_updated(self, tmp_path, monkeypatch):
+        """GIVEN un hook guard registrado con OTRO intérprete WHEN register_guard_hook()
+        THEN reescribe el comando al intérprete actual y retorna 'updated'."""
+        from forge import installer
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir(parents=True)
+        settings = claude_home / "settings.json"
+        stale_cmd = f"C:\\otro\\python.exe -m {installer.GUARD_HOOK_MODULE}"
+        existing = {
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "Bash", "hooks": [{"type": "command", "command": stale_cmd}]}
+                ]
+            }
+        }
+        settings.write_text(json.dumps(existing), encoding="utf-8")
+        monkeypatch.setattr(installer, "CLAUDE_HOME", claude_home)
+
+        status = installer.register_guard_hook()
+
+        assert status == "updated"
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        cmds = [h["command"] for g in data["hooks"]["PreToolUse"] for h in g["hooks"]]
+        assert stale_cmd not in cmds
+        assert installer._guard_hook_command() in cmds
+        assert len(cmds) == 1
 
     def test_merges_with_existing_settings(self, tmp_path, monkeypatch):
         from forge import installer
