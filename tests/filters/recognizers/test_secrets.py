@@ -192,6 +192,19 @@ class TestAWSSecretKey:
         """R06.4: entity type label is AWS_SECRET_KEY."""
         assert "AWS_SECRET_KEY" in build_aws_secret_key_recognizer().supported_entities
 
+    def test_aws_secret_key_base_score_is_0_4(self):
+        """R06.5: base score constant must be 0.4 (below 0.5 threshold — never fires alone).
+
+        This pin test prevents the docstring from drifting out of sync with
+        the actual score value assigned to the pattern.
+        """
+        recognizer = build_aws_secret_key_recognizer()
+        scores = [p.score for p in recognizer.patterns]
+        assert scores == [0.4], (
+            f"AWS_SECRET_KEY base score changed: expected [0.4], got {scores}. "
+            "Update the docstring in forge/filters/recognizers/secrets.py to match."
+        )
+
 
 # ---------------------------------------------------------------------------
 # GITHUB_PAT (REQ-REC-07)

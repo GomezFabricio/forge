@@ -29,10 +29,16 @@ class TestCreateGuardrailsTemplate:
         assert content.get("version") == 1
         assert isinstance(content.get("rules"), list)
 
-    def test_run_includes_guardrails_template(self, tmp_path):
-        """run() should include guardrails_template in report."""
-        from forge.bootstrap import run
-        report = run(tmp_path)
+    def test_run_includes_guardrails_template(self, tmp_path, monkeypatch):
+        """run() should include guardrails_template in report.
+
+        init_codegraph is mocked so the test does not require a 'codegraph'
+        binary on PATH. The test targets the guardrails-template deposit, not
+        CodeGraph initialisation.
+        """
+        import forge.bootstrap as _bootstrap
+        monkeypatch.setattr(_bootstrap, "init_codegraph", lambda root: (None, "mocked"))
+        report = _bootstrap.run(tmp_path)
         assert "guardrails_template" in report
         assert report["guardrails_template"] in ("created", "preserved")
 
@@ -54,9 +60,13 @@ class TestCreateGuardrailsTemplate:
         assert result2 == "preserved"
 
     def test_inline_template_matches_templates_file(self):
-        """GUARDRAILS_TEMPLATE (deployed by bootstrap) must stay byte-identical to
-        templates/guardrails.yaml (covered by the anti-R7 and false-positive tests).
-        If this fails, one of the two sources was edited without the other."""
+        """GUARDRAILS_TEMPLATE runtime value must equal the content of templates/guardrails.yaml.
+
+        This compares the Python string value of GUARDRAILS_TEMPLATE (as evaluated
+        at import time) against the text read from the file at test runtime.
+        It does NOT compare raw source bytes — escape sequences in the source are
+        already resolved by Python before the comparison runs.
+        If this fails, one of the two sources was edited without updating the other."""
         from forge.bootstrap import GUARDRAILS_TEMPLATE
         template_file = Path(__file__).resolve().parent.parent / "templates" / "guardrails.yaml"
         file_content = template_file.read_text(encoding="utf-8")
