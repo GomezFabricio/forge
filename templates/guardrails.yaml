@@ -29,7 +29,7 @@ rules:
   # git push --force / git push -f
   # Reescribe historia pública. Alternativa: --force-with-lease verifica que no
   # haya commits de otros que no viste aún.
-  - pattern: 'git\s+push\s+(--force|-f)(\s|$)'
+  - pattern: 'git\s+push\s+(--force|-f)(\s|$|[;&|])'
     action: confirm
     reason: "git push --force reescribe historia remota y puede descartar commits de otros"
     alternative: "git push --force-with-lease (verifica que no haya commits remotos nuevos antes de forzar)"
@@ -43,7 +43,7 @@ rules:
 
   # git clean -f / git clean -fd / git clean -fdx
   # Borra archivos untracked. A diferencia de reset, estos archivos no están en git y no se pueden recuperar.
-  - pattern: 'git\s+clean\s+.*-[a-zA-Z]*f'
+  - pattern: 'git\s+clean\s+(?:.*\s)?-[a-zA-Z]*f'
     action: confirm
     reason: "git clean -f borra archivos untracked de forma irrecuperable (no están en git)"
     alternative: "git clean -n primero para ver qué se borraría, luego decidir archivo por archivo"
@@ -63,7 +63,7 @@ rules:
   # Borrado recursivo sin papelera. Irrecuperable.
   # El ancla (?:^|[;&|]\s*) exige que rm esté en posición de comando: NO matchea
   # `git rm -rf --cached` (operación inofensiva sobre el índice de git).
-  - pattern: '(?:^|[;&|]\s*)(?:sudo\s+)?rm\s+.*-[a-zA-Z]*(?:r[a-zA-Z]*f|f[a-zA-Z]*r)'
+  - pattern: '(?:^|[;&|\n])\s*(?:sudo\s+)?rm\s+.*-[a-zA-Z]*(?:r[a-zA-Z]*f|f[a-zA-Z]*r)'
     action: block
     reason: "rm -rf es irrecuperable — no hay papelera ni undo"
     alternative: "revisá la lista de archivos primero con ls o find, luego borrá los específicos, o mové el directorio a /tmp"
@@ -74,7 +74,7 @@ rules:
 
   # docker compose down -v / docker-compose down -v
   # El flag -v borra los volúmenes nombrados — destruye datos persistentes del contenedor.
-  - pattern: 'docker[\s-]compose\s+down\s+.*-[a-zA-Z]*v'
+  - pattern: 'docker[\s-]compose\s+down\s+(?:.*\s)?(?:-v|--volumes)(?:\s|=|$|[;&|])'
     action: block
     reason: "docker compose down -v borra los volúmenes de datos del contenedor (bases de datos, uploads, etc.)"
     alternative: "omitir el flag -v al detener el stack; revisá los volúmenes con docker volume ls antes de borrarlos"

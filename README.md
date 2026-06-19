@@ -222,7 +222,7 @@ forge aplica cuatro capas de control complementarias:
 | Capa | Mecanismo | Kill-switch |
 |---|---|---|
 | **Hooks de entrada** | `UserPromptSubmit` redacta PII antes de que el prompt llegue a Anthropic. Fail-open. | `FORGE_PII_DISABLE=1` |
-| **Guardrails de ejecución** | `PreToolUse` evalúa reglas `block`/`confirm` en `docs/auditoria/guardrails.yaml` antes de cada Bash command. Fail-open. | `FORGE_GUARD_DISABLE=1` |
+| **Guardrails de ejecución** | `PreToolUse` evalúa reglas `block`/`confirm` en `docs/auditoria/guardrails.yaml` antes de cada Bash command. Fail-open y best-effort: un patrón con backtracking catastrófico escrito por el usuario es responsabilidad del usuario (el guard acota la longitud del input pero no garantiza terminación en patrones patológicos). | `FORGE_GUARD_DISABLE=1` |
 | **Review con juicio** | `/fg-review` OBLIGATORIO en todo ciclo. Hasta 6 reviewers especialistas + auditoría de assertions + TDD compliance. | No tiene (piso innegociable) |
 | **Contratos en CI del repo forge** | Tests de consistencia determinísticos: paridad agents↔skills, enums desde fuente única, anti-regresiones en templates. Protegen el repo de forge, no los proyectos del dev. | No aplica |
 

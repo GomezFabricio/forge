@@ -491,7 +491,16 @@ patrón que hizo match.
 
 Si el hook falla por cualquier motivo interno (bug, YAML malformado, error de I/O),
 devuelve `{}` y sale con código 0 — el comando se ejecuta con la política normal de
-permisos de Claude Code. El fallo se registra en `.forge/auditoria-guard.jsonl`.
+permisos de Claude Code. El fallo se registra en `.forge/auditoria-guard.jsonl` con
+`action: "error"` (incluyendo los errores inesperados que escapan de la evaluación).
+
+### Límite conocido: el guard es best-effort
+
+El guard limita la longitud del comando que evalúa contra cada regex (`MAX_COMMAND_LEN`)
+para acotar el costo de backtracking. Aun así, un patrón mal escrito en tu
+`guardrails.yaml` con backtracking catastrófico (p. ej. `(a+)+$`) puede ser lento: el
+filtro es best-effort y un patrón patológico escrito por el usuario es responsabilidad
+del usuario. Mantené los patrones simples y anclados.
 
 ---
 
