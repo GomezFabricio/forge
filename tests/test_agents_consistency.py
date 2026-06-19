@@ -351,3 +351,188 @@ class TestSkillResolutionEnumSingleSource:
             f"  Ocurrencias backtick: {standalone_injected}\n"
             f"  En enum: {has_bare_injected}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Item A — context7 tool name correctness
+# ---------------------------------------------------------------------------
+
+# The deployed @upstash/context7-mcp server exposes exactly these two tools.
+ALLOWED_CONTEXT7_TOOLS = frozenset(
+    ["mcp__context7__resolve-library-id", "mcp__context7__query-docs"]
+)
+
+_CONTEXT7_TOOL_RE = re.compile(r"\bmcp__context7__[a-z0-9][a-z0-9_-]*[a-z0-9]\b")
+
+
+class TestContext7ToolNames:
+    """(A) Verifica que ningún agent o skill use mcp__context7__get-library-docs.
+
+    El servidor @upstash/context7-mcp despliega exactamente dos tools:
+      - mcp__context7__resolve-library-id
+      - mcp__context7__query-docs
+
+    El nombre 'get-library-docs' es incorrecto y causa runtime errors.
+    """
+
+    def _collect_context7_refs(self, text: str) -> set[str]:
+        """Extract all mcp__context7__* tool names from text."""
+        return set(_CONTEXT7_TOOL_RE.findall(text))
+
+    def test_no_get_library_docs_in_agents(self):
+        """Ningún agent fg-*.md declara mcp__context7__get-library-docs."""
+        errores = []
+        for fase in FASES_EXECUTORS:
+            agent_path = AGENTS_DIR / f"fg-{fase}.md"
+            if not agent_path.exists():
+                continue
+            text = agent_path.read_text(encoding="utf-8")
+            refs = self._collect_context7_refs(text)
+            invalid = refs - ALLOWED_CONTEXT7_TOOLS
+            if invalid:
+                errores.append(f"agents/fg-{fase}.md: context7 tools no permitidas: {sorted(invalid)}")
+        assert errores == [], (
+            "Agents con tool names de context7 incorrectos:\n" + "\n".join(errores)
+        )
+
+    def test_no_get_library_docs_in_skills(self):
+        """Ninguna skill fg-*.md usa mcp__context7__get-library-docs."""
+        errores = []
+        for skill_path in sorted(SKILLS_DIR.glob("fg-*.md")):
+            text = skill_path.read_text(encoding="utf-8")
+            refs = self._collect_context7_refs(text)
+            invalid = refs - ALLOWED_CONTEXT7_TOOLS
+            if invalid:
+                errores.append(f"skills/{skill_path.name}: context7 tools no permitidas: {sorted(invalid)}")
+        assert errores == [], (
+            "Skills con tool names de context7 incorrectos:\n" + "\n".join(errores)
+        )
+
+    def test_context7_tools_in_allowed_set(self):
+        """Todos los mcp__context7__* referenciados en agents y skills están en el set permitido."""
+        errores = []
+        # Check agents
+        for fase in FASES_EXECUTORS:
+            agent_path = AGENTS_DIR / f"fg-{fase}.md"
+            if not agent_path.exists():
+                continue
+            text = agent_path.read_text(encoding="utf-8")
+            refs = self._collect_context7_refs(text)
+            disallowed = refs - ALLOWED_CONTEXT7_TOOLS
+            if disallowed:
+                errores.append(f"agents/fg-{fase}.md: {sorted(disallowed)}")
+        # Check skills
+        for skill_path in sorted(SKILLS_DIR.glob("fg-*.md")):
+            text = skill_path.read_text(encoding="utf-8")
+            refs = self._collect_context7_refs(text)
+            disallowed = refs - ALLOWED_CONTEXT7_TOOLS
+            if disallowed:
+                errores.append(f"skills/{skill_path.name}: {sorted(disallowed)}")
+        assert errores == [], (
+            f"Referencias a context7 tools fuera del set permitido {ALLOWED_CONTEXT7_TOOLS}:\n"
+            + "\n".join(errores)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Item C — skill_resolution field required in ALL fg-* skill envelopes
+# ---------------------------------------------------------------------------
+
+
+class TestSkillResolutionPresentInAllSkills:
+    """(C) Verifica que CADA skill fg-* incluya skill_resolution en su envelope.
+
+    fg-phase-common.md Sección B define skill_resolution como campo base
+    obligatorio. Toda skill fg-* debe listarlo, independientemente de si el
+    texto muestra el enum completo.
+    """
+
+    def test_all_fg_skills_have_skill_resolution_field(self):
+        """Cada skills/fg-*.md menciona 'skill_resolution:' en su envelope."""
+        faltantes = []
+        for skill_path in sorted(SKILLS_DIR.glob("fg-*.md")):
+            text = skill_path.read_text(encoding="utf-8")
+            # The field must appear literally in the file (in the envelope section).
+            if "skill_resolution:" not in text:
+                faltantes.append(skill_path.name)
+        assert faltantes == [], (
+            "Skills fg-* sin campo 'skill_resolution:' en el envelope "
+            "(campo base obligatorio según fg-phase-common.md Sección B):\n"
+            + "\n".join(faltantes)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Item G — native tool references must match agent tool declarations
+# ---------------------------------------------------------------------------
+
+# Native tools whose use in skill text implies they must be declared in agent frontmatter.
+# Detection heuristic: we look for the tool name used as a standalone word/phrase
+# consistent with actual invocation patterns in the skills.
+_NATIVE_TOOL_PATTERNS = {
+    "Read": re.compile(r"\bRead\b"),
+    "Edit": re.compile(r"\bEdit\b"),
+    "Write": re.compile(r"\bWrite\b"),
+    "Glob": re.compile(r"\bGlob\b"),
+    "Grep": re.compile(r"\bGrep\b"),
+}
+
+# Sections to exclude from native-tool scanning to reduce false positives.
+# We strip YAML frontmatter (between first --- delimiters) before scanning
+# because tool names there are declarations, not invocations.
+_FRONTMATTER_RE = re.compile(r"^---\n.*?---\n", re.DOTALL)
+
+
+def _strip_frontmatter(text: str) -> str:
+    """Remove YAML frontmatter from markdown text."""
+    return _FRONTMATTER_RE.sub("", text, count=1)
+
+
+# Phrases that indicate the tool name is being mentioned descriptively
+# (e.g. explaining what NOT to do) rather than invoked. We check if the
+# match is inside a "Nunca" / "Never" list item to reduce false positives.
+# This is a best-effort heuristic — over-declaring is safe, under-declaring is not.
+
+
+class TestNativeToolDeclarations:
+    """(G) Verifica que si una skill referencia Read/Edit/Write/Glob/Grep,
+    su agent frontmatter declare esa tool.
+
+    Heurística: el texto del skill body (sin frontmatter) menciona el nombre
+    exacto del tool como palabra delimitada por \\b. Cada match implica que
+    el executor necesita esa tool disponible. El agent correspondiente debe
+    declararla en tools:.
+
+    Over-declaring es inofensivo. El test falla solo por under-declaring.
+    """
+
+    def _infer_native_tools_from_skill(self, skill_body: str) -> set[str]:
+        """Return set of native tool names referenced in the skill body."""
+        found = set()
+        for tool_name, pattern in _NATIVE_TOOL_PATTERNS.items():
+            if pattern.search(skill_body):
+                found.add(tool_name)
+        return found
+
+    def test_native_tools_declared_in_agent(self):
+        errores = []
+        for fase in FASES_EXECUTORS:
+            skill_text = _get_skill_text(fase)
+            if skill_text is None:
+                continue
+            skill_body = _strip_frontmatter(skill_text)
+            inferred = self._infer_native_tools_from_skill(skill_body)
+            if not inferred:
+                continue
+            declared = _get_declared_tools(fase)
+            for tool in inferred:
+                if tool not in declared:
+                    errores.append(
+                        f"fg-{fase}: skill body menciona '{tool}' pero no está declarado"
+                        f" en tools: del agent (tools declarados: {sorted(declared)})"
+                    )
+        assert errores == [], (
+            "Native tools referenciadas en skills pero no declaradas en agent frontmatter:\n"
+            + "\n".join(errores)
+        )
+

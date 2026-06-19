@@ -44,6 +44,8 @@ Escanear en este orden y registrar qué se encontró:
 **(b) Skills del usuario** — en el directorio global:
 - Patrón `~/.claude/skills/*/SKILL.md`
 
+> **Nota de implementación**: usar Bash (`ls ~/.claude/skills/`) o Read-based enumeration para el escaneo de skills del usuario — **NO usar la tool Glob**. La tool Glob devuelve vacío bajo `~/.claude/` en esta configuración de entorno (limitación conocida del entorno Windows/Claude Code). La alternativa con Bash `ls` o enumeración directa vía Read es confiable.
+
 Registrar ambas fuentes en el campo `sources_scanned` del resultado.
 
 **(c) Path adicional del argumento** — si el orquestador pasó un path adicional como argumento (`$ARGUMENTS`), sumarlo como fuente extra de escaneo con el mismo tratamiento que las demás fuentes: buscar `*/SKILL.md` y `*.md` dentro de ese path, aplicar los mismos filtros y deduplicación.
@@ -88,6 +90,7 @@ Escribir el archivo con esta estructura:
 ```markdown
 # Skill Registry — {nombre del proyecto}
 
+<!-- {nombre del proyecto} se resuelve como el basename del directorio de trabajo (cwd). -->
 <!-- Auto-generado por forge (/fg-update-registry). Regenerar tras instalar, crear, mover o renombrar skills. -->
 
 Última actualización: {YYYY-MM-DD}
@@ -127,6 +130,7 @@ Llamar `mem_save` con:
 - `topic_key: skill-registry`
 - `type: config`
 - `scope: project`
+- `project: <nombre del proyecto>` — resuelto como el basename del directorio de trabajo (pwd). Ej: si el cwd es `/home/user/mi-proyecto`, el valor es `mi-proyecto`. En Windows: `C:\Users\user\mi-proyecto` → `mi-proyecto`.
 - `capture_prompt: false`
 - `content`: resumen indicando cuántas skills se indexaron y la fecha.
 
@@ -169,6 +173,9 @@ skills_indexed: <N>
 sources_scanned:
   - skills/ (proyecto)
   - ~/.claude/skills (usuario)
+skipped:
+  - path: <ruta al archivo saltado>
+    reason: missing_description | no_frontmatter | excluded_prefix
 engram_updated: true | false
 artifacts:
   - .atl/skill-registry.md (regenerado)

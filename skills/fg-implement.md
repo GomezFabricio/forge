@@ -165,7 +165,7 @@ Cuando todas las tareas estén tachadas:
 Si durante la implementación hay **ambigüedad real** sobre la firma, los parámetros o el comportamiento de una API de librería **EXTERNA** (no del propio codebase), consultar Context7 **antes de inventar la firma**:
 
 1. `mcp__context7__resolve-library-id` con el nombre de la librería → ID canónico.
-2. `mcp__context7__get-library-docs` con el ID y la query sobre el aspecto dudoso.
+2. `mcp__context7__query-docs` con el ID y una query string sobre el aspecto dudoso de la API.
 
 **Reglas de uso**:
 - 1 par de llamadas por duda concreta, no en bucle.

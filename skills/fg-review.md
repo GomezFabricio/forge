@@ -12,8 +12,9 @@ when_to_apply: El dev invoca /fg-review después de /fg-implement. Es el cuarto 
 ## Executor Override
 
 Si SOS el sub-agente `fg-review` (NO el orquestador), el gate de arriba NO aplica. Continuá con
-el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
-`Task`. Sos el executor — ejecutá.
+el trabajo de la fase que sigue. NO llamés a la tool `Skill`. Sos el executor — ejecutá.
+
+> **Excepción documentada — Tool `Task`**: `/fg-review` es la ÚNICA skill del workflow SDD con permiso de delegar. Puede invocar la tool `Task` (o `Agent`) ÚNICAMENTE para lanzar roles especialistas en el paso 7: `code-reviewer`, `security-reviewer`, `dba-reviewer`, `frontend-reviewer`, `qa-reviewer`, `legacy-impact-analyzer`. Fuera de esas delegaciones a roles, NO orquestes ni lances otros sub-agentes.
 
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, E)
 
@@ -94,6 +95,12 @@ Reportar la tabla con file/line/assertion/issue/severity.
 ### 7. Invocar sub-agentes especialistas según el cambio
 
 **Esta es la única parte del workflow SDD donde una skill delega.**
+
+Antes de lanzar cada sub-agente, seguir el **Skill Resolver Protocol** (`skills/_shared/skill-resolver.md`):
+1. Obtener el skill registry (desde engram o `.atl/skill-registry.md`).
+2. Matchear skills relevantes por contexto de código y tipo de tarea del rol.
+3. Pasar los paths exactos de `SKILL.md` al sub-agente bajo `## Skills to load before work`.
+4. Indicar al sub-agente que lea esos archivos antes de comenzar su tarea.
 
 Reglas de invocación (cada una usa la tool `Agent` con el `subagent_type` correspondiente):
 
@@ -233,4 +240,5 @@ structural: true | false
 suggest_update_arch: true | false
 next_recommended: /fg-update-arch (si estructural) | None (cambio cerrado)
 risks: None | <riesgos detectados>
+skill_resolution: paths-injected | fallback-registry | fallback-path | none
 ```

@@ -12,8 +12,9 @@ when_to_apply: El dev invoca /fg-design después de haber corrido /fg-plan. Es e
 ## Executor Override
 
 Si SOS el sub-agente `fg-design` (NO el orquestador), el gate de arriba NO aplica. Continuá con
-el trabajo de la fase que sigue. NO delegues. NO llamés a la tool `Skill`. NO llamés a la tool
-`Task`. Sos el executor — ejecutá.
+el trabajo de la fase que sigue. NO llamés a la tool `Skill`. Sos el executor — ejecutá.
+
+> **Excepción documentada — Tool `Task`**: `/fg-design` puede invocar la tool `Task` ÚNICAMENTE para lanzar el sub-agente `legacy-impact-analyzer` en el paso 2b (análisis de impacto en proyectos legacy). Esta delegación está diseñada en el contrato de la fase. Fuera de ese caso específico, NO lances sub-agentes ni orquestes.
 
 > Cargar antes: `skills/_shared/fg-phase-common.md` (secciones A, B, C, E)
 
