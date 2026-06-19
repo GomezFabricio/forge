@@ -56,6 +56,8 @@ EXIT_PLATFORM_UNSUPPORTED = 40  # OS / arch not in supported map
 CLAUDE_HOME = Path.home() / ".claude"
 ENGRAM_BIN_DIR_UNIX = Path.home() / ".engram" / "bin"
 ENGRAM_BIN_DIR_WIN = Path.home() / ".engram" / "bin"
+# Unified alias — both platform variants are identical; prefer this in new code.
+ENGRAM_BIN_DIR = ENGRAM_BIN_DIR_UNIX
 
 GITHUB_RELEASES_API = (
     "https://api.github.com/repos/Gentleman-Programming/engram/releases/latest"
@@ -79,7 +81,9 @@ CODEGRAPH_BIN_DIR_UNIX = Path.home() / ".codegraph" / "bin"
 CODEGRAPH_BIN_DIR_WIN = Path.home() / ".codegraph" / "bin"
 
 # Path monkeypatcheable para tests — NO usar Path.home() directamente en lógica testeable.
-CODEGRAPH_CLAUDE_JSON: Path = Path.home() / ".claude.json"
+# CLAUDE_JSON is the canonical name; CODEGRAPH_CLAUDE_JSON is kept as an alias for backward compat.
+CLAUDE_JSON: Path = Path.home() / ".claude.json"
+CODEGRAPH_CLAUDE_JSON: Path = CLAUDE_JSON
 
 # Mapa de tokens (os, arch) → nombre de asset en el release de CodeGraph.
 # IMPORTANTE: tokens DISTINTOS a engram.
@@ -228,9 +232,15 @@ def detect_engram() -> tuple[bool, dict]:
             engram_block = servers.get("engram", {}) if isinstance(servers, dict) else {}
             cmd = engram_block.get("command") if isinstance(engram_block, dict) else None
             if cmd:
-                # Accept the entry if the command is "engram" (rely on PATH) or an absolute path
-                # that actually exists on disk.
-                if cmd == "engram" or Path(cmd).exists():
+                # Accept the entry only when the binary is actually usable:
+                #   - generic "engram": require shutil.which to confirm it is on PATH
+                #   - absolute path:    require the file exists AND is executable
+                if cmd == "engram":
+                    usable = shutil.which("engram") is not None
+                else:
+                    p = Path(cmd)
+                    usable = p.exists() and os.access(cmd, os.X_OK)
+                if usable:
                     info["mcp_json"] = cmd
                     return True, info
         except (json.JSONDecodeError, OSError):
@@ -467,7 +477,11 @@ def install_codegraph() -> tuple[bool, str]:
                     os.unlink(tmp_path_str)
                     return False, "Binario 'codegraph' no encontrado dentro del tarball."
                 member.name = bin_name  # flatten: eliminar subcarpetas del path
-                tf.extract(member, path=str(binary_dest.parent))
+                # filter="data" hardens against symlink attacks (Python 3.12+).
+                if sys.version_info >= (3, 12):
+                    tf.extract(member, path=str(binary_dest.parent), filter="data")
+                else:
+                    tf.extract(member, path=str(binary_dest.parent))
         else:
             with zipfile.ZipFile(tmp_path_str, "r") as zf:
                 member = next(
@@ -502,6 +516,32 @@ def install_codegraph() -> tuple[bool, str]:
     return True, f"codegraph instalado en {binary_dest}"
 
 
+def _backup_once(path: Path, backed_up: set) -> None:
+    """Write a .forge-bak of *path* the FIRST time it is about to be mutated.
+
+    Subsequent calls for the same path are no-ops — this preserves the pristine
+    pre-install state across sequential registrar calls within a single run().
+
+    Args:
+        path:       The file that is about to be mutated.
+        backed_up:  A run-scoped set of already-backed-up path strings.
+                    Callers must pass the same set instance for the entire run.
+    """
+    key = str(path)
+    if key in backed_up:
+        return
+    backed_up.add(key)
+    if path.exists():
+        bak = path.with_suffix(path.suffix + ".forge-bak")
+        # Never overwrite an existing backup. A registrar may have created the
+        # pristine .forge-bak already (e.g. install_engram() runs before the
+        # codegraph registrar and is not tracked by this run's set); overwriting
+        # here would clobber the pristine snapshot with mutated content.
+        if not bak.exists():
+            with contextlib.suppress(OSError):
+                bak.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 def register_codegraph_mcp() -> str:
     """Registra el bloque MCP de CodeGraph en ~/.claude.json con merge idempotente.
 
@@ -533,11 +573,12 @@ def register_codegraph_mcp() -> str:
     if isinstance(mcp_servers, dict) and "codegraph" in mcp_servers:
         return "present"
 
-    # Crear backup antes de escribir
+    # Crear backup antes de escribir — solo si aún no existe (preserva pristine de run())
     if existing_content is not None:
         backup_path = claude_json_path.with_suffix(".json.forge-bak")
-        with contextlib.suppress(OSError):
-            backup_path.write_text(existing_content, encoding="utf-8")
+        if not backup_path.exists():
+            with contextlib.suppress(OSError):
+                backup_path.write_text(existing_content, encoding="utf-8")
 
     # Merge: agregar mcpServers.codegraph preservando el resto
     if "mcpServers" not in config or not isinstance(config.get("mcpServers"), dict):
@@ -612,11 +653,12 @@ def register_context7_mcp() -> str:
     if isinstance(mcp_servers, dict) and "context7" in mcp_servers:
         return "present"
 
-    # Crear backup antes de escribir
+    # Crear backup antes de escribir — solo si aún no existe (preserva pristine de run())
     if existing_content is not None:
         backup_path = claude_json_path.with_suffix(".json.forge-bak")
-        with contextlib.suppress(OSError):
-            backup_path.write_text(existing_content, encoding="utf-8")
+        if not backup_path.exists():
+            with contextlib.suppress(OSError):
+                backup_path.write_text(existing_content, encoding="utf-8")
 
     # Construir el bloque a escribir (copiar base, no mutar la constante)
     api_key = os.environ.get("CONTEXT7_API_KEY", "")
@@ -643,17 +685,28 @@ def register_context7_mcp() -> str:
     return "created" if was_empty else "merged"
 
 
-def _pii_hook_command() -> str:
-    """Comando del hook PII, pinneado al intérprete actual.
+def _hook_command(module: str) -> str:
+    """Build a hook command that invokes *module* via the current interpreter.
 
-    Usa sys.executable (el Python del venv de pipx donde forge quedó instalado),
-    NO un 'python' genérico del PATH que podría no tener forge importable. Cita la
-    ruta si tiene espacios (ej. instalaciones en 'C:\\Program Files\\...').
+    Uses sys.executable (the venv Python where forge is installed) rather than
+    a generic 'python' that may not have forge importable. Quotes the path when
+    it contains spaces (e.g. 'C:\\Program Files\\...').
+
+    Args:
+        module: fully-qualified Python module name (e.g. 'forge.filters.hook_user_prompt')
+
+    Returns:
+        A command string of the form ``<python> -m <module>``.
     """
     py = sys.executable or "python"
     if " " in py:
         py = f'"{py}"'
-    return f"{py} -m {PII_HOOK_MODULE}"
+    return f"{py} -m {module}"
+
+
+def _pii_hook_command() -> str:
+    """Comando del hook PII, pinneado al intérprete actual."""
+    return _hook_command(PII_HOOK_MODULE)
 
 
 def _pii_hook_already_registered(user_prompt_submit: list) -> bool:
@@ -730,10 +783,7 @@ def register_pii_hook() -> str:
 
 def _guard_hook_command() -> str:
     """Comando del hook de guardrails, pinneado al intérprete actual."""
-    py = sys.executable or "python"
-    if " " in py:
-        py = f'"{py}"'
-    return f"{py} -m {GUARD_HOOK_MODULE}"
+    return _hook_command(GUARD_HOOK_MODULE)
 
 
 def _guard_hook_already_registered(pre_tool_use: list) -> bool:
@@ -777,11 +827,12 @@ def register_guard_hook() -> str:
         if isinstance(ptu, list) and _guard_hook_already_registered(ptu):
             return "present"
 
-    # Backup antes de escribir
+    # Backup antes de escribir — solo si aún no existe (preserva pristine de run())
     if existing_content is not None:
         backup_path = settings_path.with_suffix(".json.forge-bak")
-        with contextlib.suppress(OSError):
-            backup_path.write_text(existing_content, encoding="utf-8")
+        if not backup_path.exists():
+            with contextlib.suppress(OSError):
+                backup_path.write_text(existing_content, encoding="utf-8")
 
     was_empty = existing_content is None or existing_content.strip() == ""
 
@@ -1223,11 +1274,12 @@ def register_engram_mcp(binary_path: Path | None = None) -> str:
     if isinstance(mcp_servers, dict) and "engram" in mcp_servers:
         return "present"
 
-    # Crear backup antes de escribir
+    # Crear backup antes de escribir — solo si aún no existe (preserva pristine de run())
     if existing_content is not None:
         backup_path = claude_json_path.with_suffix(".json.forge-bak")
-        with contextlib.suppress(OSError):
-            backup_path.write_text(existing_content, encoding="utf-8")
+        if not backup_path.exists():
+            with contextlib.suppress(OSError):
+                backup_path.write_text(existing_content, encoding="utf-8")
 
     # Construir el bloque: ruta absoluta si la conocemos, "engram" como fallback
     command = str(binary_path) if binary_path is not None else "engram"
@@ -1325,7 +1377,11 @@ def install_engram() -> tuple[bool, str]:
                 if member is None:
                     return False, "Binary 'engram' not found inside tarball."
                 member.name = bin_name  # flatten path
-                tf.extract(member, path=str(binary_dest.parent))
+                # filter="data" hardens against symlink attacks (Python 3.12+).
+                if sys.version_info >= (3, 12):
+                    tf.extract(member, path=str(binary_dest.parent), filter="data")
+                else:
+                    tf.extract(member, path=str(binary_dest.parent))
         else:
             with zipfile.ZipFile(tmp_path_str, "r") as zf:
                 member = next(
@@ -1517,12 +1573,30 @@ def run(args) -> int:  # args: argparse.Namespace
     R-INST-04: --skip-codegraph omite instalación; --install-codegraph fuerza sin prompt.
     R-INST-05: fallo de CodeGraph → warning en reporte, NO cambia exit code.
     """
+    # Snapshot both config files BEFORE any registrar mutates them — Fix 3 (pristine backup).
+    # All registrars that write these files share this set via _backup_once() so that only
+    # the first write per file within this run produces a backup.
+    _run_backed_up: set = set()
+
     detected, info = detect_engram()
 
     if detected and getattr(args, "install_engram", False):
         # REQ-FLAGS-03: already detected, skip reinstall
         method = info.get("mcp_json") or info.get("which") or info.get("version_check") or "?"
         print(f"engram ya detectado vía {method}, salteando install")
+
+        # Fix 1: detected but MCP block may still be missing — register if so.
+        if not info.get("mcp_json"):
+            detected_bin = info.get("which")
+            _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)
+            register_engram_mcp(Path(detected_bin) if detected_bin else None)
+
+    elif detected:
+        # Detected (no --install-engram flag). Fix 1: if MCP block is missing, write it now.
+        if not info.get("mcp_json"):
+            detected_bin = info.get("which")
+            _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)
+            register_engram_mcp(Path(detected_bin) if detected_bin else None)
 
     elif not detected:
         if getattr(args, "install_engram", False):
@@ -1559,6 +1633,7 @@ def run(args) -> int:  # args: argparse.Namespace
 
             if cg_detected:
                 # Ya instalado — solo verificar/registrar MCP
+                _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)  # Fix 3
                 mcp_status = register_codegraph_mcp()
                 which_path = cg_info.get("which", "")
                 codegraph_report = {"status": "already_present", "msg": which_path}
@@ -1578,6 +1653,7 @@ def run(args) -> int:  # args: argparse.Namespace
                 if do_install:
                     ok_cg, msg_cg = install_codegraph()
                     if ok_cg:
+                        _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)  # Fix 3
                         mcp_status = register_codegraph_mcp()
                         codegraph_report = {"status": "installed", "msg": msg_cg, "mcp": mcp_status}
                     else:
@@ -1596,11 +1672,13 @@ def run(args) -> int:  # args: argparse.Namespace
         else:
             if getattr(args, "install_context7", False):
                 # --install-context7: sin prompt (CI-safe)
+                _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)  # Fix 3
                 mcp_status_ctx = register_context7_mcp()
                 context7_report = {"status": "registered", "mcp": mcp_status_ctx}
             else:
                 answer_ctx = prompt_context7_yn()
                 if answer_ctx == "y":
+                    _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)  # Fix 3
                     mcp_status_ctx = register_context7_mcp()
                     context7_report = {"status": "registered", "mcp": mcp_status_ctx}
                 else:
@@ -1611,10 +1689,12 @@ def run(args) -> int:  # args: argparse.Namespace
 
     # Paso Hook PII — try/except amplio: fallo no aborta ni cambia exit code (fail-open)
     pii_hook_report: dict = {}
+    _settings_path = CLAUDE_HOME / "settings.json"
     try:
         if getattr(args, "skip_pii_hook", False):
             pii_hook_report = {"status": "skipped", "msg": "omitido por --skip-pii-hook"}
         else:
+            _backup_once(_settings_path, _run_backed_up)  # Fix 3
             hook_status = register_pii_hook()
             pii_hook_report = {"status": "registered", "hook": hook_status}
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
@@ -1626,6 +1706,7 @@ def run(args) -> int:  # args: argparse.Namespace
         if getattr(args, "skip_guard_hook", False):
             guard_hook_report = {"status": "skipped", "msg": "omitido por --skip-guard-hook"}
         else:
+            _backup_once(_settings_path, _run_backed_up)  # Fix 3 (no-op if pii already backed up)
             hook_status = register_guard_hook()
             guard_hook_report = {"status": "registered", "hook": hook_status}
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
