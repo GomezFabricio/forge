@@ -60,6 +60,13 @@ Repository = "https://github.com/GomezFabricio/forge"
 Issues = "https://github.com/GomezFabricio/forge/issues"
 Changelog = "https://github.com/GomezFabricio/forge/blob/main/CHANGELOG.md"
 
+[tool.hatch.metadata]
+# Permite la dependencia directa por URL al wheel de en_core_web_sm (PEP 508
+# direct reference). Sin esto hatchling aborta la generación de metadata
+# ("cannot be a direct reference"). forge no se publica en PyPI, así que la
+# URL directa es válida.
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["forge"]
 
