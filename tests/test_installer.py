@@ -191,6 +191,7 @@ class TestDetectEngram:
 
         binary = tmp_path / "engram_bin"
         binary.write_text("fake binary")
+        binary.chmod(0o755)  # indicador 1 (path absoluto) exige X_OK; en Unix hay que setearlo
         claude_json = tmp_path / ".claude.json"
         claude_json.write_text(json.dumps({
             "mcpServers": {
@@ -217,6 +218,9 @@ class TestDetectEngram:
         }))
 
         monkeypatch.setattr(installer, "CODEGRAPH_CLAUDE_JSON", claude_json)
+        # Comando genérico "engram": indicador 1 exige que esté en PATH. Lo mockeamos
+        # para no depender de si la máquina (o el runner de CI) tiene engram instalado.
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/local/bin/engram")
 
         found, info = installer.detect_engram()
         assert found is True
@@ -341,6 +345,7 @@ class TestDetectEngram:
 
         binary = tmp_path / "engram_bin"
         binary.write_text("fake")
+        binary.chmod(0o755)  # indicador 1 (path absoluto) exige X_OK; en Unix hay que setearlo
         claude_json = tmp_path / ".claude.json"
         claude_json.write_text(json.dumps({
             "mcpServers": {
