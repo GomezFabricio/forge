@@ -8,6 +8,21 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Instalación — CodeGraph (bundle completo) y filtro PII (modelo spaCy)
+
+#### Fixed
+
+- **`install_codegraph()` extraía solo el wrapper, no el bundle.** El release de CodeGraph no es un binario estático sino un bundle (`node` + `bin/codegraph` + `lib/dist/bin/codegraph.js`); el instalador extraía únicamente el wrapper y lo dejaba huérfano (`codegraph --version` → "No such file or directory", pese a reportar "instalado"). Ahora extrae el árbol completo a `~/.codegraph/` strippeando el directorio top-level, hace `chmod +x` del wrapper **y** del `node` bundleado, corre el cleanup de quarantine de macOS de forma **recursiva** (el quarantine sobre `node` también bloquea la ejecución), y valida estructuralmente (wrapper + runtime `node` presentes) fallando ruidoso si el bundle quedó incompleto. Ramas `.tar.gz` y `.zip`.
+- **El hook PII no redactaba nada y crasheaba el prompt.** `build_analyzer()` pasaba `nlp_engine=None`, lo que hacía que Presidio cayera a su modelo default `en_core_web_lg`, no lo encontrara e intentara autodescargarlo en runtime → `sys.exit()` (un `SystemExit` que el fail-open `except Exception` del hook no atrapaba) → exit 1 con el error de spaCy en stdout, sin redactar (PII iba sin filtrar a la API). Ahora se usa un `SpacyNlpEngine` explícito con `en_core_web_sm` (~12MB, declarado como dependencia directa en `pyproject.toml` para que pipx/pip lo depositen en el venv) que **nunca** autodescarga: un modelo ausente se vuelve un `OSError` que el fail-open sí atrapa. El modelo es necesario porque Presidio siempre tokeniza y la detección de secretos por contexto (AWS/OpenAI/Bearer) depende de los lemas.
+
+#### Added
+
+- **Smoke-check del filtro PII al final de `forge install`**: tras registrar el hook, construye el analyzer y corre una redacción de prueba; si falla, el reporte avisa ruidosamente (estado `registered_broken`) en vez de declarar "registrado" sobre un filtro que dejaría pasar PII en silencio (fail-open).
+
+#### Changed
+
+- **`templates/CLAUDE-md-institucional.md`**: nueva subsección "Precedencia al recibir un cambio (y repo sin scaffolding)" — forge está siempre activo; ante un cambio sobre nivel Libre con `config.yaml` ausente, `/fg-setup` es el paso cero antes del ciclo SDD. Un PRD o un diseño previo alimenta las fases, no las reemplaza.
+
 ### Modelo de interacción — los executors no preguntan al dev, el orquestador resuelve
 
 #### Changed

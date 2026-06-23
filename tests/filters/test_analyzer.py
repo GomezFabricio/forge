@@ -43,18 +43,41 @@ class TestBuildAnalyzer:
         missing = _ALL_22_ENTITY_TYPES - supported
         assert missing == set(), f"Missing entity types: {missing}"
 
-    def test_no_spacy_required(self):
-        """ANA-01-B: build_analyzer() does not require spaCy or NLP models."""
-        # If this test runs without spaCy installed, it passes.
-        # The mere act of calling build_analyzer() is the test.
+    def test_build_analyzer_pins_small_model(self):
+        """ANA-01-B: build_analyzer() pins en_core_web_sm, never the lg default.
+
+        The filter needs a spaCy model for tokenization + lemma-based context boosting;
+        the old "no model required" claim was false and crashed the hook when Presidio
+        fell back to auto-downloading en_core_web_lg. We pin the small model explicitly.
+        """
         engine = build_analyzer()
-        # Also verify a CUIT can be analyzed (basic sanity)
+        assert engine.nlp_engine.models == [
+            {"lang_code": "en", "model_name": "en_core_web_sm"}
+        ]
+        # Sanity: a CUIT is still detected end-to-end with the small model.
         results = engine.analyze(
             text=f"CUIT del proveedor: {CUIT_VALID_1}",
             language="en",
         )
         cuit_results = [r for r in results if r.entity_type == "CUIT"]
         assert len(cuit_results) >= 1
+
+    def test_engine_never_auto_downloads_model(self):
+        """Regression: the engine must NOT auto-download a missing model at runtime.
+
+        Presidio's stock SpacyNlpEngine pip-installs missing models via spaCy's CLI,
+        which calls sys.exit() on failure — a SystemExit that bypasses the PII hook's
+        fail-open guard (it catches Exception, not BaseException) and crashes the
+        prompt with exit 1. _ForgeSpacyNlpEngine makes the download a no-op so a
+        missing model surfaces as a catchable OSError from spacy.load() instead.
+        """
+        from forge.filters.analyzer import _ForgeSpacyNlpEngine
+
+        eng = _ForgeSpacyNlpEngine(
+            models=[{"lang_code": "en", "model_name": "en_core_web_sm"}]
+        )
+        # No-op: returns None, no download, no SystemExit.
+        assert eng._download_spacy_model_if_needed("model-that-does-not-exist") is None
 
     def test_anthropic_wins_over_openai(self):
         """ANA-01-C: ANTHROPIC_KEY at score 1.0 wins over OPENAI_KEY for sk-ant- strings."""

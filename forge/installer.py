@@ -463,49 +463,106 @@ def install_codegraph() -> tuple[bool, str]:
                 # Si no se puede descargar SHA256SUMS, continuar sin verificar (advertencia)
                 pass
 
-        binary_dest.parent.mkdir(parents=True, exist_ok=True)
+        # El release de CodeGraph NO es un binario estático: es un bundle.
+        #     codegraph-<os>-<arch>/
+        #     ├── node                       (runtime Node bundleado)
+        #     ├── bin/codegraph              (wrapper que ejecuta node + la app)
+        #     └── lib/dist/bin/codegraph.js  (la app real)
+        # El wrapper resuelve `node` y `lib/` como hermanos de su carpeta bin/, así
+        # que TODO el árbol debe quedar en ~/.codegraph/ (bin_dir.parent), no solo
+        # el wrapper (extraer solo el wrapper era el bug: quedaba huérfano). Se
+        # strippea el directorio top-level codegraph-<os>-<arch>/ para que el layout
+        # final sea ~/.codegraph/{node,bin/codegraph,lib/...}.
+        bundle_root = bin_dir.parent  # ~/.codegraph
+        bundle_root.mkdir(parents=True, exist_ok=True)
 
         if ext == ".tar.gz":
             with tarfile.open(tmp_path_str, "r:gz") as tf:
-                # Encontrar el binario dentro del archivo (puede estar en subcarpeta)
-                member = next(
-                    (m for m in tf.getmembers()
-                     if m.name.endswith("codegraph") or m.name.endswith("codegraph.exe")),
+                members = tf.getmembers()
+                wrapper = next(
+                    (m for m in members
+                     if m.name.endswith("bin/codegraph")
+                     or m.name.endswith("bin/codegraph.exe")),
                     None,
                 )
-                if member is None:
+                if wrapper is None:
                     os.unlink(tmp_path_str)
-                    return False, "Binario 'codegraph' no encontrado dentro del tarball."
-                member.name = bin_name  # flatten: eliminar subcarpetas del path
-                # filter="data" hardens against symlink attacks (Python 3.12+).
+                    return False, "Bundle de CodeGraph inválido: falta bin/codegraph en el tarball."
+                # Top-level a strippear = lo que precede a 'bin/' (ej. 'codegraph-darwin-arm64/').
+                top = wrapper.name[: wrapper.name.rfind("bin/")]
+                wrapper_rel = wrapper.name[len(top):].lstrip("/")
+                picked = []
+                for m in members:
+                    name = m.name[len(top):] if top and m.name.startswith(top) else m.name
+                    name = name.lstrip("/")
+                    if not name:
+                        continue  # saltar la entrada del dir top-level strippeado
+                    m.name = name
+                    picked.append(m)
+                # filter="data" endurece contra symlink/path-traversal (Python 3.12+).
                 if sys.version_info >= (3, 12):
-                    tf.extract(member, path=str(binary_dest.parent), filter="data")
+                    tf.extractall(path=str(bundle_root), members=picked, filter="data")
                 else:
-                    tf.extract(member, path=str(binary_dest.parent))
+                    tf.extractall(path=str(bundle_root), members=picked)
         else:
             with zipfile.ZipFile(tmp_path_str, "r") as zf:
-                member = next(
-                    (n for n in zf.namelist()
-                     if n.endswith("codegraph") or n.endswith("codegraph.exe")),
+                names = zf.namelist()
+                wrapper = next(
+                    (n for n in names
+                     if n.endswith("bin/codegraph")
+                     or n.endswith("bin/codegraph.exe")
+                     or n.endswith("bin/codegraph.cmd")),
                     None,
                 )
-                if member is None:
+                if wrapper is None:
                     os.unlink(tmp_path_str)
-                    return False, "Binario 'codegraph' no encontrado dentro del zip."
-                with zf.open(member) as src, open(binary_dest, "wb") as dst:
-                    dst.write(src.read())
+                    return False, "Bundle de CodeGraph inválido: falta bin/codegraph en el zip."
+                top = wrapper[: wrapper.rfind("bin/")]
+                wrapper_rel = wrapper[len(top):].lstrip("/")
+                for n in names:
+                    if n.endswith("/"):
+                        continue  # entrada de directorio
+                    rel = n[len(top):] if top and n.startswith(top) else n
+                    rel = rel.lstrip("/")
+                    if not rel:
+                        continue
+                    dest = bundle_root / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(n) as src, open(dest, "wb") as dst:
+                        dst.write(src.read())
 
         os.unlink(tmp_path_str)
+
+        # El wrapper real (su ruta puede diferir del default codegraph[.exe]).
+        binary_dest = bundle_root / wrapper_rel
 
     except (urllib.error.URLError, OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
         return False, f"Error descargando/extrayendo CodeGraph: {exc}"
 
-    # chmod +x en unix
+    # El wrapper Y el node bundleado deben ser ejecutables (unix). El node también:
+    # el wrapper lo invoca como `$DIR/node`, no sirve de nada un wrapper +x con node sin +x.
     if os_tok != "win32":
-        os.chmod(binary_dest, 0o755)
+        node_unix = bundle_root / "node"
+        for exe in (binary_dest, node_unix):
+            if exe.exists():
+                with contextlib.suppress(OSError):
+                    os.chmod(exe, 0o755)
 
-    # macOS quarantine cleanup (best-effort)
-    _xattr_cleanup_darwin(binary_dest)
+    # macOS quarantine cleanup — RECURSIVO sobre el bundle: el quarantine sobre el
+    # `node` bundleado también bloquea la ejecución, no solo el del wrapper.
+    _xattr_cleanup_darwin(bundle_root, recursive=True)
+
+    # Smoke-check estructural: el bug original dejaba SOLO el wrapper. Verificamos
+    # que el bundle quedó completo (wrapper + runtime node) y fallamos ruidoso si no,
+    # en vez de reportar "instalado" sobre un estado roto.
+    node_bin = bundle_root / ("node.exe" if os_tok == "win32" else "node")
+    if not binary_dest.exists():
+        return False, f"CodeGraph quedó incompleto: falta el wrapper en {binary_dest}."
+    if not node_bin.exists():
+        return False, (
+            f"CodeGraph quedó incompleto: falta el runtime 'node' en {node_bin} "
+            f"(el wrapper quedaría huérfano)."
+        )
 
     # Editar PATH
     if os_tok == "win32":
@@ -513,7 +570,7 @@ def install_codegraph() -> tuple[bool, str]:
     else:
         _edit_path_unix(bin_dir)
 
-    return True, f"codegraph instalado en {binary_dest}"
+    return True, f"codegraph (bundle) instalado en {bundle_root}"
 
 
 def _backup_once(path: Path, backed_up: set) -> None:
@@ -1254,19 +1311,27 @@ def _edit_path_windows(bin_dir: Path) -> str:
     return "appended"
 
 
-def _xattr_cleanup_darwin(binary_path: Path) -> None:
-    """Remove macOS quarantine attribute from binary (best-effort).
+def _xattr_cleanup_darwin(binary_path: Path, *, recursive: bool = False) -> None:
+    """Remove the macOS quarantine attribute from a file (or a whole tree).
 
     Only runs on darwin. Failures are silently swallowed — the install
     continues without aborting.
+
+    Args:
+        binary_path: file or directory whose quarantine xattr to clear.
+        recursive:   when True (e.g. the CodeGraph bundle dir), pass ``-r`` so the
+                     attribute is cleared on every file in the tree. macOS also
+                     quarantines the bundled ``node``, which blocks execution if
+                     left set — clearing only the wrapper is not enough.
     """
     if sys.platform != "darwin":
         return
+    flag = "-dr" if recursive else "-d"
     with contextlib.suppress(FileNotFoundError, subprocess.TimeoutExpired, OSError):
         subprocess.run(
-            ["xattr", "-d", "com.apple.quarantine", str(binary_path)],
+            ["xattr", flag, "com.apple.quarantine", str(binary_path)],
             capture_output=True,
-            timeout=5,
+            timeout=30 if recursive else 5,
             check=False,
         )
 
@@ -1456,6 +1521,31 @@ def install_engram() -> tuple[bool, str]:
 # =============================================================================
 
 
+def _smoke_check_pii() -> tuple[bool, str]:
+    """Verify the PII filter actually works right after install.
+
+    The UserPromptSubmit hook fails open by design, so a broken filter is INVISIBLE
+    at runtime — prompts just flow through unredacted. The classic failure was the
+    spaCy model missing → Presidio auto-download → ``sys.exit()`` (SystemExit). We
+    prove the full path here: ``build_analyzer()`` (which loads the model eagerly)
+    plus a redaction on a sample, so the install report can shout instead of
+    claiming "registered" over a filter that silently leaks PII.
+
+    Returns ``(ok, message)``. Never raises — including SystemExit — so it can never
+    abort the install (the enclosing handler only catches ``Exception``).
+    """
+    try:
+        from forge.filters.analyzer import build_analyzer
+
+        analyzer = build_analyzer()
+        results = analyzer.analyze(text="email de prueba: smoke@example.com", language="en")
+        if not any(r.entity_type == "EMAIL_ADDRESS" for r in results):
+            return False, "no detectó un email de prueba (¿modelo spaCy ausente o roto?)"
+        return True, "redacción de prueba OK"
+    except BaseException as exc:  # noqa: B036 — el modo de fallo clásico es SystemExit
+        return False, f"{type(exc).__name__}: {exc}"
+
+
 def prompt_user_yn() -> str:
     """Display engram install prompt and read y/n response.
 
@@ -1547,6 +1637,10 @@ def print_report(report: dict) -> None:
         ph_msg = pii_info.get("msg", "")
         if ph_status == "registered":
             print(f"  hook PII: registrado en ~/.claude/settings.json ({ph_hook})")
+        elif ph_status == "registered_broken":
+            print(f"  hook PII: ⚠ registrado PERO el filtro NO redacta — {ph_msg}")
+            print("            El hook fail-open dejará pasar PII SIN filtrar. "
+                  "Revisar que el modelo spaCy (en_core_web_sm) esté en el venv.")
         elif ph_status == "skipped":
             print(f"  hook PII: omitido ({ph_msg})")
         elif ph_status == "failed":
@@ -1729,7 +1823,17 @@ def run(args) -> int:  # args: argparse.Namespace
         else:
             _backup_once(_settings_path, _run_backed_up)  # Fix 3
             hook_status = register_pii_hook()
-            pii_hook_report = {"status": "registered", "hook": hook_status}
+            ok_smoke, smoke_msg = _smoke_check_pii()
+            if ok_smoke:
+                pii_hook_report = {"status": "registered", "hook": hook_status, "smoke": smoke_msg}
+            else:
+                # Registrado pero el filtro no redacta: el hook dejará pasar PII en
+                # silencio (fail-open). No abortamos, pero el reporte debe gritar.
+                pii_hook_report = {
+                    "status": "registered_broken",
+                    "hook": hook_status,
+                    "msg": smoke_msg,
+                }
     except Exception as exc:  # noqa: BLE001 — defensa en profundidad (fail-open)
         pii_hook_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
 

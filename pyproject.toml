@@ -34,6 +34,14 @@ dependencies = [
     # cargar. En entornos limpios click no siempre llega por transitividad, así
     # que lo declaramos explícito (sin esto el filtro PII crashea en runtime).
     "click>=8.0",
+    # Modelo spaCy chico (~12MB). Presidio SIEMPRE tokeniza y el context-enhancer
+    # necesita lemas, así que el filtro PII requiere un modelo. Lo declaramos como
+    # dependencia directa (wheel) para que pipx/pip lo depositen en el venv en la
+    # instalación: sin esto Presidio cae al default en_core_web_lg, no lo encuentra
+    # e intenta autodescargarlo en runtime (sys.exit → crash del hook). El pin 3.8.0
+    # debe seguir la familia minor de spacy (3.8.x); bump si presidio sube spacy.
+    # forge no está en PyPI, así que la URL directa es válida (pip la resuelve).
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 ]
 
 [project.optional-dependencies]

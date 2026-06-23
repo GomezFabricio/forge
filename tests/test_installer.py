@@ -1993,18 +1993,33 @@ class TestInstallCodegraph:
         return sha256sums_resp, content
 
     def test_happy_path_unix_returns_true(self, tmp_path, monkeypatch):
-        """GIVEN plataforma linux/x64, API responde, descarga y SHA256 OK
-        WHEN install_codegraph() THEN retorna (True, mensaje con ruta del binario)."""
+        """GIVEN un bundle tar.gz válido (node + bin/codegraph + lib/) y SHA256 OK
+        WHEN install_codegraph() THEN extrae el bundle COMPLETO a ~/.codegraph/
+        (no solo el wrapper) y retorna (True, mensaje)."""
         import hashlib
+        import io
+        import tarfile
 
         from forge import installer
 
         asset_name = "codegraph-linux-x64.tar.gz"
-        binary_content = b"fake binary"
-        sha256 = hashlib.sha256(binary_content).hexdigest()
-        sha256sums_text = f"{sha256}  {asset_name}\n"
 
-        # Redirigir bin dir a tmp_path
+        # Tarball real con la estructura de bundle de CodeGraph (no un binario suelto).
+        buf = io.BytesIO()
+        bundle_files = {
+            "codegraph-linux-x64/node": b"#!/bin/sh\necho node\n",
+            "codegraph-linux-x64/bin/codegraph": b"#!/bin/sh\nexec node app\n",
+            "codegraph-linux-x64/lib/dist/bin/codegraph.js": b"console.log(1)\n",
+        }
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            for name, data in bundle_files.items():
+                ti = tarfile.TarInfo(name=name)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+        tarball_bytes = buf.getvalue()
+        sha256sums_text = f"{hashlib.sha256(tarball_bytes).hexdigest()}  {asset_name}\n"
+
+        # Redirigir bin dir a tmp_path → bundle_root = tmp_path
         monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
         monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
 
@@ -2024,32 +2039,24 @@ class TestInstallCodegraph:
         sha256sums_resp.__enter__ = lambda s: s
         sha256sums_resp.__exit__ = MagicMock(return_value=False)
 
-        # Mock tarfile: extraer binario falso
-        import tarfile
-        mock_member = MagicMock(spec=tarfile.TarInfo)
-        mock_member.name = "codegraph-linux-x64/codegraph"
-        mock_tf = MagicMock()
-        mock_tf.__enter__ = lambda s: s
-        mock_tf.__exit__ = MagicMock(return_value=False)
-        mock_tf.getmembers.return_value = [mock_member]
-        mock_tf.extract = MagicMock()
-
         def fake_download(url, dest):
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(binary_content)
+            dest.write_bytes(tarball_bytes)
 
         with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
              patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
              patch.object(installer, "_download_binary", side_effect=fake_download), \
-             patch("tarfile.open", return_value=mock_tf), \
+             patch.object(installer, "_edit_path_unix"), \
              patch("os.chmod"), \
-             patch("os.unlink"), \
              patch.object(installer, "_xattr_cleanup_darwin"):
             ok, msg = installer.install_codegraph()
 
-        assert ok is True
-        assert isinstance(msg, str)
-        assert len(msg) > 0
+        assert ok is True, msg
+        # El bundle quedó COMPLETO bajo ~/.codegraph/ (tmp_path), no solo el wrapper.
+        assert (tmp_path / "node").exists(), "falta el runtime node"
+        assert (tmp_path / "bin" / "codegraph").exists(), "falta el wrapper"
+        assert (tmp_path / "lib" / "dist" / "bin" / "codegraph.js").exists(), "falta lib/"
+        assert "instalado" in msg
 
     def test_network_failure_returns_false(self, tmp_path, monkeypatch):
         """GIVEN urllib.request.urlopen lanza URLError WHEN install_codegraph()
@@ -2150,16 +2157,28 @@ class TestInstallCodegraph:
         assert isinstance(msg, str)
 
     def test_happy_path_windows_returns_true(self, tmp_path, monkeypatch):
-        """GIVEN plataforma win32/x64, descarga zip exitosa WHEN install_codegraph()
-        THEN retorna (True, mensaje). Triangulación: comportamiento zip distinto a tar.gz."""
+        """GIVEN un bundle .zip válido en win32/x64 WHEN install_codegraph()
+        THEN extrae el bundle COMPLETO y retorna (True, mensaje).
+        Triangulación: la rama zip difiere de la tar.gz."""
         import hashlib
+        import io
+        import zipfile
 
         from forge import installer
 
         asset_name = "codegraph-win32-x64.zip"
-        binary_content = b"fake windows binary"
-        sha256 = hashlib.sha256(binary_content).hexdigest()
-        sha256sums_text = f"{sha256}  {asset_name}\n"
+
+        buf = io.BytesIO()
+        bundle_files = {
+            "codegraph-win32-x64/node.exe": b"MZ fake node\n",
+            "codegraph-win32-x64/bin/codegraph.exe": b"MZ fake wrapper\n",
+            "codegraph-win32-x64/lib/dist/bin/codegraph.js": b"console.log(1)\n",
+        }
+        with zipfile.ZipFile(buf, "w") as zf:
+            for name, data in bundle_files.items():
+                zf.writestr(name, data)
+        zip_bytes = buf.getvalue()
+        sha256sums_text = f"{hashlib.sha256(zip_bytes).hexdigest()}  {asset_name}\n"
 
         monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
         monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
@@ -2180,30 +2199,20 @@ class TestInstallCodegraph:
         sha256sums_resp.__enter__ = lambda s: s
         sha256sums_resp.__exit__ = MagicMock(return_value=False)
 
-        mock_zf = MagicMock()
-        mock_zf.__enter__ = lambda s: s
-        mock_zf.__exit__ = MagicMock(return_value=False)
-        mock_zf.namelist.return_value = ["codegraph-win32-x64/codegraph.exe"]
-        mock_src = MagicMock()
-        mock_src.__enter__ = lambda s: s
-        mock_src.__exit__ = MagicMock(return_value=False)
-        mock_src.read.return_value = binary_content
-        mock_zf.open.return_value = mock_src
-
         def fake_download(url, dest):
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(binary_content)
+            dest.write_bytes(zip_bytes)
 
         with patch.object(installer, "_detect_codegraph_platform", return_value=("win32", "x64")), \
              patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
              patch.object(installer, "_download_binary", side_effect=fake_download), \
-             patch.object(installer, "_edit_path_windows", return_value="appended"), \
-             patch("zipfile.ZipFile", return_value=mock_zf), \
-             patch("os.unlink"):
+             patch.object(installer, "_edit_path_windows", return_value="appended"):
             ok, msg = installer.install_codegraph()
 
-        assert ok is True
-        assert isinstance(msg, str)
+        assert ok is True, msg
+        assert (tmp_path / "node.exe").exists(), "falta el runtime node.exe"
+        assert (tmp_path / "bin" / "codegraph.exe").exists(), "falta el wrapper"
+        assert (tmp_path / "lib" / "dist" / "bin" / "codegraph.js").exists(), "falta lib/"
 
 
 # ---------------------------------------------------------------------------
@@ -3789,19 +3798,31 @@ class TestFix4TarfileFilter:
     DeprecationWarning and enable symlink hardening."""
 
     def test_install_codegraph_uses_filter_data_on_312(self, tmp_path, monkeypatch):
-        """GIVEN Python >= 3.12, tarfile extraction path in install_codegraph
-        WHEN install_codegraph() extracts a tar.gz THEN tf.extract receives filter='data'."""
-        import sys
+        """GIVEN Python >= 3.12 WHEN install_codegraph() extrae un tar.gz
+        THEN tf.extractall recibe filter='data' (endurecimiento symlink/traversal)."""
         import hashlib
+        import io
+        import sys
+        import tarfile
+
         from forge import installer
 
         if sys.version_info < (3, 12):
             pytest.skip("filter='data' guard only tested on 3.12+")
 
         asset_name = "codegraph-linux-x64.tar.gz"
-        binary_content = b"fake binary"
-        sha256 = hashlib.sha256(binary_content).hexdigest()
-        sha256sums_text = f"{sha256}  {asset_name}\n"
+        buf = io.BytesIO()
+        bundle_files = {
+            "codegraph-linux-x64/node": b"node\n",
+            "codegraph-linux-x64/bin/codegraph": b"wrapper\n",
+        }
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            for name, data in bundle_files.items():
+                ti = tarfile.TarInfo(name=name)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+        tarball_bytes = buf.getvalue()
+        sha256sums_text = f"{hashlib.sha256(tarball_bytes).hexdigest()}  {asset_name}\n"
 
         monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_UNIX", tmp_path / "bin")
         monkeypatch.setattr(installer, "CODEGRAPH_BIN_DIR_WIN", tmp_path / "bin")
@@ -3822,38 +3843,32 @@ class TestFix4TarfileFilter:
         sha256sums_resp.__enter__ = lambda s: s
         sha256sums_resp.__exit__ = MagicMock(return_value=False)
 
-        import tarfile
-        mock_member = MagicMock(spec=tarfile.TarInfo)
-        mock_member.name = "codegraph-linux-x64/codegraph"
-        extract_calls = []
+        # Spy sobre extractall real: registra kwargs y sigue extrayendo de verdad.
+        extractall_calls = []
+        orig_extractall = tarfile.TarFile.extractall
 
-        mock_tf = MagicMock()
-        mock_tf.__enter__ = lambda s: s
-        mock_tf.__exit__ = MagicMock(return_value=False)
-        mock_tf.getmembers.return_value = [mock_member]
+        def spy_extractall(self, *args, **kwargs):
+            extractall_calls.append(kwargs)
+            return orig_extractall(self, *args, **kwargs)
 
-        def capture_extract(*args, **kwargs):
-            extract_calls.append(kwargs)
-
-        mock_tf.extract = capture_extract
+        monkeypatch.setattr(tarfile.TarFile, "extractall", spy_extractall)
 
         def fake_download(url, dest):
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(binary_content)
+            dest.write_bytes(tarball_bytes)
 
         with patch.object(installer, "_detect_codegraph_platform", return_value=("linux", "x64")), \
              patch("urllib.request.urlopen", side_effect=[api_resp, sha256sums_resp]), \
              patch.object(installer, "_download_binary", side_effect=fake_download), \
-             patch("tarfile.open", return_value=mock_tf), \
+             patch.object(installer, "_edit_path_unix"), \
              patch("os.chmod"), \
-             patch("os.unlink"), \
              patch.object(installer, "_xattr_cleanup_darwin"):
             ok, msg = installer.install_codegraph()
 
-        assert ok is True
-        assert extract_calls, "tf.extract was never called"
-        assert extract_calls[0].get("filter") == "data", (
-            f"Expected filter='data' in extract kwargs, got: {extract_calls[0]}"
+        assert ok is True, msg
+        assert extractall_calls, "tf.extractall was never called"
+        assert extractall_calls[0].get("filter") == "data", (
+            f"Expected filter='data' in extractall kwargs, got: {extractall_calls[0]}"
         )
 
     def test_install_engram_uses_filter_data_on_312(self, tmp_path, monkeypatch):

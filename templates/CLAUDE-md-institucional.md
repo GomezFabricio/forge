@@ -159,6 +159,29 @@ Configurable en `docs/auditoria/config.yaml → rules.workflow.ceremonial_thresh
 `/fg-review` siempre corre. En cualquier nivel (Rápido, Completo) y cualquier config.
 No es negociable, no es configurable. Es la garantía mínima del sistema.
 
+#### Precedencia al recibir un cambio (y repo sin scaffolding)
+
+forge está siempre activo (ver encabezado): no se opta por usarlo, es el modo de
+operación por defecto. Lo que puede faltar es el **scaffolding del proyecto**
+(`docs/auditoria/config.yaml`, `docs/arquitectura/`, índice CodeGraph). Su ausencia
+NO significa "forge no está acá" — forge está latente igual. El orden al recibir
+un cambio es:
+
+1. **Graduar la ceremonia primero.** ¿Es nivel Libre (typo, una línea, una pregunta,
+   opt-in `--libre`)? Entonces forge no entra: sin setup, sin ciclo. Fin.
+2. **Si es Rápido o Completo y falta `config.yaml`:** `/fg-setup` es el PASO CERO del
+   primer ciclo. El orquestador lo propone y espera confirmación; el gate corre con el
+   comportamiento default `auto`, porque `ceremonial_threshold` vive dentro del
+   `config.yaml` que todavía no existe. Si además falta `overview.md`, se encadena con
+   la conversación de visión de bootstrap ya definida (ver "Visión del sistema (modo
+   bootstrap)").
+3. **Recién entonces el ciclo SDD** (`/fg-plan` → [`/fg-design`] → `/fg-implement` →
+   `/fg-review`).
+
+Nunca se arranca a construir un cambio por encima de Libre salteando el setup y el
+ciclo "porque ya viene un PRD o un diseño": esos insumos alimentan las fases, no las
+reemplazan.
+
 ### Las tres leyes (cuando TDD está activo)
 
 1. **NO escribir código de producción** sin un test fallando.

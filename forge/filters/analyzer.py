@@ -1,12 +1,43 @@
 """Analyzer factory — Presidio AnalyzerEngine wired with all custom recognizers (REQ-ANA-01).
 
-Pattern-only mode: no spaCy, no NLP model required. Cold start budget: < 300ms on Windows.
+Detection is pattern-based, but Presidio always tokenizes the text — and the
+context-aware enhancer needs lemmas — before running any recognizer, so a spaCy
+model IS required. We pin the small English model (en_core_web_sm, ~12MB): it
+provides tokenization plus a lemmatizer for context boosting, and is far lighter
+than the en_core_web_lg default Presidio would otherwise pull (~560MB). The model
+ships as a declared dependency (pyproject) and is never auto-downloaded at runtime
+(see ``_ForgeSpacyNlpEngine``).
 """
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 from presidio_analyzer.context_aware_enhancers import LemmaContextAwareEnhancer
+from presidio_analyzer.nlp_engine import SpacyNlpEngine
 
 from forge.filters.recognizers import all_recognizers
+
+# spaCy model used for tokenization + lemmas (needed by the context-aware
+# enhancer). Small model: ~12MB. Declared as a dependency in pyproject so it is
+# always present in the install venv.
+_SPACY_MODEL_NAME = "en_core_web_sm"
+
+
+class _ForgeSpacyNlpEngine(SpacyNlpEngine):
+    """SpacyNlpEngine pinned to our model that never auto-downloads at runtime.
+
+    Presidio's stock engine tries to pip-install a missing model on load by
+    shelling out to spaCy's CLI downloader, which calls ``sys.exit()`` on failure
+    — a ``SystemExit`` (``BaseException``). The PII hook's fail-open guard only
+    catches ``Exception``, so a missing model would crash the hook (exit 1, spaCy
+    error on stdout) instead of passing the prompt through unmodified.
+
+    Making the download a no-op turns an absent model into a plain ``OSError`` from
+    ``spacy.load()``, which the hook's fail-open path catches cleanly. In a correct
+    install the model is present (declared dependency), so this never fires.
+    """
+
+    def _download_spacy_model_if_needed(self, model_name: str) -> None:
+        # Never download at runtime; the model ships as a declared dependency.
+        return
 
 # Presidio built-in recognizer names to enable (R16.4)
 _BUILTIN_RECOGNIZERS = [
@@ -28,7 +59,7 @@ _CONTEXT_SIMILARITY_FACTOR = 0.5
 
 
 def build_analyzer() -> AnalyzerEngine:
-    """Return an AnalyzerEngine in pattern-only mode with all 22 recognizers.
+    """Return an AnalyzerEngine with all 22 recognizers and a pinned spaCy model.
 
     Registered recognizers:
     - 15 custom recognizers (forge/filters/recognizers/)
@@ -36,12 +67,16 @@ def build_analyzer() -> AnalyzerEngine:
       IP_ADDRESS, PHONE_NUMBER, URL, CRYPTO
 
     Configuration:
-    - No NLP engine (no spaCy model required)
+    - NLP engine: en_core_web_sm via _ForgeSpacyNlpEngine (explicit, never the
+      en_core_web_lg default; never auto-downloaded). Tokenization + lemmas only;
+      the model's NER is unused — all detection comes from the recognizers above.
     - score_threshold=0.5 (default; passed at analyze() call time)
     - context_similarity_factor=0.5 (higher than Presidio default of 0.35)
       to ensure context-required recognizers reach score >= 0.85
 
-    Calling this function multiple times is safe — no module-level state is mutated.
+    Note: AnalyzerEngine loads the spaCy model eagerly here, so this call pays the
+    model load (~0.5s cold). Calling it multiple times is safe — no module-level
+    state is mutated.
     """
     # Build a fresh registry with only the recognizers we want
     registry = RecognizerRegistry()
@@ -71,9 +106,14 @@ def build_analyzer() -> AnalyzerEngine:
         context_suffix_count=5,
     )
 
+    # Explicit small-model engine — never the lg default, never a runtime download.
+    nlp_engine = _ForgeSpacyNlpEngine(
+        models=[{"lang_code": "en", "model_name": _SPACY_MODEL_NAME}]
+    )
+
     return AnalyzerEngine(
         registry=registry,
-        nlp_engine=None,
+        nlp_engine=nlp_engine,
         supported_languages=["en"],
         context_aware_enhancer=context_enhancer,
         default_score_threshold=0.5,
