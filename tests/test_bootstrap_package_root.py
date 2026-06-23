@@ -16,7 +16,7 @@ class TestRepoLayout:
     def test_resolves_to_repo_root_in_editable_install(self):
         """In the current editable install, PACKAGE_ROOT must point to the
         repo root that actually contains config/."""
-        from forge.bootstrap import PACKAGE_ROOT, _resolve_package_root
+        from forge.bootstrap import PACKAGE_ROOT
 
         # Config directory must exist under the resolved root
         assert (PACKAGE_ROOT / "config").exists(), (
@@ -45,6 +45,7 @@ class TestWheelLayout:
         """When __file__ is inside site-packages (no config/ sibling), the
         resolver must pick up the share/forge layout from sysconfig data dir."""
         import sysconfig as _sysconfig
+
         from forge import bootstrap as _bs
 
         # Simulate site-packages: no config/ next to forge/
@@ -81,6 +82,7 @@ class TestWheelLayout:
     def test_wheel_root_has_config(self, tmp_path, monkeypatch):
         """After resolution in wheel layout, config/ is reachable."""
         import sysconfig as _sysconfig
+
         from forge import bootstrap as _bs
 
         fake_site_packages = tmp_path / "lib" / "site-packages" / "forge"
@@ -114,6 +116,7 @@ class TestNeitherExists:
         the repo-relative candidate without raising.  Errors surface later when
         a consumer actually tries to open a missing file."""
         import sysconfig as _sysconfig
+
         from forge import bootstrap as _bs
 
         # Fake site-packages with NO config/ anywhere
@@ -143,5 +146,4 @@ class TestNeitherExists:
     def test_import_does_not_raise(self):
         """Importing forge.bootstrap in the real environment must never raise,
         even if internal paths were wrong — the module-level resolution is safe."""
-        import importlib
         import forge.bootstrap  # noqa: F401 — just verify import succeeds

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 
+
 def _resolve_package_root() -> Path:
     """Return the package root that contains the ``config/`` directory.
 

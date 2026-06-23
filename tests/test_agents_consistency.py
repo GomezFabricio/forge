@@ -214,7 +214,6 @@ class TestDeclaredToolsSuperset:
             if skill_text is None:
                 continue
             declared = _get_declared_tools(fase)
-            declared_lower = {t.lower() for t in declared}
 
             # Check full MCP tool names mentioned in skill text
             invoked_mcp = set(_FULL_MCP_TOOL_RE.findall(skill_text))

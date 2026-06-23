@@ -12,9 +12,9 @@ import yaml
 
 from forge.guards.hook_pre_tool import (
     MAX_COMMAND_LEN,
-    process_hook,
-    _is_guard_disabled,
     _hash_command,
+    _is_guard_disabled,
+    process_hook,
 )
 
 

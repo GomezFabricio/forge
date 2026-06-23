@@ -1,6 +1,5 @@
 """Tests for create_guardrails_template() in forge.bootstrap."""
 from pathlib import Path
-import pytest
 
 
 class TestCreateGuardrailsTemplate:
@@ -21,6 +20,7 @@ class TestCreateGuardrailsTemplate:
 
     def test_created_file_is_valid_yaml(self, tmp_path):
         import yaml
+
         from forge.bootstrap import create_guardrails_template
         create_guardrails_template(tmp_path)
         dest = tmp_path / "docs" / "auditoria" / "guardrails.yaml"
@@ -45,6 +45,7 @@ class TestCreateGuardrailsTemplate:
     def test_created_file_has_rules(self, tmp_path):
         """The created file should have at least one rule."""
         import yaml
+
         from forge.bootstrap import create_guardrails_template
         create_guardrails_template(tmp_path)
         dest = tmp_path / "docs" / "auditoria" / "guardrails.yaml"
@@ -70,7 +71,7 @@ class TestCreateGuardrailsTemplate:
         from forge.bootstrap import GUARDRAILS_TEMPLATE
         template_file = Path(__file__).resolve().parent.parent / "templates" / "guardrails.yaml"
         file_content = template_file.read_text(encoding="utf-8")
-        assert GUARDRAILS_TEMPLATE == file_content, (
+        assert file_content == GUARDRAILS_TEMPLATE, (
             "GUARDRAILS_TEMPLATE in forge/bootstrap.py has drifted from "
             "templates/guardrails.yaml — update both together"
         )

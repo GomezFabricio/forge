@@ -3595,7 +3595,6 @@ class TestFix2DetectEngramUsabilityCheck:
     def test_indicator1_abs_path_exists_non_executable_falls_through(self, tmp_path, monkeypatch):
         """GIVEN mcpServers.engram.command points to an existing but non-executable file
         WHEN detect_engram() THEN indicator 1 not triggered (binary not usable)."""
-        import os as _os
         from forge import installer
 
         binary = tmp_path / "engram_noexec"
@@ -3875,6 +3874,7 @@ class TestFix4TarfileFilter:
         """GIVEN Python >= 3.12, tarfile extraction path in install_engram
         WHEN install_engram() extracts a tar.gz THEN tf.extract receives filter='data'."""
         import sys
+
         from forge import installer
 
         if sys.version_info < (3, 12):
@@ -3893,7 +3893,6 @@ class TestFix4TarfileFilter:
         api_response.__enter__ = lambda s: s
         api_response.__exit__ = MagicMock(return_value=False)
 
-        import tarfile
         mock_member = MagicMock()
         mock_member.name = "engram"
         extract_calls = []
