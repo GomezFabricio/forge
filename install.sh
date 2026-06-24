@@ -28,7 +28,34 @@ for candidate in python3 python; do
   fi
 done
 if [ -z "$PYTHON_BIN" ]; then
-  log "se requiere Python 3.10 o superior. Instalalo y volvé a correr."
+  log "forge necesita Python 3.10 o superior y no encontré una versión compatible."
+  case "$(uname -s)" in
+    Darwin)
+      if command -v brew >/dev/null 2>&1; then
+        log "Instalalo con:  brew install python@3.13"
+      else
+        log "Instalá Homebrew (https://brew.sh) y luego:  brew install python@3.13"
+        log "O bajá el instalador desde https://www.python.org/downloads/macos/"
+      fi
+      ;;
+    Linux)
+      if command -v apt-get >/dev/null 2>&1; then
+        log "Instalalo con:  sudo apt update && sudo apt install -y python3 python3-venv python3-pip"
+      elif command -v dnf >/dev/null 2>&1; then
+        log "Instalalo con:  sudo dnf install -y python3 python3-pip"
+      elif command -v pacman >/dev/null 2>&1; then
+        log "Instalalo con:  sudo pacman -S --needed python python-pip"
+      elif command -v zypper >/dev/null 2>&1; then
+        log "Instalalo con:  sudo zypper install -y python3 python3-pip"
+      else
+        log "Instalá Python 3.10+ con el gestor de paquetes de tu distro, o desde https://www.python.org/downloads/"
+      fi
+      ;;
+    *)
+      log "Instalá Python 3.10+ desde https://www.python.org/downloads/"
+      ;;
+  esac
+  log "Cuando lo tengas, volvé a correr este instalador."
   exit 1
 fi
 

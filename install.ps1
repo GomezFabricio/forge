@@ -40,7 +40,14 @@ foreach ($candidate in @('python', 'python3')) {
     }
 }
 if (-not $python) {
-    Stop-Install 'se requiere Python 3.10 o superior. Instalalo y volvé a correr.'
+    Write-Step 'forge necesita Python 3.10 o superior y no encontré una versión compatible.'
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Step 'Instalalo con:  winget install -e --id Python.Python.3.13'
+    } else {
+        Write-Step 'Bajá el instalador desde https://www.python.org/downloads/windows/ y tildá "Add python.exe to PATH".'
+    }
+    Write-Step '(Ojo: el "python" del Microsoft Store es un stub que no sirve para instalar paquetes; usá winget o python.org.)'
+    Stop-Install 'cuando lo tengas, abrí una terminal nueva y volvé a correr este instalador.'
 }
 
 # 2. Asegurar pipx. Detectamos con `find_spec` (no imprime nada) en vez de

@@ -18,6 +18,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 #### Added
 
 - **Smoke-check del filtro PII al final de `forge install`**: tras registrar el hook, construye el analyzer y corre una redacción de prueba; si falla, el reporte avisa ruidosamente (estado `registered_broken`) en vez de declarar "registrado" sobre un filtro que dejaría pasar PII en silencio (fail-open).
+- **Los instaladores guían la instalación de Python cuando falta.** `install.sh` e `install.ps1` ya no abortan con un escueto "instalalo y volvé a correr": detectan el SO/gestor de paquetes y muestran el **comando exacto** (`brew install python@3.13`, `sudo apt install …`, `dnf`, `pacman`, `zypper`, `winget install Python.Python.3.13` o el instalador de python.org), avisan del stub de Microsoft Store en Windows, y recuerdan re-correr el instalador. No instalan Python por su cuenta (decisión explícita del usuario).
 
 #### Changed
 
