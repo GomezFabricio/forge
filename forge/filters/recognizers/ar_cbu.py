@@ -1,10 +1,10 @@
-"""CBU recognizer — Argentine bank account code (REQ-REC-03).
+"""Recognizer de CBU — código de cuenta bancaria argentino (REQ-REC-03).
 
-CBU format: 22 digits. Two-block checksum algorithm (BCRA specification):
-- Block 1: first 7 digits with weights [3,1,7,9,3,1,7], check at position 7
-- Block 2: digits 8-20 (13 digits) with weights [9,1,7,3,9,1,7,3,9,1,7,3,9], check at pos 21
+Formato CBU: 22 dígitos. Algoritmo de checksum de dos bloques (especificación BCRA):
+- Bloque 1: primeros 7 dígitos con pesos [3,1,7,9,3,1,7], verificador en la posición 7
+- Bloque 2: dígitos 8-20 (13 dígitos) con pesos [9,1,7,3,9,1,7,3,9,1,7,3,9], verificador en la pos 21
 
-check_digit = (10 - (sum_of_weighted_digits % 10)) % 10
+check_digit = (10 - (suma_de_dígitos_ponderados % 10)) % 10
 """
 
 
@@ -15,21 +15,21 @@ _BLOCK2_WEIGHTS = [9, 1, 7, 3, 9, 1, 7, 3, 9, 1, 7, 3, 9]
 
 
 def _cbu_check_digit(digits: str, weights: list) -> int:
-    """Compute expected check digit for a CBU block."""
+    """Calcula el dígito verificador esperado para un bloque del CBU."""
     total = sum(int(d) * w for d, w in zip(digits, weights, strict=True))
     return (10 - (total % 10)) % 10
 
 
 def _is_valid_cbu(cbu_str: str) -> bool:
-    """Validate both CBU blocks using BCRA checksum algorithm."""
+    """Valida ambos bloques del CBU con el algoritmo de checksum del BCRA."""
     if len(cbu_str) != 22:
         return False
     try:
-        # Block 1: first 7 digits + check at index 7
+        # Bloque 1: primeros 7 dígitos + verificador en el índice 7
         expected1 = _cbu_check_digit(cbu_str[:7], _BLOCK1_WEIGHTS)
         if expected1 != int(cbu_str[7]):
             return False
-        # Block 2: digits at indices 8-20 (13 digits) + check at index 21
+        # Bloque 2: dígitos en los índices 8-20 (13 dígitos) + verificador en el índice 21
         expected2 = _cbu_check_digit(cbu_str[8:21], _BLOCK2_WEIGHTS)
         if expected2 != int(cbu_str[21]):
             return False
@@ -39,22 +39,22 @@ def _is_valid_cbu(cbu_str: str) -> bool:
 
 
 class _CbuRecognizer(PatternRecognizer):
-    """PatternRecognizer subclass that validates the CBU two-block checksum."""
+    """Subclase de PatternRecognizer que valida el checksum de dos bloques del CBU."""
 
     def validate_result(self, pattern_text: str) -> bool | None:
-        """Return True if both block checksums pass, False otherwise."""
+        """Devuelve True si ambos checksums de bloque pasan, False en caso contrario."""
         return _is_valid_cbu(pattern_text)
 
 
 def build_cbu_recognizer() -> PatternRecognizer:
-    """Return a PatternRecognizer for Argentine CBU codes.
+    """Devuelve un PatternRecognizer para códigos CBU argentinos.
 
-    - Entity type: CBU
-    - Pattern: ``\\b\\d{22}\\b`` (exact 22 digits)
-    - Base score: 0.85
-    - Two-block BCRA checksum validator: invalid checksums are discarded
-    - No context required (high specificity from 22-digit + checksum)
-    - No I/O side effects; importable without instantiating the full engine
+    - Tipo de entidad: CBU
+    - Patrón: ``\\b\\d{22}\\b`` (exactamente 22 dígitos)
+    - Score base: 0.85
+    - Validador de checksum BCRA de dos bloques: los checksums inválidos se descartan
+    - No requiere contexto (alta especificidad por los 22 dígitos + checksum)
+    - Sin efectos de I/O; importable sin instanciar el engine completo
     """
     pattern = Pattern(
         name="cbu_22digits",

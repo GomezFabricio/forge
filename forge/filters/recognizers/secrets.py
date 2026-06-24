@@ -1,17 +1,17 @@
-"""Secret recognizers — API keys, tokens, and credentials (REQ-REC-04 to REQ-REC-15).
+"""Recognizers de secretos — API keys, tokens y credenciales (REQ-REC-04 a REQ-REC-15).
 
-Each builder function returns a PatternRecognizer with:
-- No I/O side effects
-- Importable without instantiating Presidio's full engine
-- Entity type label matching the spec (UPPER_SNAKE_CASE)
+Cada función builder devuelve un PatternRecognizer con:
+- Sin efectos de I/O
+- Importable sin instanciar el engine completo de Presidio
+- Label de tipo de entidad según la spec (UPPER_SNAKE_CASE)
 
-Scoring notes (see ADR-2 in design):
-- ANTHROPIC_KEY: 1.0 — most specific prefix (sk-ant-)
-- OPENAI_KEY: base 0.4 (< threshold) + context boost to 0.85; lookahead excludes sk-ant-
-- AWS_ACCESS_KEY: 0.95 — AKIA/ABIA/ACCA/ASIA prefix is highly specific
-- AWS_SECRET_KEY: base 0.4 (below 0.5 threshold, never fires alone) + context boost to 0.85
-- BEARER_TOKEN: base 0.3 (< threshold) + context boost to 0.85
-- All others: high-specificity patterns at their respective scores
+Notas de scoring (ver ADR-2 en el diseño):
+- ANTHROPIC_KEY: 1.0 — el prefijo más específico (sk-ant-)
+- OPENAI_KEY: base 0.4 (< umbral) + boost de contexto a 0.85; el lookahead excluye sk-ant-
+- AWS_ACCESS_KEY: 0.95 — el prefijo AKIA/ABIA/ACCA/ASIA es muy específico
+- AWS_SECRET_KEY: base 0.4 (debajo del umbral 0.5, nunca dispara solo) + boost de contexto a 0.85
+- BEARER_TOKEN: base 0.3 (< umbral) + boost de contexto a 0.85
+- Todos los demás: patrones de alta especificidad con sus respectivos scores
 """
 
 import re
@@ -24,11 +24,11 @@ from presidio_analyzer import Pattern, PatternRecognizer
 
 
 def build_jwt_recognizer() -> PatternRecognizer:
-    """Three base64url segments separated by dots, each >= 10 chars.
+    """Tres segmentos base64url separados por puntos, cada uno >= 10 chars.
 
-    Score 0.9, entity JWT.
-    Avoids two-segment strings (domains, version numbers) by requiring
-    the pattern to have exactly two dots with >= 10 chars per segment.
+    Score 0.9, entidad JWT.
+    Evita strings de dos segmentos (dominios, números de versión) exigiendo
+    que el patrón tenga exactamente dos puntos con >= 10 chars por segmento.
     """
     return PatternRecognizer(
         supported_entity="JWT",
@@ -49,9 +49,9 @@ def build_jwt_recognizer() -> PatternRecognizer:
 
 
 def build_aws_access_key_recognizer() -> PatternRecognizer:
-    """AKIA/ABIA/ACCA/ASIA prefix followed by exactly 16 uppercase alphanumeric chars.
+    """Prefijo AKIA/ABIA/ACCA/ASIA seguido de exactamente 16 chars alfanuméricos en mayúscula.
 
-    Score 0.95, entity AWS_ACCESS_KEY.
+    Score 0.95, entidad AWS_ACCESS_KEY.
     """
     return PatternRecognizer(
         supported_entity="AWS_ACCESS_KEY",
@@ -72,14 +72,14 @@ def build_aws_access_key_recognizer() -> PatternRecognizer:
 
 
 def build_aws_secret_key_recognizer() -> PatternRecognizer:
-    """40-char base64 string. Base score 0.4 — requires AWS context to fire.
+    """String base64 de 40 chars. Score base 0.4 — requiere contexto de AWS para disparar.
 
-    Base score 0.4 is below the 0.5 firing threshold so the pattern never
-    triggers alone. Context words boost the score to 0.85 (fires).
-    Context words: aws_secret, secret_access_key, AWS_SECRET_ACCESS_KEY,
-    aws.secretAccessKey, plus Spanish cues (aws, clave, secreto, contraseña,
-    credencial) so a Spanish prose hint also fires it.
-    Entity AWS_SECRET_KEY.
+    El score base 0.4 está por debajo del umbral de disparo 0.5, así que el patrón
+    nunca se dispara solo. Las palabras de contexto suben el score a 0.85 (dispara).
+    Palabras de contexto: aws_secret, secret_access_key, AWS_SECRET_ACCESS_KEY,
+    aws.secretAccessKey, más pistas en español (aws, clave, secreto, contraseña,
+    credencial) para que una pista en prosa española también lo dispare.
+    Entidad AWS_SECRET_KEY.
     """
     return PatternRecognizer(
         supported_entity="AWS_SECRET_KEY",
@@ -87,8 +87,8 @@ def build_aws_secret_key_recognizer() -> PatternRecognizer:
             Pattern(
                 name="aws_secret_key",
                 regex=r"[A-Za-z0-9/+=]{40}",
-                # Base 0.4: below threshold (0.5) so it won't fire alone.
-                # With context boost (+0.5, via build_analyzer()), final score = 0.90 >= 0.85 (fires).
+                # Base 0.4: debajo del umbral (0.5) así que no dispara solo.
+                # Con boost de contexto (+0.5, vía build_analyzer()), score final = 0.90 >= 0.85 (dispara).
                 score=0.4,
             )
         ],
@@ -119,9 +119,9 @@ def build_aws_secret_key_recognizer() -> PatternRecognizer:
 
 
 def build_github_pat_recognizer() -> PatternRecognizer:
-    """Classic GitHub PAT: ghp_ + exactly 36 alphanumeric chars.
+    """PAT clásico de GitHub: ghp_ + exactamente 36 chars alfanuméricos.
 
-    Score 0.95, entity GITHUB_PAT.
+    Score 0.95, entidad GITHUB_PAT.
     """
     return PatternRecognizer(
         supported_entity="GITHUB_PAT",
@@ -142,9 +142,9 @@ def build_github_pat_recognizer() -> PatternRecognizer:
 
 
 def build_github_fine_grained_recognizer() -> PatternRecognizer:
-    """Fine-grained GitHub PAT: github_pat_ + exactly 82 alphanumeric/underscore chars.
+    """PAT fine-grained de GitHub: github_pat_ + exactamente 82 chars alfanuméricos/guión bajo.
 
-    Score 0.98, entity GITHUB_FINE_GRAINED.
+    Score 0.98, entidad GITHUB_FINE_GRAINED.
     """
     return PatternRecognizer(
         supported_entity="GITHUB_FINE_GRAINED",
@@ -165,14 +165,14 @@ def build_github_fine_grained_recognizer() -> PatternRecognizer:
 
 
 def build_openai_key_recognizer() -> PatternRecognizer:
-    """OpenAI API key: sk- (not followed by ant-) + 48 alphanumeric chars.
+    """API key de OpenAI: sk- (no seguido de ant-) + 48 chars alfanuméricos.
 
-    Base score 0.4 (< threshold 0.5) — requires openai context to fire.
-    Context boost to 0.85. Entity OPENAI_KEY.
+    Score base 0.4 (< umbral 0.5) — requiere contexto de openai para disparar.
+    Boost de contexto a 0.85. Entidad OPENAI_KEY.
 
-    The negative lookahead ``(?!ant-)`` prevents matching Anthropic keys.
-    Context includes Spanish cues (clave, credencial, contraseña) so a Spanish
-    prose hint also fires it, not only the English/identifier form.
+    El lookahead negativo ``(?!ant-)`` evita matchear keys de Anthropic.
+    El contexto incluye pistas en español (clave, credencial, contraseña) para que
+    una pista en prosa española también lo dispare, no solo la forma inglesa/identificador.
     """
     return PatternRecognizer(
         supported_entity="OPENAI_KEY",
@@ -206,9 +206,9 @@ def build_openai_key_recognizer() -> PatternRecognizer:
 
 
 def build_anthropic_key_recognizer() -> PatternRecognizer:
-    """Anthropic API key: sk-ant- + exactly 93 alphanumeric/hyphen chars.
+    """API key de Anthropic: sk-ant- + exactamente 93 chars alfanuméricos/guión.
 
-    Score 1.0, entity ANTHROPIC_KEY. No context required.
+    Score 1.0, entidad ANTHROPIC_KEY. No requiere contexto.
     """
     return PatternRecognizer(
         supported_entity="ANTHROPIC_KEY",
@@ -229,9 +229,9 @@ def build_anthropic_key_recognizer() -> PatternRecognizer:
 
 
 def build_slack_token_recognizer() -> PatternRecognizer:
-    """Slack API token: xox[bpoas]- prefix + alphanumeric/hyphen chars.
+    """Token de API de Slack: prefijo xox[bpoas]- + chars alfanuméricos/guión.
 
-    Score 0.9, entity SLACK_TOKEN.
+    Score 0.9, entidad SLACK_TOKEN.
     """
     return PatternRecognizer(
         supported_entity="SLACK_TOKEN",
@@ -252,9 +252,9 @@ def build_slack_token_recognizer() -> PatternRecognizer:
 
 
 def build_stripe_key_recognizer() -> PatternRecognizer:
-    """Stripe API key: (sk|pk|rk)_(live|test)_ + at least 24 alphanumeric chars.
+    """API key de Stripe: (sk|pk|rk)_(live|test)_ + al menos 24 chars alfanuméricos.
 
-    Score 0.9, entity STRIPE_KEY.
+    Score 0.9, entidad STRIPE_KEY.
     """
     return PatternRecognizer(
         supported_entity="STRIPE_KEY",
@@ -275,9 +275,9 @@ def build_stripe_key_recognizer() -> PatternRecognizer:
 
 
 def build_private_key_block_recognizer() -> PatternRecognizer:
-    """PEM private key block: -----BEGIN * PRIVATE KEY----- ... -----END * PRIVATE KEY-----.
+    """Bloque de clave privada PEM: -----BEGIN * PRIVATE KEY----- ... -----END * PRIVATE KEY-----.
 
-    Score 1.0, entity PRIVATE_KEY_BLOCK. Matches across newlines (DOTALL).
+    Score 1.0, entidad PRIVATE_KEY_BLOCK. Matchea a través de saltos de línea (DOTALL).
     """
     return PatternRecognizer(
         supported_entity="PRIVATE_KEY_BLOCK",
@@ -299,18 +299,18 @@ def build_private_key_block_recognizer() -> PatternRecognizer:
 
 
 def build_connection_string_password_recognizer() -> PatternRecognizer:
-    """Password embedded in connection string.
+    """Contraseña embebida en un connection string.
 
-    Captures the password value between : and @ in jdbc:/postgresql://mongodb://
-    mysql://redis:// URIs. Score 0.85, entity CONNECTION_STRING_PASSWORD.
+    Captura el valor de la contraseña entre : y @ en URIs jdbc:/postgresql://mongodb://
+    mysql://redis://. Score 0.85, entidad CONNECTION_STRING_PASSWORD.
     """
     return PatternRecognizer(
         supported_entity="CONNECTION_STRING_PASSWORD",
         patterns=[
             Pattern(
                 name="conn_string_password",
-                # Capture group not supported by Presidio — we match the password portion only
-                # by anchoring after ://[user]: and before @
+                # Presidio no soporta grupos de captura — matcheamos solo la porción de la
+                # contraseña anclando después de ://[user]: y antes de @
                 regex=r"(?:jdbc:|postgresql://|mongodb://|mysql://|redis://)[^@\s]*:[^\s:@/][^@\s]*@",
                 score=0.85,
             )
@@ -325,11 +325,11 @@ def build_connection_string_password_recognizer() -> PatternRecognizer:
 
 
 def build_bearer_token_recognizer() -> PatternRecognizer:
-    """Bearer token in HTTP Authorization header.
+    """Token Bearer en el header Authorization de HTTP.
 
-    Pattern includes the 'bearer ' prefix (case-insensitive) + token.
-    Base score 0.6 already above threshold when pattern matches (bearer + 20+ chars).
-    Context words boost to 0.85. Entity BEARER_TOKEN.
+    El patrón incluye el prefijo 'bearer ' (case-insensitive) + el token.
+    El score base 0.6 ya está sobre el umbral cuando el patrón matchea (bearer + 20+ chars).
+    Las palabras de contexto suben a 0.85. Entidad BEARER_TOKEN.
     """
     return PatternRecognizer(
         supported_entity="BEARER_TOKEN",

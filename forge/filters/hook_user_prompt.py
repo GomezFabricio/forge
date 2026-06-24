@@ -26,7 +26,7 @@ _FG_PASS_MARKER = "#fg-pass"
 
 
 def _is_pii_disabled() -> bool:
-    """Return True if FORGE_PII_DISABLE is set to a truthy value (non-empty, not "0")."""
+    """Devuelve True si FORGE_PII_DISABLE tiene un valor truthy (no vacío, distinto de "0")."""
     val = os.environ.get("FORGE_PII_DISABLE", "")
     return bool(val) and val != "0"
 
@@ -39,17 +39,17 @@ def process_prompt(
     operators=None,
     log_path: Path | None = None,
 ) -> dict:
-    """Process a Claude Code UserPromptSubmit hook payload.
+    """Procesa un payload del hook UserPromptSubmit de Claude Code.
 
-    :param input_data: Parsed JSON from stdin (must contain ``"prompt"`` key).
-    :param analyzer: Injected ``AnalyzerEngine`` (optional; lazy-built if None).
-    :param anonymizer: Injected ``AnonymizerEngine`` (optional; lazy-built if None).
-    :param operators: Injected operators config dict (optional; lazy-built if None).
-    :param log_path: Override log file path (for tests). Defaults to ``.forge/auditoria-pii.jsonl``.
-    :return: ``{}`` for no-op (pass-through) or
-             ``{"continue": True, "modified_prompt": <redacted>}`` for redactions.
+    :param input_data: JSON parseado de stdin (debe contener la clave ``"prompt"``).
+    :param analyzer: ``AnalyzerEngine`` inyectado (opcional; se construye lazy si es None).
+    :param anonymizer: ``AnonymizerEngine`` inyectado (opcional; se construye lazy si es None).
+    :param operators: dict de config de operators inyectado (opcional; se construye lazy si es None).
+    :param log_path: Override del path del log (para tests). Default: ``.forge/auditoria-pii.jsonl``.
+    :return: ``{}`` para no-op (pass-through) o
+             ``{"continue": True, "modified_prompt": <redactado>}`` para redacciones.
     """
-    # Step 0: FORGE_PII_DISABLE kill-switch — checked BEFORE #fg-pass and any presidio import
+    # Paso 0: kill-switch FORGE_PII_DISABLE — se chequea ANTES de #fg-pass y de cualquier import de presidio
     if _is_pii_disabled():
         prompt = input_data.get("prompt", "")
         _log_passthrough(prompt, log_path)
@@ -58,13 +58,13 @@ def process_prompt(
 
     prompt = input_data.get("prompt", "")
 
-    # Step 1: check #fg-pass override BEFORE any analysis (R20.5)
+    # Paso 1: chequear el override #fg-pass ANTES de cualquier análisis (R20.5)
     if _FG_PASS_MARKER in prompt:
         _log_passthrough(prompt, log_path)
         sys.stderr.write("[fg-pii] passthrough activo (#fg-pass detectado)\n")
         return {}
 
-    # Step 2: lazy-import analyzer/anonymizer (ADR-3: cold start optimization)
+    # Paso 2: import lazy de analyzer/anonymizer (ADR-3: optimización de cold start)
     if analyzer is None:
         from forge.filters.analyzer import build_analyzer
 
@@ -75,14 +75,14 @@ def process_prompt(
         anonymizer, operators = build_anonymizer()
 
     try:
-        # Step 3: analyze
+        # Paso 3: analizar
         results = analyzer.analyze(text=prompt, language="en")
 
-        # Step 4: if no results, pass through silently (no log)
+        # Paso 4: si no hay resultados, pasar sin modificar y en silencio (sin log)
         if not results:
             return {}
 
-        # Step 5: anonymize
+        # Paso 5: anonimizar
         anon_result = anonymizer.anonymize(
             text=prompt,
             analyzer_results=results,
@@ -90,11 +90,11 @@ def process_prompt(
         )
         modified_prompt = anon_result.text
 
-        # Step 6: log redaction event
+        # Paso 6: loguear el evento de redacción
         types_count = _build_types_count(results)
         _log_redaction(prompt, types_count, log_path)
 
-        # Step 7: emit stderr note
+        # Paso 7: emitir nota a stderr
         total = sum(types_count.values())
         sorted_types = ", ".join(sorted(types_count.keys()))
         sys.stderr.write(f"[fg-pii] {total} dato(s) redactado(s): {sorted_types}\n")
@@ -102,14 +102,14 @@ def process_prompt(
         return {"continue": True, "modified_prompt": modified_prompt}
 
     except Exception as exc:  # noqa: BLE001
-        # Fail-open: log error to stderr, do not block the prompt
+        # Fail-open: loguear el error a stderr, no bloquear el prompt
         sys.stderr.write(f"[fg-pii] error: {type(exc).__name__}\n")
         _log_error(prompt, log_path)
         return {}
 
 
 def _build_types_count(results) -> dict:
-    """Build a dict mapping entity types to their occurrence counts."""
+    """Construye un dict que mapea tipos de entidad a su cantidad de ocurrencias."""
     types_count: dict = {}
     for result in results:
         types_count[result.entity_type] = types_count.get(result.entity_type, 0) + 1
@@ -117,7 +117,7 @@ def _build_types_count(results) -> dict:
 
 
 def _log_redaction(prompt: str, types_count: dict, log_path: Path | None) -> None:
-    """Append a redaction event to the JSONL log."""
+    """Agrega un evento de redacción al log JSONL."""
     from forge.filters.redaction_log import hash_prompt, log_event
 
     log_event(
@@ -129,7 +129,7 @@ def _log_redaction(prompt: str, types_count: dict, log_path: Path | None) -> Non
 
 
 def _log_passthrough(prompt: str, log_path: Path | None) -> None:
-    """Append a passthrough event to the JSONL log."""
+    """Agrega un evento de passthrough al log JSONL."""
     from forge.filters.redaction_log import hash_prompt, log_event
 
     log_event(
@@ -141,7 +141,7 @@ def _log_passthrough(prompt: str, log_path: Path | None) -> None:
 
 
 def _log_error(prompt: str, log_path: Path | None) -> None:
-    """Append an error event to the JSONL log (fail-open: swallow any logging errors)."""
+    """Agrega un evento de error al log JSONL (fail-open: traga cualquier error de logging)."""
     try:
         from forge.filters.redaction_log import hash_prompt, log_event
 
@@ -152,14 +152,14 @@ def _log_error(prompt: str, log_path: Path | None) -> None:
             log_path=log_path,
         )
     except Exception:  # noqa: BLE001
-        pass  # Fail-open: never let logging block the hook
+        pass  # Fail-open: nunca dejar que el logging bloquee el hook
 
 
 def main() -> int:
-    """Entry point for Claude Code UserPromptSubmit hook.
+    """Entry point del hook UserPromptSubmit de Claude Code.
 
-    Reads JSON from stdin, calls process_prompt, writes JSON to stdout.
-    Always exits 0 (fail-open per ADR-4).
+    Lee JSON de stdin, llama a process_prompt, escribe JSON a stdout.
+    Siempre sale con 0 (fail-open según ADR-4).
     """
     try:
         raw = sys.stdin.buffer.read().decode("utf-8")
@@ -167,7 +167,7 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         error_response = {"error": f"Failed to parse stdin: {type(exc).__name__}: {exc}"}
         sys.stdout.write(json.dumps(error_response))
-        return 0  # Fail-open: exit 0 even on parse error
+        return 0  # Fail-open: exit 0 incluso si falla el parseo
 
     try:
         result = process_prompt(input_data)

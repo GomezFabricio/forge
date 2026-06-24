@@ -1,11 +1,11 @@
-"""DNI_AR recognizer — Argentine national ID (REQ-REC-02).
+"""Recognizer de DNI_AR — documento nacional de identidad argentino (REQ-REC-02).
 
-Two-tier pattern:
-- Formatted: ``\\d{1,2}\\.\\d{3}\\.\\d{3}`` — base score 0.7 (fires alone)
-- Raw digits: ``\\b\\d{7,8}\\b`` — base score 0.3 (needs context to reach threshold)
+Patrón de dos niveles:
+- Formateado: ``\\d{1,2}\\.\\d{3}\\.\\d{3}`` — score base 0.7 (dispara solo)
+- Dígitos sueltos: ``\\b\\d{7,8}\\b`` — score base 0.3 (necesita contexto para llegar al umbral)
 
-Context words boost raw-digits pattern to >= 0.5 (above default threshold).
-Arbitrary 7-8 digit integers without context do NOT fire at threshold 0.5.
+Las palabras de contexto suben el patrón de dígitos sueltos a >= 0.5 (sobre el umbral default).
+Enteros arbitrarios de 7-8 dígitos sin contexto NO disparan con el umbral 0.5.
 """
 
 from presidio_analyzer import Pattern, PatternRecognizer
@@ -22,14 +22,14 @@ _DNI_CONTEXT = [
 
 
 def build_dni_recognizer() -> PatternRecognizer:
-    """Return a PatternRecognizer for Argentine DNI numbers.
+    """Devuelve un PatternRecognizer para números de DNI argentinos.
 
-    - Entity type: DNI_AR
-    - Pattern 1 (formatted): ``\\d{1,2}\\.\\d{3}\\.\\d{3}`` — score 0.7
-    - Pattern 2 (raw digits): ``\\b\\d{7,8}\\b`` — score 0.3
-    - Context boost: ``dni``, ``documento``, etc. raise score to >= 0.5
-    - No checksum (DNI has none)
-    - No I/O side effects; importable without instantiating the full engine
+    - Tipo de entidad: DNI_AR
+    - Patrón 1 (formateado): ``\\d{1,2}\\.\\d{3}\\.\\d{3}`` — score 0.7
+    - Patrón 2 (dígitos sueltos): ``\\b\\d{7,8}\\b`` — score 0.3
+    - Boost de contexto: ``dni``, ``documento``, etc. suben el score a >= 0.5
+    - Sin checksum (el DNI no tiene)
+    - Sin efectos de I/O; importable sin instanciar el engine completo
     """
     patterns = [
         Pattern(

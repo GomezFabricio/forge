@@ -1,13 +1,13 @@
-"""Anonymizer factory — Presidio AnonymizerEngine with type-specific placeholders (REQ-ANO-01).
+"""Fábrica del anonimizador — AnonymizerEngine de Presidio con placeholders por tipo (REQ-ANO-01).
 
-Each entity type maps to a stable placeholder in [TYPE] format.
-Conflict resolution (overlapping spans) is delegated to Presidio's built-in logic.
+Cada tipo de entidad se mapea a un placeholder estable con el formato [TIPO].
+La resolución de conflictos (spans solapados) se delega en la lógica interna de Presidio.
 """
 
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
-# All 22 entity types (15 custom + 7 built-in)
+# Los 22 tipos de entidad (15 custom + 7 built-in)
 _ENTITY_TYPES = [
     "CUIT",
     "DNI_AR",
@@ -35,12 +35,12 @@ _ENTITY_TYPES = [
 
 
 def build_anonymizer() -> tuple:
-    """Return (AnonymizerEngine, operators_config) with [TYPE] placeholders.
+    """Devuelve (AnonymizerEngine, operators_config) con placeholders [TIPO].
 
-    operators_config is a dict mapping each of the 22 entity type labels to an
-    OperatorConfig("replace", {"new_value": "[<TYPE>]"}).
+    operators_config es un dict que mapea cada uno de los 22 labels de tipo de
+    entidad a un OperatorConfig("replace", {"new_value": "[<TIPO>]"}).
 
-    Calling this function multiple times is safe — no module-level state is mutated.
+    Llamar a esta función varias veces es seguro — no muta estado a nivel módulo.
     """
     engine = AnonymizerEngine()
     operators = {

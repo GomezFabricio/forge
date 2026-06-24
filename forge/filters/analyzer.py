@@ -1,12 +1,12 @@
-"""Analyzer factory — Presidio AnalyzerEngine wired with all custom recognizers (REQ-ANA-01).
+"""Fábrica del analyzer — AnalyzerEngine de Presidio cableado con todos los recognizers custom (REQ-ANA-01).
 
-Detection is pattern-based, but Presidio always tokenizes the text — and the
-context-aware enhancer needs lemmas — before running any recognizer, so a spaCy
-model IS required. We pin the small English model (en_core_web_sm, ~12MB): it
-provides tokenization plus a lemmatizer for context boosting, and is far lighter
-than the en_core_web_lg default Presidio would otherwise pull (~560MB). The model
-ships as a declared dependency (pyproject) and is never auto-downloaded at runtime
-(see ``_ForgeSpacyNlpEngine``).
+La detección es por patrones, pero Presidio SIEMPRE tokeniza el texto — y el
+context-aware enhancer necesita lemas — antes de correr cualquier recognizer, así
+que SÍ hace falta un modelo spaCy. Fijamos el modelo chico de inglés (en_core_web_sm,
+~12MB): aporta tokenización más un lematizador para el boost de contexto, y es mucho
+más liviano que el default en_core_web_lg que Presidio traería si no (~560MB). El
+modelo viaja como dependencia declarada (pyproject) y nunca se autodescarga en runtime
+(ver ``_ForgeSpacyNlpEngine``).
 """
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
@@ -15,31 +15,31 @@ from presidio_analyzer.nlp_engine import SpacyNlpEngine
 
 from forge.filters.recognizers import all_recognizers
 
-# spaCy model used for tokenization + lemmas (needed by the context-aware
-# enhancer). Small model: ~12MB. Declared as a dependency in pyproject so it is
-# always present in the install venv.
+# Modelo spaCy usado para tokenización + lemas (lo necesita el context-aware
+# enhancer). Modelo chico: ~12MB. Declarado como dependencia en pyproject para que
+# esté siempre presente en el venv de instalación.
 _SPACY_MODEL_NAME = "en_core_web_sm"
 
 
 class _ForgeSpacyNlpEngine(SpacyNlpEngine):
-    """SpacyNlpEngine pinned to our model that never auto-downloads at runtime.
+    """SpacyNlpEngine fijado a nuestro modelo que nunca autodescarga en runtime.
 
-    Presidio's stock engine tries to pip-install a missing model on load by
-    shelling out to spaCy's CLI downloader, which calls ``sys.exit()`` on failure
-    — a ``SystemExit`` (``BaseException``). The PII hook's fail-open guard only
-    catches ``Exception``, so a missing model would crash the hook (exit 1, spaCy
-    error on stdout) instead of passing the prompt through unmodified.
+    El engine de fábrica de Presidio intenta pip-instalar un modelo ausente al
+    cargar, invocando el downloader del CLI de spaCy, que llama a ``sys.exit()`` si
+    falla — un ``SystemExit`` (``BaseException``). El fail-open del hook PII solo
+    atrapa ``Exception``, así que un modelo ausente crashearía el hook (exit 1, error
+    de spaCy en stdout) en vez de dejar pasar el prompt sin modificar.
 
-    Making the download a no-op turns an absent model into a plain ``OSError`` from
-    ``spacy.load()``, which the hook's fail-open path catches cleanly. In a correct
-    install the model is present (declared dependency), so this never fires.
+    Hacer la descarga un no-op convierte un modelo ausente en un ``OSError`` común de
+    ``spacy.load()``, que el fail-open del hook atrapa limpio. En una instalación
+    correcta el modelo está presente (dependencia declarada), así que esto nunca se dispara.
     """
 
     def _download_spacy_model_if_needed(self, model_name: str) -> None:
-        # Never download at runtime; the model ships as a declared dependency.
+        # Nunca descargar en runtime; el modelo viaja como dependencia declarada.
         return
 
-# Presidio built-in recognizer names to enable (R16.4)
+# Nombres de los recognizers built-in de Presidio que habilitamos (R16.4)
 _BUILTIN_RECOGNIZERS = [
     "CreditCardRecognizer",
     "EmailRecognizer",
@@ -50,41 +50,41 @@ _BUILTIN_RECOGNIZERS = [
     "CryptoRecognizer",
 ]
 
-# Context boost factor for the full engine.
-# Presidio's default is 0.35. We use 0.5 so that:
+# Factor de boost de contexto para el engine completo.
+# El default de Presidio es 0.35. Usamos 0.5 para que:
 #   - AWS_SECRET_KEY (base 0.4) + 0.5 = 0.90 >= 0.85 ✓
 #   - OPENAI_KEY (base 0.4) + 0.5 = 0.90 >= 0.85 ✓
-#   - All other context-boosted types are well above threshold
+#   - Todos los demás tipos con boost de contexto queden bien sobre el umbral
 _CONTEXT_SIMILARITY_FACTOR = 0.5
 
 
 def build_analyzer() -> AnalyzerEngine:
-    """Return an AnalyzerEngine with all 22 recognizers and a pinned spaCy model.
+    """Devuelve un AnalyzerEngine con los 22 recognizers y un modelo spaCy fijado.
 
-    Registered recognizers:
-    - 15 custom recognizers (forge/filters/recognizers/)
-    - 7 Presidio built-in recognizers: CREDIT_CARD, EMAIL_ADDRESS, IBAN_CODE,
+    Recognizers registrados:
+    - 15 recognizers custom (forge/filters/recognizers/)
+    - 7 recognizers built-in de Presidio: CREDIT_CARD, EMAIL_ADDRESS, IBAN_CODE,
       IP_ADDRESS, PHONE_NUMBER, URL, CRYPTO
 
-    Configuration:
-    - NLP engine: en_core_web_sm via _ForgeSpacyNlpEngine (explicit, never the
-      en_core_web_lg default; never auto-downloaded). Tokenization + lemmas only;
-      the model's NER is unused — all detection comes from the recognizers above.
-    - score_threshold=0.5 (default; passed at analyze() call time)
-    - context_similarity_factor=0.5 (higher than Presidio default of 0.35)
-      to ensure context-required recognizers reach score >= 0.85
+    Configuración:
+    - Engine NLP: en_core_web_sm vía _ForgeSpacyNlpEngine (explícito, nunca el
+      default en_core_web_lg; nunca autodescargado). Solo tokenización + lemas;
+      el NER del modelo no se usa — toda la detección viene de los recognizers de arriba.
+    - score_threshold=0.5 (default; se pasa al momento de llamar analyze())
+    - context_similarity_factor=0.5 (más alto que el default 0.35 de Presidio)
+      para asegurar que los recognizers que requieren contexto lleguen a score >= 0.85
 
-    Note: AnalyzerEngine loads the spaCy model eagerly here, so this call pays the
-    model load (~0.5s cold). Calling it multiple times is safe — no module-level
-    state is mutated.
+    Nota: AnalyzerEngine carga el modelo spaCy de forma eager acá, así que esta
+    llamada paga la carga del modelo (~0.5s en frío). Llamarla varias veces es seguro
+    — no se muta estado a nivel módulo.
     """
-    # Build a fresh registry with only the recognizers we want
+    # Construir un registry nuevo solo con los recognizers que queremos
     registry = RecognizerRegistry()
 
-    # Load all predefined built-in recognizers, then remove those not in our allowed list (R16.4)
+    # Cargar todos los recognizers built-in predefinidos y después quitar los que no están en la lista permitida (R16.4)
     registry.load_predefined_recognizers(languages=["en"])
 
-    # Remove all built-in recognizers NOT in our allowed list
+    # Quitar todos los recognizers built-in que NO están en nuestra lista permitida
     allowed_names = set(_BUILTIN_RECOGNIZERS)
     to_remove = [
         rec
@@ -94,11 +94,11 @@ def build_analyzer() -> AnalyzerEngine:
     for rec in to_remove:
         registry.remove_recognizer(rec.__class__.__name__)
 
-    # Register all 15 custom recognizers
+    # Registrar los 15 recognizers custom
     for recognizer in all_recognizers():
         registry.add_recognizer(recognizer)
 
-    # Build context enhancer with higher boost factor for context-required recognizers
+    # Construir el context enhancer con un factor de boost más alto para los recognizers que requieren contexto
     context_enhancer = LemmaContextAwareEnhancer(
         context_similarity_factor=_CONTEXT_SIMILARITY_FACTOR,
         min_score_with_context_similarity=0.5,
@@ -106,7 +106,7 @@ def build_analyzer() -> AnalyzerEngine:
         context_suffix_count=5,
     )
 
-    # Explicit small-model engine — never the lg default, never a runtime download.
+    # Engine explícito con el modelo chico — nunca el default lg, nunca una descarga en runtime.
     nlp_engine = _ForgeSpacyNlpEngine(
         models=[{"lang_code": "en", "model_name": _SPACY_MODEL_NAME}]
     )

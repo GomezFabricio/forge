@@ -1,7 +1,7 @@
-"""forge.filters.recognizers — custom PII recognizers.
+"""forge.filters.recognizers — recognizers de PII custom.
 
-Exports:
-- all_recognizers(): returns list of all 15 custom PatternRecognizer instances.
+Exporta:
+- all_recognizers(): devuelve la lista de las 15 instancias de PatternRecognizer custom.
 """
 
 from forge.filters.recognizers.ar_cbu import build_cbu_recognizer
@@ -24,17 +24,17 @@ from forge.filters.recognizers.secrets import (
 
 
 def all_recognizers():
-    """Return a list of all 15 custom PatternRecognizer instances.
+    """Devuelve una lista con las 15 instancias de PatternRecognizer custom.
 
-    The list is rebuilt on every call (pure factory — no module-level state).
-    Register all instances with a RecognizerRegistry before passing to AnalyzerEngine.
+    La lista se reconstruye en cada llamada (fábrica pura — sin estado a nivel módulo).
+    Registrar todas las instancias en un RecognizerRegistry antes de pasarlas al AnalyzerEngine.
     """
     return [
-        # Argentine identifiers
+        # Identificadores argentinos
         build_cuit_recognizer(),
         build_dni_recognizer(),
         build_cbu_recognizer(),
-        # Generic tokens and secrets
+        # Tokens y secretos genéricos
         build_jwt_recognizer(),
         build_aws_access_key_recognizer(),
         build_aws_secret_key_recognizer(),

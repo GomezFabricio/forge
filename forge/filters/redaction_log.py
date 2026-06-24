@@ -1,7 +1,7 @@
-"""Redaction log helpers (REQ-LOG-01).
+"""Helpers del log de redacción (REQ-LOG-01).
 
-Writes append-only JSONL to .forge/auditoria-pii.jsonl.
-Never stores prompt content — only a SHA-256 hash (truncated to 16 chars).
+Escribe JSONL append-only en .forge/auditoria-pii.jsonl.
+Nunca guarda el contenido del prompt — solo un hash SHA-256 (truncado a 16 chars).
 """
 
 import hashlib
@@ -18,9 +18,9 @@ _DEFAULT_LOG_PATH = Path(".forge") / "auditoria-pii.jsonl"
 
 
 def hash_prompt(prompt: str) -> str:
-    """Return the first 16 hex characters of the SHA-256 digest of prompt.
+    """Devuelve los primeros 16 caracteres hex del digest SHA-256 de prompt.
 
-    This is sufficient for event correlation without enabling re-identification.
+    Alcanza para correlacionar eventos sin permitir re-identificación.
     """
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
     return digest[:16]
@@ -33,14 +33,14 @@ def log_event(
     prompt_hash: str,
     log_path: Path | None = None,
 ) -> None:
-    """Append a redaction or passthrough event to the JSONL log file.
+    """Agrega un evento de redacción o passthrough al archivo de log JSONL.
 
-    :param action: One of ``"redacted"``, ``"passthrough"``, ``"error"``.
-    :param types: Dict mapping entity type labels to their occurrence count.
-                  Empty dict for passthrough/error events.
-    :param prompt_hash: 16-character hex string (SHA-256[:16] of original prompt).
-    :param log_path: Override log file path. Defaults to ``.forge/auditoria-pii.jsonl``
-                     relative to cwd. Override is used in tests via ``tmp_path``.
+    :param action: Uno de ``"redacted"``, ``"passthrough"``, ``"error"``.
+    :param types: Dict que mapea labels de tipo de entidad a su cantidad de ocurrencias.
+                  Dict vacío para eventos passthrough/error.
+    :param prompt_hash: String hex de 16 caracteres (SHA-256[:16] del prompt original).
+    :param log_path: Override del path del log. Default: ``.forge/auditoria-pii.jsonl``
+                     relativo al cwd. El override se usa en tests vía ``tmp_path``.
     """
     if log_path is None:
         log_path = _DEFAULT_LOG_PATH
@@ -60,6 +60,6 @@ def log_event(
         "version": _FORGE_VERSION,
     }
 
-    # Open in append mode with explicit LF line endings (no CRLF on Windows)
+    # Abrir en modo append con line endings LF explícitos (sin CRLF en Windows)
     with open(log_path, "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(entry) + "\n")

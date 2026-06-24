@@ -1,7 +1,7 @@
-"""CUIT recognizer — Argentine tax ID (REQ-REC-01).
+"""Recognizer de CUIT — identificador tributario argentino (REQ-REC-01).
 
-CUIT format: XX-XXXXXXXX-X (2-8-1 digit groups separated by hyphens).
-Checksum: mod-11 algorithm with AFIP weights [5,4,3,2,7,6,5,4,3,2].
+Formato CUIT: XX-XXXXXXXX-X (grupos de 2-8-1 dígitos separados por guiones).
+Checksum: algoritmo mod-11 con pesos AFIP [5,4,3,2,7,6,5,4,3,2].
 """
 
 
@@ -21,7 +21,7 @@ _CUIT_CONTEXT = [
 
 
 def _is_valid_cuit(cuit_str: str) -> bool:
-    """Validate CUIT check digit via mod-11 algorithm (AFIP specification)."""
+    """Valida el dígito verificador del CUIT con el algoritmo mod-11 (especificación AFIP)."""
     digits = cuit_str.replace("-", "")
     if len(digits) != 11:
         return False
@@ -31,28 +31,28 @@ def _is_valid_cuit(cuit_str: str) -> bool:
     if check == 11:
         check = 0
     if check == 10:
-        # AFIP: this combination yields no valid CUIT
+        # AFIP: esta combinación no produce un CUIT válido
         return False
     return check == int(digits[10])
 
 
 class _CuitRecognizer(PatternRecognizer):
-    """PatternRecognizer subclass that validates the CUIT mod-11 checksum."""
+    """Subclase de PatternRecognizer que valida el checksum mod-11 del CUIT."""
 
     def validate_result(self, pattern_text: str) -> bool | None:
-        """Return True if checksum passes, False otherwise."""
+        """Devuelve True si el checksum pasa, False en caso contrario."""
         return _is_valid_cuit(pattern_text)
 
 
 def build_cuit_recognizer() -> PatternRecognizer:
-    """Return a PatternRecognizer for Argentine CUIT numbers.
+    """Devuelve un PatternRecognizer para números de CUIT argentinos.
 
-    - Entity type: CUIT
-    - Pattern: ``\\d{2}-\\d{8}-\\d`` (formatted only, no raw digits)
-    - Base score: 0.85
-    - Mod-11 checksum validator: invalid check digits are discarded
-    - Context words boost score to 1.0
-    - No I/O side effects; importable without instantiating the full engine
+    - Tipo de entidad: CUIT
+    - Patrón: ``\\d{2}-\\d{8}-\\d`` (solo formateado, sin dígitos sueltos)
+    - Score base: 0.85
+    - Validador de checksum mod-11: los dígitos verificadores inválidos se descartan
+    - Las palabras de contexto suben el score a 1.0
+    - Sin efectos de I/O; importable sin instanciar el engine completo
     """
     pattern = Pattern(
         name="cuit_formatted",
