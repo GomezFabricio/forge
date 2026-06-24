@@ -8,6 +8,12 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Perfiles de modelo por fase (`model_profile`)
+
+#### Added
+
+- **El modelo de cada fase ahora es configurable vía perfil.** Nuevo `rules.workflow.model_profile` en `docs/auditoria/config.yaml`, con tres opciones: `equilibrado` (default — `opus` en plan/design/review, `sonnet` en los executors; = comportamiento previo), `performance` (`opus` en todas las fases) y `basico` (`sonnet` en plan/design/review, `haiku` en los executors). El orquestador lee el perfil y le pasa el modelo correspondiente a cada agente `fg-*` al delegar; el frontmatter `model:` de cada agente queda como red de seguridad (el default `equilibrado`). Documentado en `templates/CLAUDE-md-institucional.md` → "Modelos por fase — perfiles configurables". forge no usa ni referencia el modelo Fable en ningún perfil.
+
 ### Instalación — CodeGraph (bundle completo) y filtro PII (modelo spaCy)
 
 #### Fixed

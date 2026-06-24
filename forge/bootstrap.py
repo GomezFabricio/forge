@@ -373,6 +373,14 @@ rules:
     #   "full" = fuerza Completo SIEMPRE, sin preguntar (entornos críticos / auditoría estricta).
     ceremonial_threshold: auto
 
+    # model_profile: qué modelos usa el orquestador por fase (ver "Modelo de delegación"
+    # en el CLAUDE.md institucional). El orquestador lee el perfil y, al delegar a cada
+    # agente fg-*, le pasa el modelo correspondiente.
+    #   "equilibrado" = opus en plan/design/review, sonnet en los executors (default).
+    #   "performance" = opus en todas las fases (máxima calidad, mayor costo).
+    #   "basico"      = sonnet en plan/design/review, haiku en los executors (rápido / económico).
+    model_profile: equilibrado
+
   pr_size:
     # Cuando /fg-design cierra, calcula un "Review Workload Forecast" estimando
     # las líneas que va a tener el PR. Este bloque controla qué hacer con ese forecast.

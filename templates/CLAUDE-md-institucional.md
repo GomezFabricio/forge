@@ -239,12 +239,21 @@ El workflow de forge opera en 3 capas:
 - El dev tipea `/fg-x` → el command lo recibe → delega al agent `fg-x`.
 - El orquestador detecta intent sin command explícito → delega directamente al agent `fg-x`.
 
-#### Tabla de model assignments
+#### Modelos por fase — perfiles configurables
 
-| Agent | Modelo |
-|-------|--------|
-| `fg-plan`, `fg-design`, `fg-review` | opus |
-| `fg-setup`, `fg-explore`, `fg-implement`, `fg-update-arch`, `fg-update-registry` | sonnet |
+El modelo de cada fase lo define el **perfil** `rules.workflow.model_profile` del `config.yaml` del proyecto (default `equilibrado`). El orquestador lee el perfil y, al delegar a un agent `fg-*`, le pasa el modelo de la columna correspondiente.
+
+| Fase | `equilibrado` (default) | `performance` | `basico` |
+|------|--------------------------|---------------|----------|
+| `fg-plan`, `fg-design`, `fg-review` | opus | opus | sonnet |
+| `fg-setup`, `fg-explore`, `fg-implement`, `fg-update-arch`, `fg-update-registry` | sonnet | opus | haiku |
+
+**Resolución del modelo:**
+
+- Si falta el `config.yaml` (proyecto sin setup) o el perfil es `equilibrado`, se usa el modelo declarado en el frontmatter de cada `agents/fg-*.md` — que es justo el default `equilibrado`. No hace falta override.
+- Para `performance` o `basico`, el orquestador pasa el modelo de la columna como override al delegar a cada agente.
+- El frontmatter `model:` de cada agente es la red de seguridad: garantiza un modelo sensato aunque el agent se invoque sin que el orquestador resuelva el perfil.
+- El perfil cubre las fases `fg-*`. Los sub-agentes de revisión que `/fg-review` pueda invocar quedan fuera del perfil (usan su propia configuración).
 
 #### Sub-agent context protocol
 
