@@ -1,20 +1,20 @@
-"""forge CLI entry point.
+"""Entry point del CLI de forge.
 
-Subcommands:
-    forge --version                    Print installed version.
-    forge install                      Deposit skills, agents and register engram MCP
-                                       in ~/.claude/. Implemented in forge/installer.py.
-    forge install --install-engram     Auto-install engram without prompt.
-    forge install --skip-engram-check  Skip engram detection, deposit assets only.
-    forge install --skip-codegraph     Skip CodeGraph installation entirely.
-    forge install --install-codegraph  Auto-install CodeGraph without prompt (CI-safe).
-    forge install --skip-context7      Skip Context7 MCP registration entirely.
-    forge install --install-context7   Register Context7 MCP without prompt (CI-safe).
-    forge install --skip-pii-hook      Skip auto-registering the PII UserPromptSubmit hook.
-    forge --help                       Show help.
+Subcomandos:
+    forge --version                    Imprime la versión instalada.
+    forge install                      Deposita skills, agents y registra el MCP de engram
+                                       en ~/.claude/. Implementado en forge/installer.py.
+    forge install --install-engram     Instala engram automáticamente, sin prompt.
+    forge install --skip-engram-check  Saltea la detección de engram, solo deposita assets.
+    forge install --skip-codegraph     Omite por completo la instalación de CodeGraph.
+    forge install --install-codegraph  Instala CodeGraph automáticamente sin prompt (CI-safe).
+    forge install --skip-context7      Omite por completo el registro de Context7 MCP.
+    forge install --install-context7   Registra Context7 MCP sin prompt (CI-safe).
+    forge install --skip-pii-hook      Omite el auto-registro del hook PII (UserPromptSubmit).
+    forge --help                       Muestra la ayuda.
 
-Project-level setup is done from Claude Code with the /fg-setup skill,
-which invokes forge.bootstrap in the active project.
+El setup a nivel proyecto se hace desde Claude Code con la skill /fg-setup,
+que invoca forge.bootstrap en el proyecto activo.
 """
 
 import argparse
@@ -24,7 +24,7 @@ from . import __version__
 
 
 def cmd_install(args: argparse.Namespace) -> int:
-    """Thin dispatch to installer.run(args). Returns exit code."""
+    """Dispatch fino a installer.run(args). Devuelve el exit code."""
     from forge.installer import run as installer_run
     return installer_run(args)
 

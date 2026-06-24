@@ -28,42 +28,43 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ReDoS mitigation (Task B / ADR-4 defense-in-depth).
+# Mitigación de ReDoS (Tarea B / ADR-4, defensa en profundidad).
 #
-# A user-authored guardrails.yaml may contain a pattern vulnerable to
-# catastrophic backtracking (e.g. ``(a+)+$``). The cost of such backtracking
-# scales with the length of the INPUT, not the pattern: a longer command can
-# turn a slow match into one that spins for tens of seconds, stalling the dev
-# loop. That is worse than an exception (which fails open instantly) because a
-# hung process keeps Claude Code waiting — defeating the ADR-4 intent of never
-# blocking the loop.
+# Un guardrails.yaml escrito por el usuario puede contener un patrón vulnerable a
+# backtracking catastrófico (ej. ``(a+)+$``). El costo de ese backtracking escala
+# con la longitud del INPUT, no del patrón: un comando más largo puede convertir un
+# match lento en uno que gira por decenas de segundos, frenando el dev loop. Eso es
+# peor que una excepción (que falla-abierto al instante) porque un proceso colgado
+# mantiene a Claude Code esperando — anulando la intención del ADR-4 de nunca
+# bloquear el loop.
 #
-# We bound the command string fed to every regex to MAX_COMMAND_LEN characters.
-# Truncating the input caps the worst-case backtracking cost to a fixed ceiling
-# regardless of the pattern, on both Windows and Unix, with zero extra threads
-# or signals. A real per-evaluation timeout was evaluated and rejected: a
-# ``threading``-based join cannot interrupt a CPU-bound ``re.search`` under
-# CPython because the regex engine holds the GIL while matching (measured: a
-# 2s join returned only after ~23s), so it would provide false safety. The
-# length cap is therefore the primary, and only reliable, mitigation here.
+# Acotamos el string del comando que se le pasa a cada regex a MAX_COMMAND_LEN
+# caracteres. Truncar el input topea el costo de backtracking del peor caso a un
+# techo fijo sin importar el patrón, tanto en Windows como en Unix, sin threads ni
+# señales extra. Se evaluó y descartó un timeout real por evaluación: un join basado
+# en ``threading`` no puede interrumpir un ``re.search`` CPU-bound bajo CPython
+# porque el motor de regex mantiene el GIL mientras matchea (medido: un join de 2s
+# recién retornó tras ~23s), así que daría falsa seguridad. El cap de longitud es
+# entonces la mitigación principal, y la única confiable, acá.
 #
-# Residual risk (accepted, documented): a pathological pattern whose blow-up
-# threshold is BELOW MAX_COMMAND_LEN can still be slow on a short command. The
-# guard is best-effort; a catastrophic user-authored pattern remains the user's
-# responsibility (see README "Defensa en profundidad" / guia-de-uso §6).
-# 8192 chars comfortably covers realistic Bash one-liners while keeping the
-# truncated-input backtracking cost negligible (measured sub-millisecond).
+# Riesgo residual (aceptado, documentado): un patrón patológico cuyo umbral de
+# explosión esté POR DEBAJO de MAX_COMMAND_LEN puede seguir siendo lento con un
+# comando corto. El guard es best-effort; un patrón catastrófico escrito por el
+# usuario sigue siendo responsabilidad del usuario (ver README "Defensa en
+# profundidad" / guia-de-uso §6).
+# 8192 chars cubren cómodamente one-liners de Bash realistas manteniendo el costo de
+# backtracking del input truncado despreciable (medido sub-milisegundo).
 MAX_COMMAND_LEN = 8192
 
 
 def _is_guard_disabled() -> bool:
-    """Return True if FORGE_GUARD_DISABLE is set to a truthy value (non-empty, not "0")."""
+    """Devuelve True si FORGE_GUARD_DISABLE tiene un valor truthy (no vacío, distinto de "0")."""
     val = os.environ.get("FORGE_GUARD_DISABLE", "")
     return bool(val) and val != "0"
 
 
 def _hash_command(command: str) -> str:
-    """Return the first 16 hex characters of the SHA-256 digest of command."""
+    """Devuelve los primeros 16 caracteres hex del digest SHA-256 de command."""
     digest = hashlib.sha256(command.encode("utf-8")).hexdigest()
     return digest[:16]
 
@@ -76,9 +77,9 @@ def _log_decision(
     reason: str,
     log_path: Path,
 ) -> None:
-    """Append a decision or error event to the guard JSONL log.
+    """Agrega un evento de decisión o error al log JSONL del guard.
 
-    Swallows all errors (fail-open: logging must never block the hook).
+    Traga todos los errores (fail-open: el logging nunca debe bloquear el hook).
     """
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -93,7 +94,7 @@ def _log_decision(
         with open(log_path, "a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:  # noqa: BLE001
-        pass  # Fail-open: never let logging block the hook
+        pass  # Fail-open: nunca dejar que el logging bloquee el hook
 
 
 def _log_error(
@@ -101,7 +102,7 @@ def _log_error(
     message: str,
     log_path: Path,
 ) -> None:
-    """Append an error event to the guard JSONL log (fail-open)."""
+    """Agrega un evento de error al log JSONL del guard (fail-open)."""
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
@@ -113,25 +114,25 @@ def _log_error(
         with open(log_path, "a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:  # noqa: BLE001
-        pass  # Fail-open: never let logging block the hook
+        pass  # Fail-open: nunca dejar que el logging bloquee el hook
 
 
 def _evaluate_rules(command: str, rules: list, command_hash: str, log_path: Path) -> dict:
-    """Evaluate guardrails rules in order; return first-match decision or {}.
+    """Evalúa las reglas de guardrails en orden; devuelve la decisión de la primera que matchea o {}.
 
-    :param command: The Bash command string from the hook payload.
-    :param rules: List of rule dicts from guardrails.yaml.
-    :param command_hash: SHA-256[:16] of command for logging.
-    :param log_path: Path to the guard JSONL log.
-    :returns: Decision dict (deny/ask JSON) or {} if no rule matched.
+    :param command: El string del comando Bash del payload del hook.
+    :param rules: Lista de dicts de regla de guardrails.yaml.
+    :param command_hash: SHA-256[:16] del comando para el log.
+    :param log_path: Path al log JSONL del guard.
+    :returns: Dict de decisión (JSON deny/ask) o {} si ninguna regla matcheó.
     """
-    # ReDoS mitigation: bound the input fed to every regex (see MAX_COMMAND_LEN).
-    # The hash used for the audit log is computed over the FULL command upstream,
-    # so correlation is unaffected; only the matched text is capped.
+    # Mitigación de ReDoS: acotar el input que se le pasa a cada regex (ver MAX_COMMAND_LEN).
+    # El hash usado para el log de auditoría se calcula sobre el comando COMPLETO aguas arriba,
+    # así que la correlación no se ve afectada; solo se topea el texto que se matchea.
     match_target = command[:MAX_COMMAND_LEN]
 
     for rule in rules:
-        # Validate required fields — skip invalid rules (fail-open, log error once)
+        # Validar campos requeridos — saltear reglas inválidas (fail-open, loguear el error una vez)
         pattern_str = rule.get("pattern")
         action = rule.get("action")
         reason = rule.get("reason")
@@ -150,7 +151,7 @@ def _evaluate_rules(command: str, rules: list, command_hash: str, log_path: Path
             )
             continue
 
-        # Compile regex — per-rule ignorecase flag
+        # Compilar la regex — flag ignorecase por regla
         flags = re.IGNORECASE if rule.get("ignorecase") else 0
         try:
             regex = re.compile(pattern_str, flags)
@@ -164,17 +165,17 @@ def _evaluate_rules(command: str, rules: list, command_hash: str, log_path: Path
         if not regex.search(match_target):
             continue
 
-        # Match found — build decision
+        # Match encontrado — construir la decisión
         permission = "deny" if action == "block" else "ask"
 
-        # Build reason string
+        # Construir el string de la razón
         alternative = rule.get("alternative", "")
         if alternative:
             decision_reason = f"Razón: {reason} — Alternativa: {alternative}"
         else:
             decision_reason = f"Razón: {reason}"
 
-        # Log the decision
+        # Loguear la decisión
         _log_decision(
             action=action,
             pattern=pattern_str,
@@ -195,11 +196,11 @@ def _evaluate_rules(command: str, rules: list, command_hash: str, log_path: Path
 
 
 def _resolve_log_path(input_data: dict, log_path: Path | None) -> Path | None:
-    """Best-effort guard log path for the error-audit paths (fail-open).
+    """Path best-effort del log del guard para los paths de auditoría de error (fail-open).
 
-    Returns the explicit override if given; otherwise derives it from the
-    payload cwd. Returns None when no location can be determined, in which case
-    the caller silently skips the audit (never raises). Swallows all errors.
+    Devuelve el override explícito si se da; si no, lo deriva del cwd del payload.
+    Devuelve None cuando no se puede determinar una ubicación, en cuyo caso el
+    llamador saltea la auditoría en silencio (nunca lanza). Traga todos los errores.
     """
     if log_path is not None:
         return log_path
@@ -213,12 +214,12 @@ def _resolve_log_path(input_data: dict, log_path: Path | None) -> Path | None:
 
 
 def _process_hook_inner(input_data: dict, *, log_path: Path | None = None) -> dict:
-    """Core hook logic. May raise — wrapped by process_hook's fail-open guard."""
+    """Lógica central del hook. Puede lanzar — la envuelve el guard fail-open de process_hook."""
     # Kill-switch: FORGE_GUARD_DISABLE
     if _is_guard_disabled():
         return {}
 
-    # Only act on Bash tool with a non-empty command
+    # Solo actuar sobre la tool Bash con un comando no vacío
     if input_data.get("tool_name") != "Bash":
         return {}
 
@@ -230,7 +231,7 @@ def _process_hook_inner(input_data: dict, *, log_path: Path | None = None) -> di
     if not isinstance(command, str) or not command.strip():
         return {}
 
-    # Resolve cwd from payload (NOT os.getcwd())
+    # Resolver el cwd desde el payload (NO os.getcwd())
     cwd_str = input_data.get("cwd", "")
     if not cwd_str:
         return {}
@@ -238,15 +239,15 @@ def _process_hook_inner(input_data: dict, *, log_path: Path | None = None) -> di
     cwd = Path(cwd_str)
     guardrails_path = cwd / "docs" / "auditoria" / "guardrails.yaml"
 
-    # No guardrails file -> unaffected project, pass through
+    # Sin archivo de guardrails -> proyecto no afectado, pasar de largo
     if not guardrails_path.exists():
         return {}
 
-    # Resolve log path
+    # Resolver el path del log
     if log_path is None:
         log_path = cwd / ".forge" / "auditoria-guard.jsonl"
 
-    # Parse guardrails file
+    # Parsear el archivo de guardrails
     try:
         import yaml  # noqa: PLC0415
         guardrails = yaml.safe_load(guardrails_path.read_text(encoding="utf-8"))
@@ -267,52 +268,53 @@ def _process_hook_inner(input_data: dict, *, log_path: Path | None = None) -> di
 
 
 def process_hook(input_data: dict, *, log_path: Path | None = None) -> dict:
-    """Process a Claude Code PreToolUse hook payload.
+    """Procesa un payload del hook PreToolUse de Claude Code.
 
-    Fail-open guard (ADR-4): any unexpected exception is swallowed, returns {}.
-    Unlike a bare swallow, an unexpected failure here ALSO leaves a
-    machine-readable audit trace (``action="error"``) so escaped exceptions are
-    not invisible. The audit line carries only the exception TYPE name as a
-    stable marker — never the raw command — preserving the privacy contract.
+    Guard fail-open (ADR-4): cualquier excepción inesperada se traga y devuelve {}.
+    A diferencia de un swallow pelado, un fallo inesperado acá TAMBIÉN deja una traza
+    de auditoría legible por máquina (``action="error"``) para que las excepciones que
+    se escapan no sean invisibles. La línea de auditoría lleva solo el NOMBRE del TIPO
+    de excepción como marcador estable — nunca el comando crudo — preservando el
+    contrato de privacidad.
 
-    :param input_data: Parsed JSON from stdin.
-    :param log_path: Override log file path (for tests).
-    :returns: Decision dict or {} (no decision = normal permission flow).
+    :param input_data: JSON parseado de stdin.
+    :param log_path: Override del path del log (para tests).
+    :returns: Dict de decisión o {} (sin decisión = flujo normal de permisos).
     """
     try:
         return _process_hook_inner(input_data, log_path=log_path)
     except Exception as exc:  # noqa: BLE001
-        # D3: emit a machine-readable audit record on the error path. Use only
-        # the exception type name as a stable marker — do NOT include the raw
-        # command or the exception args (which could echo input).
+        # D3: emitir un registro de auditoría legible por máquina en el camino de error.
+        # Usar solo el nombre del tipo de excepción como marcador estable — NO incluir el
+        # comando crudo ni los args de la excepción (que podrían reflejar el input).
         audit_path = _resolve_log_path(input_data, log_path)
         if audit_path is not None:
             _log_error(
                 message=f"unexpected error in process_hook: {type(exc).__name__}",
                 log_path=audit_path,
             )
-        return {}  # Fail-open: never re-raise, never exit non-zero
+        return {}  # Fail-open: nunca re-lanzar, nunca salir con código distinto de cero
 
 
 def main() -> int:
-    """Entry point for Claude Code PreToolUse hook.
+    """Entry point del hook PreToolUse de Claude Code.
 
-    Reads JSON from stdin, calls process_hook, writes JSON to stdout.
-    Always exits 0 (fail-open per ADR-4).
+    Lee JSON de stdin, llama a process_hook, escribe JSON a stdout.
+    Siempre sale con 0 (fail-open según ADR-4).
     """
     try:
         raw = sys.stdin.buffer.read().decode("utf-8")
         input_data = json.loads(raw)
     except Exception:  # noqa: BLE001
         sys.stdout.write("{}")
-        return 0  # Fail-open: exit 0 even on parse error
+        return 0  # Fail-open: exit 0 incluso ante error de parseo
 
     try:
         result = process_hook(input_data)
     except Exception as exc:  # noqa: BLE001
-        # Backstop: process_hook owns its own fail-open audit, but if it ever
-        # raises before that guard runs, still leave a machine-readable trace
-        # here (action="error", type-name marker only — never the raw command).
+        # Backstop: process_hook tiene su propia auditoría fail-open, pero si alguna vez
+        # lanza antes de que ese guard corra, igual dejar una traza legible por máquina
+        # acá (action="error", solo el nombre del tipo — nunca el comando crudo).
         sys.stderr.write(f"[fg-guard] error: {type(exc).__name__}\n")
         audit_path = _resolve_log_path(input_data, None)
         if audit_path is not None:
