@@ -25,40 +25,40 @@ from pathlib import Path
 
 
 def _resolve_package_root() -> Path:
-    """Return the package root that contains the ``config/`` directory.
+    """Devuelve el package root que contiene el directorio ``config/``.
 
-    Two layouts are supported:
+    Se soportan dos layouts:
 
-    * Editable / repo install (``pip install -e .`` / ``pipx install --editable .``):
-      ``forge/bootstrap.py`` lives at ``<repo-root>/forge/bootstrap.py``, so
-      ``Path(__file__).parent.parent`` is the repo root where ``config/`` sits.
+    * Instalación editable / repo (``pip install -e .`` / ``pipx install --editable .``):
+      ``forge/bootstrap.py`` vive en ``<repo-root>/forge/bootstrap.py``, así que
+      ``Path(__file__).parent.parent`` es el repo root donde está ``config/``.
 
-    * Non-editable wheel install:
-      The wheel maps ``config/`` into the platform data directory via
-      ``[tool.hatch.build.targets.wheel.shared-data]``.  The installer locates
-      these files at ``sysconfig.get_path("data") / share / forge`` — the same
-      root returned by ``installer.get_share_root()``.
+    * Instalación wheel no-editable:
+      El wheel mapea ``config/`` al directorio de datos de la plataforma vía
+      ``[tool.hatch.build.targets.wheel.shared-data]``.  El instalador ubica
+      estos archivos en ``sysconfig.get_path("data") / share / forge`` — el mismo
+      root que devuelve ``installer.get_share_root()``.
 
-    Resolution order: check for ``config/`` existence under each candidate and
-    return the first match.  If neither candidate has ``config/`` (e.g. running
-    from an unexpected layout), fall back to the repo-relative candidate so that
-    errors surface as missing-file errors rather than silent wrong-path usage.
+    Orden de resolución: chequear la existencia de ``config/`` bajo cada candidato y
+    devolver el primero que matchee.  Si ningún candidato tiene ``config/`` (ej. corriendo
+    desde un layout inesperado), caer al candidato relativo al repo para que los
+    errores aparezcan como errores de archivo-faltante en vez de uso silencioso de path equivocado.
     """
-    import sysconfig  # noqa: PLC0415 — stdlib, cheap import
+    import sysconfig  # noqa: PLC0415 — stdlib, import barato
 
-    # Candidate 1: editable / repo layout
+    # Candidato 1: layout editable / repo
     repo_candidate = Path(__file__).resolve().parent.parent
     if (repo_candidate / "config").exists():
         return repo_candidate
 
-    # Candidate 2: wheel / non-editable layout (share/forge mirrors the repo root)
+    # Candidato 2: layout wheel / no-editable (share/forge espeja el repo root)
     data_dir = sysconfig.get_path("data")
     if data_dir:
         wheel_candidate = Path(data_dir) / "share" / "forge"
         if (wheel_candidate / "config").exists():
             return wheel_candidate
 
-    # Neither candidate confirmed — return the repo-relative one so errors are explicit
+    # Ningún candidato confirmado — devolver el relativo al repo para que los errores sean explícitos
     return repo_candidate
 
 
@@ -100,13 +100,13 @@ TEST_RUNNERS = {
 
 
 def detect_mode(root: Path) -> str:
-    """Return 'upgrade' | 'adopt' | 'bootstrap' based on filesystem state.
+    """Devuelve 'upgrade' | 'adopt' | 'bootstrap' según el estado del filesystem.
 
-    upgrade   : (root / '.forge') exists as a directory
-    adopt     : (root / '.git') exists OR any known stack manifest is present
-    bootstrap : otherwise (empty or unknown project dir)
+    upgrade   : (root / '.forge') existe como directorio
+    adopt     : (root / '.git') existe O hay algún manifiesto de stack conocido
+    bootstrap : en otro caso (dir de proyecto vacío o desconocido)
 
-    Pure filesystem read — no side effects, no mutations (NFR-04).
+    Lectura pura del filesystem — sin efectos secundarios, sin mutaciones (NFR-04).
     """
     if (root / ".forge").exists():
         return "upgrade"
@@ -119,7 +119,7 @@ def detect_mode(root: Path) -> str:
 
 
 def _load_ruamel():
-    """Import ruamel.yaml, raising RuntimeError with install instructions if missing."""
+    """Importa ruamel.yaml, lanzando RuntimeError con instrucciones de instalación si falta."""
     try:
         from ruamel.yaml import YAML  # noqa: PLC0415
         return YAML
@@ -131,20 +131,20 @@ def _load_ruamel():
 
 
 def needs_detection(root: Path) -> bool:
-    """Determine if stack/test_runner detection should re-run.
+    """Determina si la detección de stack/test_runner debe re-correr.
 
-    Returns True iff:
-      - config.yaml does not exist (no detection has been done), OR
-      - context.pending_detection is True, OR
-      - context.last_detection is null/missing, OR
-      - Any project manifest (pyproject.toml, package.json, go.mod, etc.)
-        has mtime > last_detection.
+    Devuelve True si y solo si:
+      - config.yaml no existe (no se hizo ninguna detección), O
+      - context.pending_detection es True, O
+      - context.last_detection es null/ausente, O
+      - Algún manifiesto del proyecto (pyproject.toml, package.json, go.mod, etc.)
+        tiene mtime > last_detection.
 
-    This is the Python helper that backs the Section A.2 lazy detection GATE
-    in _shared/fg-phase-common.md. Skills call this; if True, they call
-    update_detection_fields() before proceeding.
+    Este es el helper de Python que respalda el GATE de detección lazy de la Sección A.2
+    en _shared/fg-phase-common.md. Las skills lo llaman; si es True, llaman a
+    update_detection_fields() antes de proceder.
 
-    Pure filesystem read — no side effects (NFR-04).
+    Lectura pura del filesystem — sin efectos secundarios (NFR-04).
     """
     import yaml as _yaml  # noqa: PLC0415
 
@@ -159,11 +159,11 @@ def needs_detection(root: Path) -> bool:
 
     context = config.get("context", {}) or {}
 
-    # pending_detection: missing → treat as True (EC-05 graceful migration)
+    # pending_detection: ausente → tratar como True (EC-05 migración graceful)
     if context.get("pending_detection", True):
         return True
 
-    # last_detection: null or missing → mtime check always triggers
+    # last_detection: null o ausente → el chequeo de mtime siempre dispara
     last_detection_raw = context.get("last_detection")
     if last_detection_raw is None:
         return True
@@ -173,7 +173,7 @@ def needs_detection(root: Path) -> bool:
     except (ValueError, TypeError):
         return True
 
-    # Check if any known manifest has mtime newer than last_detection
+    # Chequear si algún manifiesto conocido tiene mtime más nuevo que last_detection
     for manifest in STACK_MANIFESTS:
         manifest_path = root / manifest
         if manifest_path.exists():
@@ -185,22 +185,22 @@ def needs_detection(root: Path) -> bool:
 
 
 def update_detection_fields(root: Path, *, mode: str | None = None) -> dict:
-    """Re-detect stack/test_runner and update context.* in docs/auditoria/config.yaml.
+    """Re-detecta stack/test_runner y actualiza context.* en docs/auditoria/config.yaml.
 
-    Uses ruamel.yaml round-trip to preserve comments and key order in rules.*.
-    Mutates ONLY:
+    Usa el round-trip de ruamel.yaml para preservar comentarios y orden de claves en rules.*.
+    Muta SOLO:
       - context.stacks
       - context.test_runner
       - context.last_detection  (datetime.now(timezone.utc).isoformat())
       - context.pending_detection → False
-    NEVER mutates rules.*.
+    NUNCA muta rules.*.
 
     Returns: {"stacks": [...], "test_runner": {...}, "changed": bool}
 
-    EC-03: if config.yaml is missing AND mode == "upgrade", re-creates the file
-    using AUDIT_CONFIG_TEMPLATE before proceeding with detection.
-    Otherwise (no mode specified), returns {} if config is missing (no-op).
-    Idempotent: safe to call repeatedly (NFR-01).
+    EC-03: si config.yaml falta Y mode == "upgrade", recrea el archivo
+    usando AUDIT_CONFIG_TEMPLATE antes de proceder con la detección.
+    En otro caso (sin mode especificado), devuelve {} si falta config (no-op).
+    Idempotente: seguro de llamar repetidamente (NFR-01).
     """
     YAML = _load_ruamel()
 
@@ -263,7 +263,7 @@ def update_detection_fields(root: Path, *, mode: str | None = None) -> dict:
     data["context"]["last_detection"] = datetime.now(timezone.utc).isoformat()
     data["context"]["pending_detection"] = False
 
-    # Write back preserving comments
+    # Escribir de vuelta preservando comentarios
     buf = StringIO()
     yaml.dump(data, buf)
     config_path.write_text(buf.getvalue(), encoding="utf-8")
@@ -434,14 +434,14 @@ rules:
 
 
 def _build_stacks_yaml(stacks: list) -> str:
-    """Render the stacks list as yaml lines with 4-space indent."""
+    """Renderiza la lista de stacks como líneas yaml con indent de 4 espacios."""
     if not stacks:
         return "    []"
     return "\n".join(f"    - {s}" for s in stacks)
 
 
 def _build_test_runner_yaml(runner: str, runner_command: str, detected_from: str) -> str:
-    """Render the test_runner block as yaml lines with 4-space indent."""
+    """Renderiza el bloque test_runner como líneas yaml con indent de 4 espacios."""
     if not runner:
         return "    null"
     lines = [
@@ -548,13 +548,13 @@ rules:
 
 
 def create_guardrails_template(root: Path) -> str:
-    """Deposit the guardrails template at docs/auditoria/guardrails.yaml.
+    """Deposita el template de guardrails en docs/auditoria/guardrails.yaml.
 
-    Idempotent: does not overwrite an existing file.
+    Idempotente: no sobrescribe un archivo existente.
 
     Returns:
-        'created'   — the file was created from the template
-        'preserved' — the file already existed; no changes made
+        'created'   — el archivo se creó a partir del template
+        'preserved' — el archivo ya existía; sin cambios
     """
     dest = root / "docs" / "auditoria" / "guardrails.yaml"
     if dest.exists():
@@ -626,10 +626,10 @@ def create_arquitectura_docs(
 
 
 def _load_config_for_round_trip(root: Path):
-    """Load docs/auditoria/config.yaml using ruamel round-trip mode.
+    """Carga docs/auditoria/config.yaml usando el modo round-trip de ruamel.
 
-    Returns (yaml_instance, data, config_path) if config exists, else None.
-    Ensures context block exists as CommentedMap.
+    Devuelve (yaml_instance, data, config_path) si config existe, si no None.
+    Asegura que el bloque context exista como CommentedMap.
     """
     config_path = root / "docs" / "auditoria" / "config.yaml"
     if not config_path.exists():
@@ -650,7 +650,7 @@ def _load_config_for_round_trip(root: Path):
 
 
 def _write_config_round_trip(yaml, data, config_path: Path) -> None:
-    """Write data back to config_path using ruamel dump."""
+    """Escribe data de vuelta a config_path usando el dump de ruamel."""
     buf = StringIO()
     yaml.dump(data, buf)
     config_path.write_text(buf.getvalue(), encoding="utf-8")
@@ -697,11 +697,11 @@ def mark_vision_skipped(root: Path) -> bool:
 
 
 def read_overview(root: Path) -> str | None:
-    """Read docs/arquitectura/overview.md content if present and non-empty.
+    """Lee el contenido de docs/arquitectura/overview.md si existe y no está vacío.
 
     Returns:
-        Content as string (UTF-8) if file exists and has non-whitespace content.
-        None if file does not exist OR is empty OR whitespace-only.
+        El contenido como string (UTF-8) si el archivo existe y tiene contenido no-whitespace.
+        None si el archivo no existe O está vacío O es solo whitespace.
     """
     overview_path = root / "docs" / "arquitectura" / "overview.md"
     if not overview_path.exists():
@@ -713,11 +713,11 @@ def read_overview(root: Path) -> str | None:
 
 
 def is_vision_skipped(root: Path) -> bool:
-    """Read context.vision_skipped from docs/auditoria/config.yaml.
+    """Lee context.vision_skipped de docs/auditoria/config.yaml.
 
     Returns:
-        True if the flag is explicitly set to True.
-        False if config.yaml is missing, malformed, or flag is False/unset.
+        True si el flag está explícitamente seteado en True.
+        False si config.yaml falta, está malformado, o el flag es False/no seteado.
     """
     import yaml  # noqa: PLC0415
 
@@ -769,13 +769,13 @@ def generate_skill_registry_placeholder(root: Path) -> str:
 
 
 def run(root: Path, mode: str | None = None) -> dict:
-    """Run the forge bootstrap process.
+    """Corre el proceso de bootstrap de forge.
 
     Args:
-        root: Project root directory.
-        mode: One of 'bootstrap', 'adopt', 'upgrade'. If None, auto-detected via detect_mode().
+        root: Directorio raíz del proyecto.
+        mode: Uno de 'bootstrap', 'adopt', 'upgrade'. Si es None, se auto-detecta vía detect_mode().
 
-    Returns a report dict including 'mode' for callers (R-MODE-07).
+    Devuelve un dict de reporte que incluye 'mode' para los callers (R-MODE-07).
     """
     if mode is None:
         mode = detect_mode(root)
@@ -796,7 +796,7 @@ def run(root: Path, mode: str | None = None) -> dict:
     }
 
     if mode == "bootstrap":
-        # Bootstrap: no manifests yet — skip stack detection, mark pending
+        # Bootstrap: todavía no hay manifiestos — saltear detección de stack, marcar pending
         stacks = []
         runner, runner_command, detected_from = None, None, ""
         report["warnings"].append(
@@ -887,18 +887,18 @@ def print_report(report: dict) -> None:
 
 
 def is_legacy_project(root: Path) -> bool:
-    """Detect if project is tagged as legacy.
+    """Detecta si el proyecto está marcado como legacy.
 
-    Detection paths (OR-semantics):
+    Caminos de detección (semántica OR):
     1. docs/auditoria/config.yaml -> context.is_legacy == True
-    2. docs/arquitectura/overview.md -> YAML frontmatter `legacy: true`
+    2. docs/arquitectura/overview.md -> frontmatter YAML `legacy: true`
 
-    All other cases (missing files, malformed YAML, false values) -> False.
-    Pure function -- no side effects.
+    Todos los demás casos (archivos faltantes, YAML malformado, valores false) -> False.
+    Función pura -- sin efectos secundarios.
     """
     import yaml  # noqa: PLC0415
 
-    # Path 1: config.yaml
+    # Camino 1: config.yaml
     config_path = root / "docs" / "auditoria" / "config.yaml"
     if config_path.exists():
         try:
@@ -908,7 +908,7 @@ def is_legacy_project(root: Path) -> bool:
         except yaml.YAMLError:
             pass
 
-    # Path 2: docs/arquitectura/overview.md frontmatter
+    # Camino 2: frontmatter de docs/arquitectura/overview.md
     overview_path = root / "docs" / "arquitectura" / "overview.md"
     if not overview_path.exists():
         return False

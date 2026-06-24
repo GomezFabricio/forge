@@ -1,29 +1,29 @@
-"""forge install — global asset installer.
+"""forge install — instalador global de assets.
 
-Orchestrates:
-  1. detect_engram()            — check if engram is already available
-  2. install_engram()           — download binary, edit PATH, register MCP (optional)
-  3. detect_codegraph()         — check if codegraph is already available
-  4. install_codegraph()        — download binary, verify SHA256, extract, edit PATH
-  5. register_codegraph_mcp()   — merge mcpServers.codegraph into ~/.claude.json
-  6. install_assets()           — deposit skills, agents into ~/.claude/
-  7. print_report()             — human-readable summary
+Orquesta:
+  1. detect_engram()            — chequea si engram ya está disponible
+  2. install_engram()           — descarga el binario, edita el PATH, registra el MCP (opcional)
+  3. detect_codegraph()         — chequea si codegraph ya está disponible
+  4. install_codegraph()        — descarga el binario, verifica SHA256, extrae, edita el PATH
+  5. register_codegraph_mcp()   — mergea mcpServers.codegraph en ~/.claude.json
+  6. install_assets()           — deposita skills, agents en ~/.claude/
+  7. print_report()             — resumen legible para humanos
 
-CodeGraph helpers (PR-A — puros, sin red ni subprocess):
+Helpers de CodeGraph (PR-A — puros, sin red ni subprocess):
   detect_codegraph()       — detecta binario codegraph en PATH (shutil.which)
   _codegraph_asset_name()  — mapea (os, arch) → nombre del asset de release
   _verify_sha256()         — verifica integridad SHA256 del binario descargado
 
 Exit codes:
-  EXIT_OK                  = 0   — success
-  EXIT_ABORTED             = 10  — user declined engram install prompt
-  EXIT_ENGRAM_INSTALL_FAILED = 20 — download or PATH edit failed
-  EXIT_DEPOSIT_FAILED      = 30  — share/forge/ not found or write error
-  EXIT_PLATFORM_UNSUPPORTED = 40 — OS / arch not in supported map
+  EXIT_OK                  = 0   — éxito
+  EXIT_ABORTED             = 10  — el usuario rechazó el prompt de instalación de engram
+  EXIT_ENGRAM_INSTALL_FAILED = 20 — falló la descarga o la edición del PATH
+  EXIT_DEPOSIT_FAILED      = 30  — share/forge/ no encontrado o error de escritura
+  EXIT_PLATFORM_UNSUPPORTED = 40 — OS / arch no está en el mapa soportado
 
-Usage:
-    Called via cli.cmd_install(args) -> installer.run(args).
-    Not meant to be run directly.
+Uso:
+    Llamado vía cli.cmd_install(args) -> installer.run(args).
+    No está pensado para ejecutarse directamente.
 """
 
 import contextlib
@@ -44,14 +44,14 @@ from pathlib import Path
 import yaml
 
 # =============================================================================
-# === Constants ===
+# === Constantes ===
 # =============================================================================
 
 EXIT_OK = 0
-EXIT_ABORTED = 10          # user said N to engram install prompt
-EXIT_ENGRAM_INSTALL_FAILED = 20  # download or PATH edit failed
-EXIT_DEPOSIT_FAILED = 30   # share/forge/ not found or write error
-EXIT_PLATFORM_UNSUPPORTED = 40  # OS / arch not in supported map
+EXIT_ABORTED = 10          # el usuario respondió N al prompt de instalación de engram
+EXIT_ENGRAM_INSTALL_FAILED = 20  # falló la descarga o la edición del PATH
+EXIT_DEPOSIT_FAILED = 30   # share/forge/ no encontrado o error de escritura
+EXIT_PLATFORM_UNSUPPORTED = 40  # OS / arch no está en el mapa soportado
 
 CLAUDE_HOME = Path.home() / ".claude"
 ENGRAM_BIN_DIR_UNIX = Path.home() / ".engram" / "bin"
@@ -81,7 +81,7 @@ CODEGRAPH_BIN_DIR_UNIX = Path.home() / ".codegraph" / "bin"
 CODEGRAPH_BIN_DIR_WIN = Path.home() / ".codegraph" / "bin"
 
 # Path monkeypatcheable para tests — NO usar Path.home() directamente en lógica testeable.
-# CLAUDE_JSON is the canonical name; CODEGRAPH_CLAUDE_JSON is kept as an alias for backward compat.
+# CLAUDE_JSON es el nombre canónico; CODEGRAPH_CLAUDE_JSON se mantiene como alias por compatibilidad.
 CLAUDE_JSON: Path = Path.home() / ".claude.json"
 CODEGRAPH_CLAUDE_JSON: Path = CLAUDE_JSON
 
@@ -204,18 +204,18 @@ Las skills (/fg-setup, /fg-explore, /fg-plan, /fg-design, /fg-implement,
 las querés invocar manualmente, pero no necesitás conocerlas."""
 
 # =============================================================================
-# === Detection ===
+# === Detección ===
 # =============================================================================
 
 
 def detect_engram() -> tuple[bool, dict]:
-    """Detect if engram is available via 3 ordered indicators.
+    """Detecta si engram está disponible vía 3 indicadores ordenados.
 
     Returns:
-        (True, info)  — first positive indicator; info has the triggering key set.
-        (False, info) — all 3 indicators negative.
+        (True, info)  — primer indicador positivo; info tiene seteada la clave que disparó.
+        (False, info) — los 3 indicadores negativos.
 
-    Pure w.r.t. network and filesystem writes. Only reads + subprocess exec.
+    Pura respecto de red y escrituras al filesystem. Solo lecturas + exec de subprocess.
     """
     info: dict[str, str | None] = {
         "mcp_json": None,
@@ -223,8 +223,8 @@ def detect_engram() -> tuple[bool, dict]:
         "version_check": None,
     }
 
-    # Indicator 1: mcpServers.engram entry in ~/.claude.json with a resolvable command
-    claude_json_path = CODEGRAPH_CLAUDE_JSON  # ~/.claude.json — same file, no duplicate path
+    # Indicador 1: entrada mcpServers.engram en ~/.claude.json con un command resoluble
+    claude_json_path = CODEGRAPH_CLAUDE_JSON  # ~/.claude.json — mismo archivo, sin duplicar path
     if claude_json_path.exists():
         try:
             data = json.loads(claude_json_path.read_text(encoding="utf-8"))
@@ -232,9 +232,9 @@ def detect_engram() -> tuple[bool, dict]:
             engram_block = servers.get("engram", {}) if isinstance(servers, dict) else {}
             cmd = engram_block.get("command") if isinstance(engram_block, dict) else None
             if cmd:
-                # Accept the entry only when the binary is actually usable:
-                #   - generic "engram": require shutil.which to confirm it is on PATH
-                #   - absolute path:    require the file exists AND is executable
+                # Aceptar la entrada solo cuando el binario es realmente usable:
+                #   - "engram" genérico: exigir que shutil.which confirme que está en PATH
+                #   - path absoluto:     exigir que el archivo exista Y sea ejecutable
                 if cmd == "engram":
                     usable = shutil.which("engram") is not None
                 else:
@@ -244,15 +244,15 @@ def detect_engram() -> tuple[bool, dict]:
                     info["mcp_json"] = cmd
                     return True, info
         except (json.JSONDecodeError, OSError):
-            pass  # corrupted file — fall through to indicator 2
+            pass  # archivo corrupto — caer al indicador 2
 
-    # Indicator 2: engram binary in PATH
+    # Indicador 2: binario engram en PATH
     found = shutil.which("engram")
     if found:
         info["which"] = found
         return True, info
 
-    # Indicator 3: engram --version responds with returncode 0
+    # Indicador 3: engram --version responde con returncode 0
     try:
         result = subprocess.run(
             ["engram", "--version"],
@@ -574,15 +574,15 @@ def install_codegraph() -> tuple[bool, str]:
 
 
 def _backup_once(path: Path, backed_up: set) -> None:
-    """Write a .forge-bak of *path* the FIRST time it is about to be mutated.
+    """Escribe un .forge-bak de *path* la PRIMERA vez que va a ser mutado.
 
-    Subsequent calls for the same path are no-ops — this preserves the pristine
-    pre-install state across sequential registrar calls within a single run().
+    Las llamadas siguientes para el mismo path son no-ops — esto preserva el estado
+    pristine pre-instalación a través de llamadas secuenciales de registrars dentro de un run().
 
     Args:
-        path:       The file that is about to be mutated.
-        backed_up:  A run-scoped set of already-backed-up path strings.
-                    Callers must pass the same set instance for the entire run.
+        path:       El archivo que va a ser mutado.
+        backed_up:  Un set (scope del run) de strings de paths ya respaldados.
+                    Los callers deben pasar la misma instancia de set durante todo el run.
     """
     key = str(path)
     if key in backed_up:
@@ -590,10 +590,10 @@ def _backup_once(path: Path, backed_up: set) -> None:
     backed_up.add(key)
     if path.exists():
         bak = path.with_suffix(path.suffix + ".forge-bak")
-        # Never overwrite an existing backup. A registrar may have created the
-        # pristine .forge-bak already (e.g. install_engram() runs before the
-        # codegraph registrar and is not tracked by this run's set); overwriting
-        # here would clobber the pristine snapshot with mutated content.
+        # Nunca sobrescribir un backup existente. Un registrar pudo haber creado ya el
+        # .forge-bak pristine (ej. install_engram() corre antes del registrar de
+        # codegraph y no está trackeado por el set de este run); sobrescribir acá
+        # pisaría el snapshot pristine con contenido ya mutado.
         if not bak.exists():
             with contextlib.suppress(OSError):
                 bak.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -743,17 +743,17 @@ def register_context7_mcp() -> str:
 
 
 def _hook_command(module: str) -> str:
-    """Build a hook command that invokes *module* via the current interpreter.
+    """Construye un comando de hook que invoca *module* vía el intérprete actual.
 
-    Uses sys.executable (the venv Python where forge is installed) rather than
-    a generic 'python' that may not have forge importable. Quotes the path when
-    it contains spaces (e.g. 'C:\\Program Files\\...').
+    Usa sys.executable (el Python del venv donde forge está instalado) en vez de
+    un 'python' genérico que puede no tener forge importable. Entrecomilla el path
+    cuando contiene espacios (ej. 'C:\\Program Files\\...').
 
     Args:
-        module: fully-qualified Python module name (e.g. 'forge.filters.hook_user_prompt')
+        module: nombre de módulo Python totalmente calificado (ej. 'forge.filters.hook_user_prompt')
 
     Returns:
-        A command string of the form ``<python> -m <module>``.
+        Un string de comando de la forma ``<python> -m <module>``.
     """
     py = sys.executable or "python"
     if " " in py:
@@ -1006,27 +1006,27 @@ def prompt_context7_yn() -> str:
 
 
 # =============================================================================
-# === Frontmatter injection ===
+# === Inyección de frontmatter ===
 # =============================================================================
 
 
 def inject_no_invoke_frontmatter(content: str) -> str:
-    """Inject (or merge) disable-model-invocation + user-invocable into YAML frontmatter.
+    """Inyecta (o mergea) disable-model-invocation + user-invocable en el frontmatter YAML.
 
-    Idempotent. Preserves existing frontmatter keys; only adds/overwrites the
-    two required keys. If no frontmatter, prepends one.
+    Idempotente. Preserva las claves de frontmatter existentes; solo agrega/sobrescribe
+    las dos claves requeridas. Si no hay frontmatter, antepone uno.
 
     Args:
-        content: Raw markdown content of a skill file.
+        content: Contenido markdown crudo de un archivo de skill.
 
     Returns:
-        Content with frontmatter containing the two required keys.
+        El contenido con un frontmatter que contiene las dos claves requeridas.
     """
     if content.startswith("---\n"):
         try:
             end = content.index("\n---\n", 4)
         except ValueError:
-            # malformed frontmatter (no closing ---) — treat as no frontmatter
+            # frontmatter malformado (sin cierre ---) — tratar como sin frontmatter
             return _prepend_frontmatter(content)
         fm_raw = content[4:end]
         body = content[end + len("\n---\n"):]
@@ -1043,26 +1043,26 @@ def inject_no_invoke_frontmatter(content: str) -> str:
 
 
 def _prepend_frontmatter(content: str) -> str:
-    """Prepend a fresh frontmatter block to content."""
+    """Antepone un bloque de frontmatter nuevo al contenido."""
     fm = yaml.safe_dump(_REQUIRED_FM_KEYS, sort_keys=False).rstrip()
     return f"---\n{fm}\n---\n\n{content}"
 
 
 # =============================================================================
-# === Asset deposit ===
+# === Depósito de assets ===
 # =============================================================================
 
 
 def get_share_root() -> Path:
-    """Return the package share root: sysconfig data_dir / share / forge."""
+    """Devuelve el share root del paquete: sysconfig data_dir / share / forge."""
     return Path(sysconfig.get_path("data")) / "share" / "forge"
 
 
 def install_assets() -> dict:
-    """Deposit skills, agents, commands into ~/.claude/.
+    """Deposita skills, agents, commands en ~/.claude/.
 
     Returns:
-        Manifest dict with keys:
+        Dict de manifiesto con claves:
           skills_deposited: int
           shared_deposited: int
           agents_deposited: int
@@ -1082,10 +1082,10 @@ def install_assets() -> dict:
     claude_commands = CLAUDE_HOME / "commands"
     warnings: list[str] = []
 
-    # 1. fg-*.md individual skills → <stem>/SKILL.md
+    # 1. skills individuales fg-*.md → <stem>/SKILL.md
     n_skills = _deposit_individual_skills(skills_src, claude_skills)
 
-    # 2. _shared co-located companions (single-consumer, no frontmatter)
+    # 2. companions _shared co-ubicados (consumidor único, sin frontmatter)
     _deposit_colocated(
         shared_src / "strict-tdd.md",
         claude_skills / "fg-implement" / "strict-tdd.md",
@@ -1095,13 +1095,13 @@ def install_assets() -> dict:
         claude_skills / "fg-review" / "strict-tdd-verify.md",
     )
 
-    # 3. _shared cross-cutting → forge-shared/<name>/SKILL.md with frontmatter
+    # 3. _shared transversales → forge-shared/<name>/SKILL.md con frontmatter
     n_shared = _deposit_shared_skills(shared_src, claude_skills)
 
-    # 4. agents → flat copy
+    # 4. agents → copia flat
     n_agents = _deposit_agents(agents_src, claude_agents)
 
-    # 5. commands → flat copy
+    # 5. commands → copia flat
     n_commands = _deposit_commands(commands_src, claude_commands)
 
     return {
@@ -1114,7 +1114,7 @@ def install_assets() -> dict:
 
 
 def _deposit_individual_skills(skills_src: Path, claude_skills: Path) -> int:
-    """Copy fg-*.md files to <claude_skills>/<stem>/SKILL.md with no-invoke frontmatter."""
+    """Copia archivos fg-*.md a <claude_skills>/<stem>/SKILL.md con frontmatter no-invoke."""
     count = 0
     for md in sorted(skills_src.glob("fg-*.md")):
         dest_dir = claude_skills / md.stem
@@ -1126,11 +1126,11 @@ def _deposit_individual_skills(skills_src: Path, claude_skills: Path) -> int:
 
 
 def _deposit_shared_skills(shared_src: Path, claude_skills: Path) -> int:
-    """Copy cross-cutting _shared files to forge-shared/<name>/SKILL.md with frontmatter."""
+    """Copia archivos _shared transversales a forge-shared/<name>/SKILL.md con frontmatter."""
     count = 0
     for md in sorted(shared_src.glob("*.md")):
         if md.stem not in _CROSS_CUTTING:
-            continue  # strict-tdd* are co-located; skip them here
+            continue  # strict-tdd* son co-ubicados; saltearlos acá
         dest_dir = claude_skills / "forge-shared" / md.stem
         dest_dir.mkdir(parents=True, exist_ok=True)
         injected = inject_no_invoke_frontmatter(md.read_text(encoding="utf-8"))
@@ -1140,7 +1140,7 @@ def _deposit_shared_skills(shared_src: Path, claude_skills: Path) -> int:
 
 
 def _deposit_colocated(src: Path, dest: Path) -> bool:
-    """Copy a single co-located companion file if source exists."""
+    """Copia un único archivo companion co-ubicado si la fuente existe."""
     if not src.exists():
         return False
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1149,7 +1149,7 @@ def _deposit_colocated(src: Path, dest: Path) -> bool:
 
 
 def _deposit_agents(agents_src: Path, claude_agents: Path) -> int:
-    """Copy agent .md files flat into claude_agents/."""
+    """Copia archivos .md de agents flat dentro de claude_agents/."""
     if not agents_src.exists():
         return 0
     claude_agents.mkdir(parents=True, exist_ok=True)
@@ -1173,18 +1173,18 @@ def _deposit_commands(commands_src: Path, claude_commands: Path) -> int:
 
 
 # =============================================================================
-# === Engram install ===
+# === Instalación de engram ===
 # =============================================================================
 
 
 def _detect_platform() -> tuple[str, str]:
-    """Detect OS and arch tokens for GitHub Release asset naming.
+    """Detecta los tokens de OS y arch para el naming de assets de GitHub Release.
 
     Returns:
-        (os_token, arch_token) where tokens match engram release naming.
+        (os_token, arch_token) donde los tokens coinciden con el naming de releases de engram.
 
     Raises:
-        SystemExit(EXIT_PLATFORM_UNSUPPORTED) if platform is not supported.
+        SystemExit(EXIT_PLATFORM_UNSUPPORTED) si la plataforma no está soportada.
     """
     plat = sys.platform  # 'linux', 'darwin', 'win32'
     mach = platform.machine().lower()  # 'x86_64', 'amd64', 'arm64', 'aarch64'
@@ -1201,14 +1201,14 @@ def _detect_platform() -> tuple[str, str]:
 
 
 def _download_binary(url: str, dest: Path) -> None:
-    """Download binary from url to dest. Retries once on failure.
+    """Descarga el binario desde url a dest. Reintenta una vez si falla.
 
     Args:
-        url: Direct download URL of the asset.
-        dest: Target path (parent directory is created if missing).
+        url: URL de descarga directa del asset.
+        dest: Path destino (el directorio padre se crea si falta).
 
     Raises:
-        urllib.error.URLError | OSError: after 2 failed attempts.
+        urllib.error.URLError | OSError: después de 2 intentos fallidos.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     last_exc: Exception | None = None
@@ -1222,22 +1222,22 @@ def _download_binary(url: str, dest: Path) -> None:
 
 
 def _edit_path_unix(bin_dir: Path) -> dict[str, str]:
-    """Append PATH export to ~/.bashrc, ~/.zshrc, and ~/.profile (Unix / macOS).
+    """Agrega el export de PATH a ~/.bashrc, ~/.zshrc y ~/.profile (Unix / macOS).
 
-    Edits all three rc files that EXIST. If a file does not exist, it is
-    skipped (not created) — except ~/.profile which is always created if
-    none of the other files existed. Idempotent: no duplicate entries.
+    Edita los tres archivos rc que EXISTAN. Si un archivo no existe, se
+    saltea (no se crea) — excepto ~/.profile, que siempre se crea si
+    ninguno de los otros existía. Idempotente: sin entradas duplicadas.
 
     Returns:
-        dict mapping rc filename (e.g. '.bashrc') to one of:
-            'present'  — entry was already there
-            'appended' — entry was added to existing file
-            'created'  — file was created with the entry (only ~/.profile)
-            'skipped'  — file did not exist (only for .bashrc / .zshrc)
+        dict que mapea el nombre del archivo rc (ej. '.bashrc') a uno de:
+            'present'  — la entrada ya estaba
+            'appended' — la entrada se agregó a un archivo existente
+            'created'  — el archivo se creó con la entrada (solo ~/.profile)
+            'skipped'  — el archivo no existía (solo para .bashrc / .zshrc)
 
-    Q4 (resolved in apply): print_report advises to open a new terminal
-    for PATH propagation on Unix (same UX as Windows).
-    REQ-PLATFORM-03: edit ~/.bashrc, ~/.zshrc, and ~/.profile.
+    Q4 (resuelto en apply): print_report sugiere abrir una nueva terminal
+    para la propagación del PATH en Unix (misma UX que Windows).
+    REQ-PLATFORM-03: editar ~/.bashrc, ~/.zshrc y ~/.profile.
     """
     home = Path.home()
     line = f'\n# Added by forge install\nexport PATH="{bin_dir}:$PATH"\n'
@@ -1256,7 +1256,7 @@ def _edit_path_unix(bin_dir: Path) -> dict[str, str]:
         rc_path.write_text(existing + line, encoding="utf-8")
         results[rc_name] = "appended"
 
-    # Ensure ~/.profile always exists (fallback for login shells)
+    # Asegurar que ~/.profile siempre exista (fallback para login shells)
     if results.get(".profile") == "skipped":
         profile = home / ".profile"
         profile.write_text(line.lstrip("\n"), encoding="utf-8")
@@ -1266,13 +1266,13 @@ def _edit_path_unix(bin_dir: Path) -> dict[str, str]:
 
 
 def _edit_path_windows(bin_dir: Path) -> str:
-    """Edit HKCU\\Environment\\Path via winreg (Windows only).
+    """Edita HKCU\\Environment\\Path vía winreg (solo Windows).
 
     Returns:
-        'present'  — already in PATH
-        'appended' — added to PATH
+        'present'  — ya estaba en el PATH
+        'appended' — se agregó al PATH
 
-    If SendMessage broadcast fails, prints a warning (non-fatal).
+    Si el broadcast de SendMessage falla, imprime una advertencia (no fatal).
     """
     import ctypes
     import winreg  # type: ignore[import]
@@ -1312,17 +1312,17 @@ def _edit_path_windows(bin_dir: Path) -> str:
 
 
 def _xattr_cleanup_darwin(binary_path: Path, *, recursive: bool = False) -> None:
-    """Remove the macOS quarantine attribute from a file (or a whole tree).
+    """Quita el atributo de quarantine de macOS de un archivo (o de todo un árbol).
 
-    Only runs on darwin. Failures are silently swallowed — the install
-    continues without aborting.
+    Solo corre en darwin. Los fallos se tragan en silencio — la instalación
+    continúa sin abortar.
 
     Args:
-        binary_path: file or directory whose quarantine xattr to clear.
-        recursive:   when True (e.g. the CodeGraph bundle dir), pass ``-r`` so the
-                     attribute is cleared on every file in the tree. macOS also
-                     quarantines the bundled ``node``, which blocks execution if
-                     left set — clearing only the wrapper is not enough.
+        binary_path: archivo o directorio cuyo xattr de quarantine limpiar.
+        recursive:   cuando es True (ej. el dir del bundle de CodeGraph), pasa ``-r`` para
+                     que el atributo se limpie en cada archivo del árbol. macOS también
+                     pone en quarantine el ``node`` bundleado, que bloquea la ejecución si
+                     queda seteado — limpiar solo el wrapper no alcanza.
     """
     if sys.platform != "darwin":
         return
@@ -1405,17 +1405,17 @@ def register_engram_mcp(binary_path: Path | None = None) -> str:
 
 
 def install_engram() -> tuple[bool, str]:
-    """Download and install engram binary. Edits PATH, registers MCP.
+    """Descarga e instala el binario de engram. Edita el PATH, registra el MCP.
 
-    Q1 (resolved in apply): GitHub assets are tarballs:
-      engram_{version}_{os}_{arch}.tar.gz (Unix) or .zip (Windows).
-    Asset selection: match first asset whose name starts with
-      'engram_' and ends with '{os_token}_{arch_token}.tar.gz' (or .zip).
-    Binary is extracted from archive.
+    Q1 (resuelto en apply): los assets de GitHub son tarballs:
+      engram_{version}_{os}_{arch}.tar.gz (Unix) o .zip (Windows).
+    Selección de asset: matchea el primer asset cuyo nombre empieza con
+      'engram_' y termina en '{os_token}_{arch_token}.tar.gz' (o .zip).
+    El binario se extrae del archivo.
 
     Returns:
-        (True, message)  — success
-        (False, message) — download or extraction failed
+        (True, message)  — éxito
+        (False, message) — falló la descarga o la extracción
     """
     import tarfile
     import tempfile
@@ -1429,7 +1429,7 @@ def install_engram() -> tuple[bool, str]:
     ext = ".zip" if os_tok == "windows" else ".tar.gz"
     expected_suffix = f"{os_tok}_{arch_tok}{ext}"
 
-    # Fetch release metadata
+    # Obtener metadata del release
     try:
         with urllib.request.urlopen(GITHUB_RELEASES_API, timeout=15) as resp:
             release = json.loads(resp.read())
@@ -1450,12 +1450,12 @@ def install_engram() -> tuple[bool, str]:
 
     download_url = asset["browser_download_url"]
 
-    # Choose destination
+    # Elegir destino
     bin_dir = ENGRAM_BIN_DIR_WIN if os_tok == "windows" else ENGRAM_BIN_DIR_UNIX
     bin_name = "engram.exe" if os_tok == "windows" else "engram"
     binary_dest = bin_dir / bin_name
 
-    # Download to temp file then extract
+    # Descargar a archivo temporal y luego extraer
     try:
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
             tmp_path_str = tmp.name
@@ -1466,7 +1466,7 @@ def install_engram() -> tuple[bool, str]:
 
         if ext == ".tar.gz":
             with tarfile.open(tmp_path_str, "r:gz") as tf:
-                # Find engram binary inside archive
+                # Encontrar el binario engram dentro del archivo
                 member = next(
                     (m for m in tf.getmembers()
                      if m.name.endswith("engram") or m.name.endswith("engram.exe")),
@@ -1474,8 +1474,8 @@ def install_engram() -> tuple[bool, str]:
                 )
                 if member is None:
                     return False, "Binary 'engram' not found inside tarball."
-                member.name = bin_name  # flatten path
-                # filter="data" hardens against symlink attacks (Python 3.12+).
+                member.name = bin_name  # aplanar el path
+                # filter="data" endurece contra ataques de symlink (Python 3.12+).
                 if sys.version_info >= (3, 12):
                     tf.extract(member, path=str(binary_dest.parent), filter="data")
                 else:
@@ -1497,20 +1497,20 @@ def install_engram() -> tuple[bool, str]:
     except (urllib.error.URLError, OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
         return False, f"Error descargando/extrayendo engram: {exc}"
 
-    # chmod +x on Unix
+    # chmod +x en Unix
     if os_tok != "windows":
         os.chmod(binary_dest, 0o755)
 
-    # macOS quarantine cleanup (best-effort)
+    # cleanup de quarantine de macOS (best-effort)
     _xattr_cleanup_darwin(binary_dest)
 
-    # Edit PATH
+    # Editar PATH
     if os_tok == "windows":
         _edit_path_windows(bin_dir)
     else:
         _edit_path_unix(bin_dir)
 
-    # Register MCP — absolute path known here, more robust than relying on PATH for MCP spawning
+    # Registrar MCP — el path absoluto se conoce acá, más robusto que depender del PATH para el spawn del MCP
     register_engram_mcp(binary_dest)
 
     return True, f"engram instalado en {binary_dest}"
@@ -1522,17 +1522,17 @@ def install_engram() -> tuple[bool, str]:
 
 
 def _smoke_check_pii() -> tuple[bool, str]:
-    """Verify the PII filter actually works right after install.
+    """Verifica que el filtro PII realmente funcione justo después de instalar.
 
-    The UserPromptSubmit hook fails open by design, so a broken filter is INVISIBLE
-    at runtime — prompts just flow through unredacted. The classic failure was the
-    spaCy model missing → Presidio auto-download → ``sys.exit()`` (SystemExit). We
-    prove the full path here: ``build_analyzer()`` (which loads the model eagerly)
-    plus a redaction on a sample, so the install report can shout instead of
-    claiming "registered" over a filter that silently leaks PII.
+    El hook UserPromptSubmit falla-abierto por diseño, así que un filtro roto es INVISIBLE
+    en runtime — los prompts pasan sin redactar. El fallo clásico era el modelo spaCy
+    ausente → autodescarga de Presidio → ``sys.exit()`` (SystemExit). Acá probamos el
+    camino completo: ``build_analyzer()`` (que carga el modelo de forma eager) más una
+    redacción sobre una muestra, para que el reporte de instalación pueda gritar en vez de
+    declarar "registrado" sobre un filtro que filtra PII en silencio.
 
-    Returns ``(ok, message)``. Never raises — including SystemExit — so it can never
-    abort the install (the enclosing handler only catches ``Exception``).
+    Devuelve ``(ok, message)``. Nunca lanza — incluido SystemExit — así que nunca puede
+    abortar la instalación (el handler que la envuelve solo atrapa ``Exception``).
     """
     try:
         from forge.filters.analyzer import build_analyzer
@@ -1547,23 +1547,23 @@ def _smoke_check_pii() -> tuple[bool, str]:
 
 
 def prompt_user_yn() -> str:
-    """Display engram install prompt and read y/n response.
+    """Muestra el prompt de instalación de engram y lee la respuesta y/n.
 
-    Accepts: y, Y, yes, YES (case-insensitive) as affirmative.
-    Any other input is treated as 'n'.
+    Acepta: y, Y, yes, YES (case-insensitive) como afirmativo.
+    Cualquier otro input se trata como 'n'.
 
     Returns:
-        'y' or 'n'
+        'y' o 'n'
     """
     response = input(PROMPT_TEXT).strip().lower()
     return "y" if response in {"y", "yes"} else "n"
 
 
 def print_report(report: dict) -> None:
-    """Print human-readable install summary.
+    """Imprime el resumen de instalación legible para humanos.
 
-    Q4 (resolved in apply): always suggests opening a new terminal
-    for PATH propagation on Unix (consistent with Windows UX).
+    Q4 (resuelto en apply): siempre sugiere abrir una nueva terminal
+    para la propagación del PATH en Unix (consistente con la UX de Windows).
     """
     engram_info = report.get("engram", {})
     assets = report.get("assets", {})
@@ -1681,11 +1681,11 @@ def print_report(report: dict) -> None:
 
 
 def run(args) -> int:  # args: argparse.Namespace
-    """Orchestrate forge install. Returns exit code.
+    """Orquesta forge install. Devuelve el exit code.
 
-    Flow:
+    Flujo:
       1. detected, info = detect_engram()
-      2. if not detected: install/skip/prompt engram
+      2. si no detectado: instalar/saltear/preguntar engram
       3. Paso CodeGraph (try/except amplio — fallo NO aborta ni cambia exit code):
          - detect_codegraph() → si ya está, reportar y registrar MCP
          - --skip-codegraph → omitir
@@ -1695,31 +1695,31 @@ def run(args) -> int:  # args: argparse.Namespace
       5. print_report(...)
       6. return EXIT_OK
 
-    REQ-FLAGS-02: --install-engram wins over --skip-engram-check.
-    REQ-FLAGS-03: if detected + --install-engram → log and skip reinstall.
+    REQ-FLAGS-02: --install-engram tiene precedencia sobre --skip-engram-check.
+    REQ-FLAGS-03: si detectado + --install-engram → loguear y saltear la reinstalación.
     R-INST-04: --skip-codegraph omite instalación; --install-codegraph fuerza sin prompt.
     R-INST-05: fallo de CodeGraph → warning en reporte, NO cambia exit code.
     """
-    # Snapshot both config files BEFORE any registrar mutates them — Fix 3 (pristine backup).
-    # All registrars that write these files share this set via _backup_once() so that only
-    # the first write per file within this run produces a backup.
+    # Snapshot de ambos archivos de config ANTES de que un registrar los mute — Fix 3 (backup pristine).
+    # Todos los registrars que escriben estos archivos comparten este set vía _backup_once() para que
+    # solo la primera escritura por archivo dentro de este run produzca un backup.
     _run_backed_up: set = set()
 
     detected, info = detect_engram()
 
     if detected and getattr(args, "install_engram", False):
-        # REQ-FLAGS-03: already detected, skip reinstall
+        # REQ-FLAGS-03: ya detectado, saltear la reinstalación
         method = info.get("mcp_json") or info.get("which") or info.get("version_check") or "?"
         print(f"engram ya detectado vía {method}, salteando install")
 
-        # Fix 1: detected but MCP block may still be missing — register if so.
+        # Fix 1: detectado pero el bloque MCP puede seguir faltando — registrarlo si es así.
         if not info.get("mcp_json"):
             detected_bin = info.get("which")
             _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)
             register_engram_mcp(Path(detected_bin) if detected_bin else None)
 
     elif detected:
-        # Detected (no --install-engram flag). Fix 1: if MCP block is missing, write it now.
+        # Detectado (sin flag --install-engram). Fix 1: si falta el bloque MCP, escribirlo ahora.
         if not info.get("mcp_json"):
             detected_bin = info.get("which")
             _backup_once(CODEGRAPH_CLAUDE_JSON, _run_backed_up)
@@ -1727,7 +1727,7 @@ def run(args) -> int:  # args: argparse.Namespace
 
     elif not detected:
         if getattr(args, "install_engram", False):
-            # --install-engram takes precedence (REQ-FLAGS-02)
+            # --install-engram tiene precedencia (REQ-FLAGS-02)
             ok, msg = install_engram()
             if not ok:
                 sys.stderr.write(f"Error instalando engram: {msg}\n")
@@ -1735,11 +1735,11 @@ def run(args) -> int:  # args: argparse.Namespace
             info["installed"] = msg
 
         elif getattr(args, "skip_engram_check", False):
-            # --skip-engram-check: proceed to deposit without engram
+            # --skip-engram-check: proceder al depósito sin engram
             print("Advertencia: engram no detectado. Salteando check por --skip-engram-check.")
 
         else:
-            # Interactive prompt
+            # Prompt interactivo
             answer = prompt_user_yn()
             if answer != "y":
                 print("Instalá engram por tu cuenta y volvé a correr 'forge install'")
@@ -1857,7 +1857,7 @@ def run(args) -> int:  # args: argparse.Namespace
     except Exception as exc:  # noqa: BLE001 — fail-open
         claude_md_report = {"status": "failed", "msg": f"error inesperado: {exc}"}
 
-    # Deposit skills and agents
+    # Depositar skills y agents
     manifest = install_assets()
     print_report({
         "engram": info,
