@@ -77,7 +77,8 @@ def build_aws_secret_key_recognizer() -> PatternRecognizer:
     Base score 0.4 is below the 0.5 firing threshold so the pattern never
     triggers alone. Context words boost the score to 0.85 (fires).
     Context words: aws_secret, secret_access_key, AWS_SECRET_ACCESS_KEY,
-    aws.secretAccessKey.
+    aws.secretAccessKey, plus Spanish cues (aws, clave, secreto, contraseña,
+    credencial) so a Spanish prose hint also fires it.
     Entity AWS_SECRET_KEY.
     """
     return PatternRecognizer(
@@ -96,6 +97,17 @@ def build_aws_secret_key_recognizer() -> PatternRecognizer:
             "secret_access_key",
             "AWS_SECRET_ACCESS_KEY",
             "aws.secretAccessKey",
+            # Pistas en español. El modelo spaCy es inglés y no lematiza el español
+            # a su raíz, así que listamos las formas de superficie tal como se
+            # escriben (con y sin tilde).
+            "aws",
+            "clave",
+            "secreta",
+            "secreto",
+            "credencial",
+            "credenciales",
+            "contraseña",
+            "contrasena",
         ],
         supported_language="en",
     )
@@ -159,6 +171,8 @@ def build_openai_key_recognizer() -> PatternRecognizer:
     Context boost to 0.85. Entity OPENAI_KEY.
 
     The negative lookahead ``(?!ant-)`` prevents matching Anthropic keys.
+    Context includes Spanish cues (clave, credencial, contraseña) so a Spanish
+    prose hint also fires it, not only the English/identifier form.
     """
     return PatternRecognizer(
         supported_entity="OPENAI_KEY",
@@ -174,6 +188,12 @@ def build_openai_key_recognizer() -> PatternRecognizer:
             "OPENAI_API_KEY",
             "openai.api_key",
             "sk-",
+            # Pistas en español (formas de superficie; el modelo es inglés).
+            "clave",
+            "credencial",
+            "credenciales",
+            "contraseña",
+            "contrasena",
         ],
         supported_language="en",
         global_regex_flags=re.DOTALL | re.MULTILINE,

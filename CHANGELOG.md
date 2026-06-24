@@ -19,6 +19,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 - **Smoke-check del filtro PII al final de `forge install`**: tras registrar el hook, construye el analyzer y corre una redacción de prueba; si falla, el reporte avisa ruidosamente (estado `registered_broken`) en vez de declarar "registrado" sobre un filtro que dejaría pasar PII en silencio (fail-open).
 - **Los instaladores guían la instalación de Python cuando falta.** `install.sh` e `install.ps1` ya no abortan con un escueto "instalalo y volvé a correr": detectan el SO/gestor de paquetes y muestran el **comando exacto** (`brew install python@3.13`, `sudo apt install …`, `dnf`, `pacman`, `zypper`, `winget install Python.Python.3.13` o el instalador de python.org), avisan del stub de Microsoft Store en Windows, y recuerdan re-correr el instalador. No instalan Python por su cuenta (decisión explícita del usuario).
+- **El filtro PII detecta secretos descritos en español.** `AWS_SECRET_KEY` y `OPENAI_KEY` (los recognizers que dependen de contexto) suman pistas en español a sus listas (`clave`, `secreto/a`, `credencial`, `contraseña`, `aws`), además de las inglesas/identificador. Así "mi clave secreta de aws es …" dispara la redacción, no solo `AWS_SECRET_ACCESS_KEY=…`. Como el modelo spaCy es inglés y no lematiza el español a su raíz, se listan las formas de superficie (con y sin tilde). `BEARER_TOKEN` y `CONNECTION_STRING_PASSWORD` ya firaban sin contexto en cualquier idioma.
 
 #### Changed
 

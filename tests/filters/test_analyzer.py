@@ -140,3 +140,37 @@ class TestBuildAnalyzer:
         openai_results = [r for r in results if r.entity_type == "OPENAI_KEY"]
         assert len(openai_results) >= 1
         assert openai_results[0].score >= 0.85
+
+    def test_aws_secret_key_with_spanish_context_fires(self):
+        """Integration: AWS_SECRET_KEY fires with a Spanish prose cue (clave/secreta/aws)."""
+        engine = build_analyzer()
+        from tests.filters.fixtures import AWS_SECRET_KEY_EXAMPLE
+        results = engine.analyze(
+            text=f"Mi clave secreta de aws es {AWS_SECRET_KEY_EXAMPLE}",
+            language="en",
+        )
+        aws_results = [r for r in results if r.entity_type == "AWS_SECRET_KEY"]
+        assert len(aws_results) >= 1
+        assert aws_results[0].score >= 0.85
+
+    def test_openai_key_with_spanish_context_fires(self):
+        """Integration: OPENAI_KEY fires with a Spanish cue (credencial) without the word 'openai'."""
+        engine = build_analyzer()
+        results = engine.analyze(
+            text=f"Mi credencial es {OPENAI_KEY_VALID}",
+            language="en",
+        )
+        openai_results = [r for r in results if r.entity_type == "OPENAI_KEY"]
+        assert len(openai_results) >= 1
+        assert openai_results[0].score >= 0.85
+
+    def test_aws_secret_key_without_any_cue_does_not_fire(self):
+        """AWS_SECRET_KEY no debe firar sobre un base64 de 40 chars sin pista de secreto."""
+        engine = build_analyzer()
+        from tests.filters.fixtures import AWS_SECRET_KEY_EXAMPLE
+        results = engine.analyze(
+            text=f"El identificador del build es {AWS_SECRET_KEY_EXAMPLE}",
+            language="en",
+        )
+        aws_results = [r for r in results if r.entity_type == "AWS_SECRET_KEY"]
+        assert len(aws_results) == 0
