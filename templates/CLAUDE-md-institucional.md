@@ -250,6 +250,7 @@ El modelo de cada fase lo define el **perfil** `rules.workflow.model_profile` de
 
 **Resolución del modelo:**
 
+- En el primer `/fg-setup` de un proyecto, el orquestador **propone el perfil** al dev (vía `decisions_needed`); el default `equilibrado` queda escrito en `config.yaml` y se actualiza si el dev elige `performance` o `basico`.
 - Si falta el `config.yaml` (proyecto sin setup) o el perfil es `equilibrado`, se usa el modelo declarado en el frontmatter de cada `agents/fg-*.md` — que es justo el default `equilibrado`. No hace falta override.
 - Para `performance` o `basico`, el orquestador pasa el modelo de la columna como override al delegar a cada agente.
 - El frontmatter `model:` de cada agente es la red de seguridad: garantiza un modelo sensato aunque el agent se invoque sin que el orquestador resuelva el perfil.

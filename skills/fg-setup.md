@@ -132,6 +132,11 @@ rules:
     # el orquestador lo pregunta una vez por sesión (post-explore) y cachea la respuesta.
     cycle_mode: interactive
 
+    # model_profile: qué modelos usa el orquestador por fase (equilibrado/performance/basico).
+    # El orquestador lo PROPONE en el primer setup (ver "Decisiones para el orquestador");
+    # default equilibrado (opus en plan/design/review, sonnet en executors).
+    model_profile: equilibrado
+
   pr_size:
     # Controls del Review Workload Forecast — ver /fg-design y fg-phase-common.md Sección C.
     budget_lines: 400       # umbral de "PR grande" (líneas cambiadas)
@@ -259,6 +264,17 @@ Estos casos NO se preguntan inline (un sub-agente no puede; ver `_shared/fg-phas
 
 - Si hay múltiples manifiestos (polyglot): `decisions_needed` con la pregunta de cuál es el principal para CodeGraph y las opciones detectadas. Mientras tanto, indexar con un default razonable y reportarlo.
 - Si CodeGraph no está disponible: `decisions_needed` con opciones `[Seguir sin CodeGraph (degradado), Instalarlo primero]`. Default: seguir degradado.
+- Perfil de modelo (`rules.workflow.model_profile`): `decisions_needed` proponiendo qué modelos usará el orquestador por fase. La fase deja escrito el default `equilibrado` en el `config.yaml`; si el dev elige otro, el orquestador actualiza la clave (no hace falta re-correr el setup). Pregunta sugerida:
+
+  ```yaml
+  decisions_needed:
+    - question: "¿Qué perfil de modelo querés para este proyecto?"
+      options: [equilibrado, performance, basico]
+      default: equilibrado
+      # equilibrado = opus en plan/design/review, sonnet en executors
+      # performance = opus en todas las fases (máxima calidad, mayor costo)
+      # basico      = sonnet en plan/design/review, haiku en executors (rápido/económico)
+  ```
 
 ### Nunca
 
